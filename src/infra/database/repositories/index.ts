@@ -1,0 +1,8 @@
+/**
+ * Repository Implementations Index
+ */
+export * from './file.repository';
+export * from './file-storage-object.repository';
+export * from './folder.repository';
+export * from './folder-storage-object.repository';
+export * from './trash.repository';

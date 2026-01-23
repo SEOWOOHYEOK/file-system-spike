@@ -8,6 +8,9 @@ export * from './entities/trash-metadata.entity';
 // DTO
 export * from './dto';
 
+// 서비스
+export * from './service';
+
 // 리포지토리 인터페이스
 export * from './repositories/trash.repository.interface';
 

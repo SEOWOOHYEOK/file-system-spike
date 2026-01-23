@@ -13,19 +13,17 @@ import {
   ConflictStrategy,
   FILE_REPOSITORY,
   FILE_STORAGE_OBJECT_REPOSITORY,
-  IFileRepository,
-  IFileStorageObjectRepository,
 } from '../../domain/file';
 import {
   FOLDER_REPOSITORY,
-  IFolderRepository,
 } from '../../domain/folder';
 import {
   TrashMetadataFactory,
   TRASH_REPOSITORY,
-  ITrashRepository,
 } from '../../domain/trash';
-
+import type { IFileRepository, IFileStorageObjectRepository } from '../../domain/file';
+import type { IFolderRepository } from '../../domain/folder';
+import type { ITrashRepository } from '../../domain/trash';
 /**
  * 파일 관리 비즈니스 서비스
  * 파일명 변경, 파일 이동, 파일 삭제(휴지통) 처리
@@ -262,7 +260,7 @@ export class FileManageService {
     const originalPath = folder ? `${folder.path}/${file.name}` : `/${file.name}`;
 
     // 4. 파일 상태 변경
-    file.moveToTrash();
+    file.delete();
     await this.fileRepository.save(file);
 
     // 5. trash_metadata 생성

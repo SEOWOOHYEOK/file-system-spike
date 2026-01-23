@@ -1,4 +1,9 @@
 import { Module } from '@nestjs/common';
+import { RepositoryModule } from '../../infra/database/repository.module';
+import { StorageInfraModule } from '../../infra/storage/storage-infra.module';
+import { FolderDomainModule } from '../../domain/folder/folder.module';
+import { FileDomainModule } from '../../domain/file/file.module';
+import { TrashDomainModule } from '../../domain/trash/trash.module';
 import { FolderQueryService } from './folder-query.service';
 import { FolderCommandService } from './folder-command.service';
 
@@ -7,6 +12,13 @@ import { FolderCommandService } from './folder-command.service';
  * 폴더 조회, 명령 서비스를 제공합니다.
  */
 @Module({
+  imports: [
+    RepositoryModule,
+    StorageInfraModule,
+    FolderDomainModule,
+    FileDomainModule,
+    TrashDomainModule,
+  ],
   providers: [FolderQueryService, FolderCommandService],
   exports: [FolderQueryService, FolderCommandService],
 })
