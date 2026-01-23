@@ -117,5 +117,13 @@ export class FolderEntity {
     this.updatedAt = new Date();
   }
 
+  restore(): void {
+    if (!this.isTrashed()) {
+      throw new Error('휴지통에 있는 폴더만 복구할 수 있습니다.');
+    }
+    this.state = FolderState.ACTIVE;
+    this.updatedAt = new Date();
+  }
+
 
 }

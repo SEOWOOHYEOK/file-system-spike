@@ -11,13 +11,13 @@ import {
   ConflictStrategy,
   FILE_REPOSITORY,
   FILE_STORAGE_OBJECT_REPOSITORY,
-  IFileRepository,
-  IFileStorageObjectRepository,
 } from '../../domain/file';
 import {
-  FOLDER_REPOSITORY,
-  IFolderRepository,
+  FOLDER_REPOSITORY,  
 } from '../../domain/folder';
+
+import type { IFileRepository, IFileStorageObjectRepository } from '../../domain/file';
+import type { IFolderRepository } from '../../domain/folder';
 
 /**
  * 파일 업로드 비즈니스 서비스

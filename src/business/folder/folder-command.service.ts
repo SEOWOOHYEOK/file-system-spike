@@ -17,9 +17,6 @@ import {
   FOLDER_STORAGE_OBJECT_REPOSITORY,
 } from '../../domain/folder';
 import {
-  FileState,
-  StorageType,
-  AvailabilityStatus,
   FILE_REPOSITORY,
   FILE_STORAGE_OBJECT_REPOSITORY,
 } from '../../domain/file';
