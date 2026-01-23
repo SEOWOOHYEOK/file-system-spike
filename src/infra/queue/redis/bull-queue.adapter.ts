@@ -96,7 +96,7 @@ export class BullQueueAdapter implements IJobQueuePort, OnModuleDestroy {
     if (bullJob.finishedOn && !bullJob.failedReason) return 'completed';
     if (bullJob.failedReason) return 'failed';
     if (bullJob.processedOn) return 'active';
-    if (bullJob.delay && bullJob.delay > 0) return 'delayed';
+    if (bullJob.opts.delay && bullJob.opts.delay > 0) return 'delayed';
     return 'waiting';
   }
 

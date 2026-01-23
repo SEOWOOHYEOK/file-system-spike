@@ -16,7 +16,7 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
-import { FileUploadService, FileDownloadService, FileManageService } from '../../business/file';
+import { FileUploadService, FileDownloadService, FileManageService } from '../../../business/file';
 import {
   UploadFileResponse,
   FileInfoResponse,
@@ -25,7 +25,7 @@ import {
   MoveFileRequest,
   MoveFileResponse,
   ConflictStrategy,
-} from '../../domain/file';
+} from '../../../domain/file';
 import {
   ApiFileUpload,
   ApiFileInfo,

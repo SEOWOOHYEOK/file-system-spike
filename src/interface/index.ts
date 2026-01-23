@@ -3,8 +3,8 @@
  */
 
 // 컨트롤러
-export * from './file/file.controller';
-export * from './folder/folder.controller';
+export * from './controller/file/file.controller';
+export * from './controller/folder/folder.controller';
 export * from './trash/trash.controller';
 
 // 인터페이스 모듈

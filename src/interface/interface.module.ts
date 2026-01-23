@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
-import { FileController } from './file/file.controller';
-import { FolderController } from './folder/folder.controller';
+import { FileController } from './controller/file/file.controller';
+import { FolderController } from './controller/folder/folder.controller';
 import { TrashController } from './trash/trash.controller';
 import { BusinessModule } from '../business/business.module';
 
