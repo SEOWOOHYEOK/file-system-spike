@@ -1,4 +1,5 @@
 import { Injectable, Inject, OnModuleInit, Logger } from '@nestjs/common';
+import * as path from 'path';
 import {
   JOB_QUEUE_PORT,
   Job,
@@ -10,6 +11,7 @@ import {
   NAS_STORAGE_PORT,
 } from '../../domain/storage/ports/nas-storage.port';
 import {
+  FILE_REPOSITORY,
   FILE_STORAGE_OBJECT_REPOSITORY,
   StorageType,
   AvailabilityStatus,
@@ -18,7 +20,7 @@ import {
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 import type { ICacheStoragePort } from '../../domain/storage/ports/cache-storage.port';
 import type { INasStoragePort } from '../../domain/storage/ports/nas-storage.port';
-import type { IFileStorageObjectRepository } from '../../domain/file';
+import type { IFileRepository, IFileStorageObjectRepository } from '../../domain/file';
 
 @Injectable()
 export class NasSyncWorker implements OnModuleInit {
@@ -31,6 +33,8 @@ export class NasSyncWorker implements OnModuleInit {
     private readonly cacheStorage: ICacheStoragePort,
     @Inject(NAS_STORAGE_PORT)
     private readonly nasStorage: INasStoragePort,
+    @Inject(FILE_REPOSITORY)
+    private readonly fileRepository: IFileRepository,
     @Inject(FILE_STORAGE_OBJECT_REPOSITORY)
     private readonly fileStorageObjectRepository: IFileStorageObjectRepository,
   ) { }
@@ -65,21 +69,28 @@ export class NasSyncWorker implements OnModuleInit {
         return;
       }
 
-      // 2. 캐시에서 파일 읽기 (스트림)
+      // 2. 파일 정보 조회 (확장자 추출용)
+      const file = await this.fileRepository.findById(fileId);
+      if (!file) {
+        this.logger.warn(`File not found: ${fileId}`);
+        return;
+      }
+
+      // 3. 캐시에서 파일 읽기 (스트림)
       const readStream = await this.cacheStorage.파일스트림읽기(fileId);
 
-      // 3. NAS에 파일 쓰기 (스트림)
-      // NAS 경로는 fileId를 그대로 사용하거나, 날짜별 폴더링 등을 적용할 수 있음
-      // 여기서는 간단히 fileId 사용 (또는 추후 정책에 따라 변경)
-      const objectKey = fileId;
+      // 4. NAS에 파일 쓰기 (스트림)
+      // objectKey는 fileId + 확장자 형태로 생성 (파일명에서 확장자 추출)
+      const extension = path.extname(file.name); // 예: ".txt", ".pdf"
+      const objectKey = extension ? `${file.name}` : fileId;
       await this.nasStorage.파일스트림쓰기(objectKey, readStream);
 
-      // 4. 상태 업데이트
+      // 5. 상태 업데이트
       nasObject.updateStatus(AvailabilityStatus.AVAILABLE);
       nasObject.updateObjectKey(objectKey);
       await this.fileStorageObjectRepository.save(nasObject);
 
-      this.logger.log(`Successfully synced file to NAS: ${fileId}`);
+      this.logger.log(`Successfully synced file to NAS: ${fileId} -> ${objectKey}`);
     } catch (error) {
       this.logger.error(`Failed to sync file to NAS: ${fileId}`, error);
 
