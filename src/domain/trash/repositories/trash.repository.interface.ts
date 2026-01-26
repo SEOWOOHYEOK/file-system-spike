@@ -114,23 +114,7 @@ export interface ITrashQueryService {
     totalSizeBytes: number;
   }>;
 
-  /**
-   * 휴지통 폴더 내용 조회
-   */
-  getTrashFolderContents(folderId: string): Promise<{
-    currentFolder: { id: string; name: string };
-    parentFolder?: { id: string; name: string };
-    breadcrumb: { id: string; name: string }[];
-    items: Array<{
-      type: TrashItemType;
-      id: string;
-      name: string;
-      sizeBytes?: number;
-      mimeType?: string;
-      modifiedAt: Date;
-    }>;
-    totalCount: number;
-  }>;
+
 }
 
 /**

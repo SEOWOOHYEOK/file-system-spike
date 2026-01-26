@@ -18,7 +18,6 @@ export class FileStorageObjectOrmEntity {
   id: string;
 
   @Column('uuid')
-  @Index()
   fileId: string;
 
   @Column({

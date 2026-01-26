@@ -23,6 +23,7 @@ import {
   FolderRepository,
   FolderStorageObjectRepository,
   TrashRepository,
+  TrashQueryRepository,
 } from './repositories';
 
 // Repository Tokens (from domain layer)
@@ -34,7 +35,7 @@ import {
   FOLDER_REPOSITORY,
   FOLDER_STORAGE_OBJECT_REPOSITORY,
 } from '../../domain/folder/repositories/folder.repository.interface';
-import { TRASH_REPOSITORY } from '../../domain/trash/repositories/trash.repository.interface';
+import { TRASH_REPOSITORY, TRASH_QUERY_SERVICE } from '../../domain/trash/repositories/trash.repository.interface';
 
 /**
  * TypeORM forFeature에 등록할 엔티티 목록
@@ -79,6 +80,11 @@ const entities = [
       provide: TRASH_REPOSITORY,
       useClass: TrashRepository,
     },
+    // Trash Query Service
+    {
+      provide: TRASH_QUERY_SERVICE,
+      useClass: TrashQueryRepository,
+    },
   ],
   exports: [
     FILE_REPOSITORY,
@@ -86,6 +92,7 @@ const entities = [
     FOLDER_REPOSITORY,
     FOLDER_STORAGE_OBJECT_REPOSITORY,
     TRASH_REPOSITORY,
+    TRASH_QUERY_SERVICE,
   ],
 })
 export class RepositoryModule {}

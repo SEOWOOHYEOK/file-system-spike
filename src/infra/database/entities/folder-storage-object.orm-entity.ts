@@ -18,7 +18,6 @@ export class FolderStorageObjectOrmEntity {
   id: string;
 
   @Column('uuid')
-  @Index()
   folderId: string;
 
   @Column({ length: 50, default: 'NAS' })

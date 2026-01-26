@@ -56,7 +56,7 @@ export class TrashService {
     private readonly folderRepository: IFolderRepository,
     @Inject(FOLDER_STORAGE_OBJECT_REPOSITORY)
     private readonly folderStorageObjectRepository: IFolderStorageObjectRepository,
-  ) {}
+  ) { }
 
   /**
    * 휴지통 목록 조회
@@ -90,36 +90,6 @@ export class TrashService {
     };
   }
 
-  /**
-   * 휴지통 폴더 내용 조회
-   */
-  async getTrashFolderContents(folderId: string): Promise<TrashFolderContentsResponse> {
-    // 폴더가 휴지통 상태인지 확인
-    const folder = await this.folderRepository.findById(folderId);
-    if (!folder || !folder.isTrashed()) {
-      throw new NotFoundException({
-        code: 'TRASH_FOLDER_NOT_FOUND',
-        message: '휴지통에서 해당 폴더를 찾을 수 없습니다.',
-      });
-    }
-
-    const result = await this.trashQueryService.getTrashFolderContents(folderId);
-
-    return {
-      currentFolder: result.currentFolder,
-      parentFolder: result.parentFolder,
-      breadcrumb: result.breadcrumb,
-      items: result.items.map(item => ({
-        type: item.type,
-        id: item.id,
-        name: item.name,
-        sizeBytes: item.sizeBytes,
-        mimeType: item.mimeType,
-        modifiedAt: item.modifiedAt.toISOString(),
-      })),
-      totalCount: result.totalCount,
-    };
-  }
 
   /**
    * 파일 복원 정보 조회
@@ -286,7 +256,7 @@ export class TrashService {
     // 하위 항목 수 계산
     const descendants = await this.folderRepository.findAllDescendants(folder.id, FolderState.TRASHED);
     const allFolderIds = [folder.id, ...descendants.map(f => f.id)];
-    
+
     let fileCount = 0;
     for (const fId of allFolderIds) {
       const files = await this.fileRepository.findByFolderId(fId, FileState.TRASHED);
@@ -493,7 +463,7 @@ export class TrashService {
    */
   async emptyTrash(userId: string): Promise<EmptyTrashResponse> {
     const trashItems = await this.trashRepository.findAll();
-    
+
     let success = 0;
     let failed = 0;
 
@@ -541,7 +511,7 @@ export class TrashService {
           skipped++;
           skippedItems.push({
             id: item.id,
-            name: item.isFile() 
+            name: item.isFile()
               ? (restoreInfo as FileRestoreInfoResponse).fileName
               : (restoreInfo as FolderRestoreInfoResponse).folderName,
             reason: 'CONFLICT',

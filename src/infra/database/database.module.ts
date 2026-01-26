@@ -50,7 +50,7 @@ const entities = [
         autoLoadEntities: true,
         // 방법 2: 경로 패턴으로 엔티티 자동 검색 (주석 처리됨)
         // entities: [path.join(__dirname, 'entities', '*.orm-entity{.ts,.js}')],
-        synchronize: configService.get<boolean>('DB_SYNCHRONIZE', false),
+        synchronize: configService.get<boolean>('DB_SYNCHRONIZE', true),
         logging: configService.get<string>('NODE_ENV') === 'development',
       }),
       inject: [ConfigService],

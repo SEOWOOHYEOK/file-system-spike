@@ -46,7 +46,7 @@ import {
 @ApiTags('Trash')
 @Controller('trash')
 export class TrashController {
-  constructor(private readonly trashService: TrashService) {}
+  constructor(private readonly trashService: TrashService) { }
 
   /**
    * GET /trash - 휴지통 목록 조회
@@ -57,16 +57,6 @@ export class TrashController {
     return this.trashService.getTrashList(query);
   }
 
-  /**
-   * GET /trash/folders/:folderId/contents - 휴지통 폴더 내부 조회
-   */
-  @Get('folders/:folderId/contents')
-  @ApiTrashFolderContents()
-  async getTrashFolderContents(
-    @Param('folderId') folderId: string,
-  ): Promise<TrashFolderContentsResponse> {
-    return this.trashService.getTrashFolderContents(folderId);
-  }
 
   /**
    * GET /trash/files/:trashMetadataId/restore-info - 파일 복원 정보 조회
