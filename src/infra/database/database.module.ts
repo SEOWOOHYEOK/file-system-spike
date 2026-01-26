@@ -23,16 +23,34 @@ import { TrashMetadataOrmEntity } from './entities/trash-metadata.orm-entity';
 import { FileStorageObjectOrmEntity } from './entities/file-storage-object.orm-entity';
 import { FolderStorageObjectOrmEntity } from './entities/folder-storage-object.orm-entity';
 
+// Organization Entities (조직 관련 엔티티)
+import {
+  Rank,
+  Position,
+  Department,
+  Employee,
+  EmployeeDepartmentPosition,
+  EmployeeDepartmentPositionHistory,
+} from '../../integrations/migration/organization/entities';
+
 /**
  * 등록된 모든 ORM 엔티티
  * 새 엔티티 추가 시 여기에만 추가하면 됩니다.
  */
 const entities = [
+  // File 관련 엔티티
   FileOrmEntity,
   FolderOrmEntity,
   TrashMetadataOrmEntity,
   FileStorageObjectOrmEntity,
   FolderStorageObjectOrmEntity,
+  // Organization 관련 엔티티
+  Rank,
+  Position,
+  Department,
+  Employee,
+  EmployeeDepartmentPosition,
+  EmployeeDepartmentPositionHistory,
 ];
 
 @Module({

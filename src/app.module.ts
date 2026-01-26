@@ -6,6 +6,8 @@ import { DomainModule } from './domain/domain.module';
 import { BusinessModule } from './business/business.module';
 import { InterfaceModule } from './interface/interface.module';
 import { RepositoryModule } from './infra/database/repository.module';
+import { SSOModule } from './integrations/sso';
+import { OrganizationMigrationModule } from './integrations/migration';
 
 /**
  * 루트 애플리케이션 모듈
@@ -23,6 +25,10 @@ import { RepositoryModule } from './infra/database/repository.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    // SSO 통합 모듈
+    SSOModule,
+    // 조직 마이그레이션 모듈
+    OrganizationMigrationModule,
     // 인프라 레이어
     RepositoryModule,
     // 도메인 레이어
