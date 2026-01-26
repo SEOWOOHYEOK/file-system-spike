@@ -15,9 +15,13 @@ import {
 import {
   FOLDER_REPOSITORY,  
 } from '../../domain/folder';
+import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';
+import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 
 import type { IFileRepository, IFileStorageObjectRepository } from '../../domain/file';
 import type { IFolderRepository } from '../../domain/folder';
+import type { ICacheStoragePort } from '../../domain/storage/ports/cache-storage.port';
+import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 
 /**
  * 파일 업로드 비즈니스 서비스
@@ -32,6 +36,10 @@ export class FileUploadService {
     private readonly fileStorageObjectRepository: IFileStorageObjectRepository,
     @Inject(FOLDER_REPOSITORY)
     private readonly folderRepository: IFolderRepository,
+    @Inject(CACHE_STORAGE_PORT)
+    private readonly cacheStorage: ICacheStoragePort,
+    @Inject(JOB_QUEUE_PORT)
+    private readonly jobQueue: IJobQueuePort,
   ) {}
 
   /**
@@ -47,7 +55,20 @@ export class FileUploadService {
    * 7. 응답 반환
    */
   async upload(request: UploadFileRequest): Promise<UploadFileResponse> {
-    const { file, folderId, conflictStrategy = ConflictStrategy.ERROR } = request;
+    const { file, folderId: rawFolderId, conflictStrategy = ConflictStrategy.ERROR } = request;
+
+    // 0. 폴더 ID 해석 (root 처리)
+    let folderId = rawFolderId;
+    if (!folderId || folderId === 'root' || folderId === '/') {
+      const rootFolder = await this.folderRepository.findOne({ parentId: null });
+      if (!rootFolder) {
+        throw new NotFoundException({
+          code: 'ROOT_FOLDER_NOT_FOUND',
+          message: '루트 폴더를 찾을 수 없습니다.',
+        });
+      }
+      folderId = rootFolder.id;
+    }
 
     // 1. 요청 검증
     await this.validateUploadRequest(file, folderId);
@@ -63,19 +84,21 @@ export class FileUploadService {
     // 3. UUID 미리 생성
     const fileId = uuidv4();
 
-    // 4. TODO: SeaweedFS 저장 (infra 레이어에서 구현)
-    // await this.storageService.upload(fileId, file.buffer);
+    // 4. SeaweedFS 저장 (infra 레이어에서 구현)
+    await this.cacheStorage.파일쓰기(fileId, file.buffer);
 
     // 5. DB 저장
     const fileEntity = await this.createFileEntity(fileId, finalFileName, folderId, file);
     await this.createStorageObjects(fileId);
 
-    // 6. TODO: Bull 큐 등록 (NAS 동기화)
-    // await this.nasQueue.add('NAS_SYNC_UPLOAD', { fileId });
+    // 6. Bull 큐 등록 (NAS 동기화)
+    await this.jobQueue.addJob('NAS_SYNC_UPLOAD', { fileId });
 
     // 7. 폴더 경로 조회하여 응답
     const folder = await this.folderRepository.findById(folderId);
-    const filePath = folder ? `${folder.path}/${finalFileName}` : `/${finalFileName}`;
+    // 루트 폴더인 경우 path가 '/'이므로 슬래시 중복 방지 로직 필요
+    const folderPath = folder ? folder.path : '';
+    const filePath = folderPath === '/' ? `/${finalFileName}` : `${folderPath}/${finalFileName}`;
 
     return {
       id: fileEntity.id,

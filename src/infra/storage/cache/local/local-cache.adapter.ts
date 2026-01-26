@@ -18,7 +18,12 @@ export class LocalCacheAdapter implements ICacheStoragePort {
   private readonly basePath: string;
 
   constructor(private readonly configService: ConfigService) {
-    this.basePath = this.configService.get<string>('CACHE_LOCAL_PATH', '/data/cache');
+    const configuredPath = this.configService.get<string>('CACHE_LOCAL_PATH', 'cache');
+    // 절대 경로가 아니면 프로젝트 루트 기준으로 경로 설정
+    this.basePath = path.isAbsolute(configuredPath) 
+      ? configuredPath 
+      : path.join(process.cwd(), configuredPath);
+      
     this.logger.log(`LocalCacheAdapter initialized with basePath: ${this.basePath}`);
   }
 

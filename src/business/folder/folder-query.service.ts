@@ -38,6 +38,38 @@ export class FolderQueryService {
   ) {}
 
   /**
+   * 루트 폴더 정보 조회
+   */
+  async getRootFolderInfo(): Promise<FolderInfoResponse> {
+    const folder = await this.folderRepository.findOne({ parentId: null });
+    if (!folder) {
+      throw new NotFoundException({
+        code: 'ROOT_FOLDER_NOT_FOUND',
+        message: '루트 폴더를 찾을 수 없습니다.',
+      });
+    }
+
+    const storageObject = await this.folderStorageObjectRepository.findByFolderId(folder.id);
+    const statistics = await this.folderRepository.getStatistics(folder.id);
+
+    return {
+      id: folder.id,
+      name: folder.name,
+      parentId: folder.parentId,
+      path: folder.path,
+      state: folder.state,
+      storageStatus: {
+        nas: storageObject?.availabilityStatus ?? null,
+      },
+      fileCount: statistics.fileCount,
+      folderCount: statistics.folderCount,
+      totalSize: statistics.totalSize,
+      createdAt: folder.createdAt.toISOString(),
+      updatedAt: folder.updatedAt.toISOString(),
+    };
+  }
+
+  /**
    * 폴더 정보 조회
    */
   async getFolderInfo(folderId: string): Promise<FolderInfoResponse> {

@@ -96,11 +96,6 @@ export const ApiFolderInfo = () =>
 - 하위 전체 파일 크기 합계
       `,
     }),
-    ApiParam({
-      name: 'folderId',
-      description: '폴더 ID',
-      example: 'folder_abc123',
-    }),
     ApiResponse({
       status: 200,
       description: '폴더 정보 조회 성공',

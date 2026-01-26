@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { RepositoryModule } from '../../infra/database/repository.module';
 import { StorageInfraModule } from '../../infra/storage/storage-infra.module';
+import { QueueInfraModule } from '../../infra/queue/queue-infra.module';
 import { FileDomainModule } from '../../domain/file/file.module';
 import { FolderDomainModule } from '../../domain/folder/folder.module';
 import { TrashDomainModule } from '../../domain/trash/trash.module';
@@ -16,6 +17,7 @@ import { FileManageService } from './file-manage.service';
   imports: [
     RepositoryModule,
     StorageInfraModule,
+    QueueInfraModule,
     FileDomainModule,
     FolderDomainModule,
     TrashDomainModule,

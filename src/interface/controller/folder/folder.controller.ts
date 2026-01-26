@@ -58,6 +58,15 @@ export class FolderController {
   }
 
   /**
+   * GET /folders/root - 루트 폴더 정보 조회
+   */
+  @Get('root')
+  @ApiFolderInfo()
+  async getRootFolderInfo(): Promise<FolderInfoResponse> {
+    return this.folderQueryService.getRootFolderInfo();
+  }
+
+  /**
    * GET /folders/:folderId - 폴더 정보 조회
    */
   @Get(':folderId')

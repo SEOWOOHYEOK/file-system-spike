@@ -47,7 +47,11 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
   private readonly pausedQueues: Set<string> = new Set();
 
   constructor(private readonly configService: ConfigService) {
-    this.basePath = this.configService.get<string>('QUEUE_LOCAL_PATH', '/data/queue');
+    const configuredPath = this.configService.get<string>('QUEUE_LOCAL_PATH', 'queue');
+    this.basePath = path.isAbsolute(configuredPath)
+      ? configuredPath
+      : path.join(process.cwd(), configuredPath);
+      
     this.pollingInterval = this.configService.get<number>('QUEUE_POLLING_INTERVAL', 3000);
     this.logger.log(`LocalFileQueueAdapter initialized - Path: ${this.basePath}`);
   }

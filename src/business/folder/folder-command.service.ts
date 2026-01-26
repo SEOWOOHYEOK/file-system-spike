@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException, OnModuleInit, Logger } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import {
   FolderEntity,
@@ -44,7 +44,9 @@ import type {
  * 폴더 생성, 이름 변경, 이동, 삭제 처리
  */
 @Injectable()
-export class FolderCommandService {
+export class FolderCommandService implements OnModuleInit {
+  private readonly logger = new Logger(FolderCommandService.name);
+
   constructor(
     @Inject(FOLDER_REPOSITORY)
     private readonly folderRepository: IFolderRepository,
@@ -57,6 +59,54 @@ export class FolderCommandService {
     @Inject(TRASH_REPOSITORY)
     private readonly trashRepository: ITrashRepository,
   ) { }
+
+  async onModuleInit() {
+    await this.ensureRootFolderExists();
+  }
+
+  /**
+   * 루트 폴더 존재 확인 및 생성
+   */
+  private async ensureRootFolderExists(): Promise<void> {
+    try {
+      const rootFolder = await this.folderRepository.findOne({ parentId: null });
+      
+      if (!rootFolder) {
+        this.logger.log('Root folder not found. Creating root folder...');
+        
+        const folderId = uuidv4();
+        const folder = new FolderEntity({
+          id: folderId,
+          name: '/',
+          parentId: null,
+          path: '/',
+          state: FolderState.ACTIVE,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
+
+        await this.folderRepository.save(folder);
+        
+        // NAS 스토리지 객체 생성 (루트 폴더용)
+        const storageObject = new FolderStorageObjectEntity({
+          id: uuidv4(),
+          folderId,
+          storageType: 'NAS',
+          objectKey: '/',
+          availabilityStatus: FolderAvailabilityStatus.AVAILABLE, // 루트는 이미 존재한다고 가정
+          createdAt: new Date(),
+        });
+
+        await this.folderStorageObjectRepository.save(storageObject);
+        
+        this.logger.log(`Root folder created with ID: ${folderId}`);
+      } else {
+        this.logger.log(`Root folder already exists with ID: ${rootFolder.id}`);
+      }
+    } catch (error) {
+      this.logger.error('Failed to ensure root folder exists', error);
+    }
+  }
 
   /**
    * 폴더 생성
