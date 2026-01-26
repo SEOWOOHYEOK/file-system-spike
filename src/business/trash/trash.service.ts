@@ -62,11 +62,17 @@ export class TrashService {
    * 휴지통 목록 조회
    */
   async getTrashList(query: GetTrashListQuery): Promise<TrashListResponse> {
+    // 기본값 설정
+    const page = query.page ?? 1;
+    const pageSize = query.pageSize ?? 50;
+    const sortBy = query.sortBy ?? 'deletedAt';
+    const sortOrder = query.sortOrder ?? 'desc';
+
     const result = await this.trashQueryService.getTrashList({
-      sortBy: query.sortBy,
-      order: query.order,
-      page: query.page,
-      limit: query.limit,
+      sortBy,
+      order: sortOrder,
+      page,
+      limit: pageSize,
     });
 
     const items: TrashItem[] = result.items.map(item => ({
@@ -83,10 +89,21 @@ export class TrashService {
       expiresAt: item.expiresAt.toISOString(),
     }));
 
+    // 페이지네이션 정보 계산
+    const totalItems = result.totalCount;
+    const totalPages = Math.ceil(totalItems / pageSize);
+
     return {
       items,
-      totalCount: result.totalCount,
       totalSizeBytes: result.totalSizeBytes,
+      pagination: {
+        page,
+        pageSize,
+        totalItems,
+        totalPages,
+        hasNext: page < totalPages,
+        hasPrev: page > 1,
+      },
     };
   }
 

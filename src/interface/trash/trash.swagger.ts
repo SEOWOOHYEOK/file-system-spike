@@ -21,22 +21,66 @@ export const ApiTrashList = () =>
       description: `
 휴지통에 있는 파일/폴더 목록을 조회합니다.
 
-### 정렬 옵션
-- \`name\`: 이름순
-- \`originalPath\`: 원래 위치순
-- \`deletedAt\`: 삭제일순 (기본값)
-- \`sizeBytes\`: 크기순
-- \`modifiedAt\`: 수정일순
+### 정렬 옵션 (sortBy)
+| 값 | 설명 |
+|---|---|
+| \`name\` | 이름순 |
+| \`originalPath\` | 원래 위치순 |
+| \`deletedAt\` | 삭제일순 (기본값) |
+| \`sizeBytes\` | 크기순 |
+| \`modifiedAt\` | 수정일순 |
+
+### 정렬 순서 (sortOrder)
+| 값 | 설명 |
+|---|---|
+| \`asc\` | 오름차순 |
+| \`desc\` | 내림차순 (기본값) |
+
+### 페이지네이션
+- \`page\`: 페이지 번호 (1부터 시작, 기본값: 1)
+- \`pageSize\`: 페이지 크기 (기본값: 50, 최대: 100)
+
+### 응답 페이지네이션 정보
+- \`page\`: 현재 페이지 번호
+- \`pageSize\`: 현재 페이지 크기
+- \`totalItems\`: 전체 항목 개수
+- \`totalPages\`: 전체 페이지 수
+- \`hasNext\`: 다음 페이지 존재 여부
+- \`hasPrev\`: 이전 페이지 존재 여부
 
 ### 주의사항
 - 휴지통 루트 레벨의 항목만 반환됩니다.
 - 폴더 내부 항목은 별도 API로 조회합니다.
       `,
     }),
-    ApiQuery({ name: 'sortBy', required: false, enum: ['name', 'originalPath', 'deletedAt', 'sizeBytes', 'modifiedAt'], description: '정렬 기준' }),
-    ApiQuery({ name: 'order', required: false, enum: ['asc', 'desc'], description: '정렬 순서' }),
-    ApiQuery({ name: 'page', required: false, type: Number, description: '페이지 번호' }),
-    ApiQuery({ name: 'limit', required: false, type: Number, description: '페이지당 항목 수' }),
+    ApiQuery({
+      name: 'sortBy',
+      required: false,
+      enum: ['name', 'originalPath', 'deletedAt', 'sizeBytes', 'modifiedAt'],
+      description: '정렬 기준 (name: 이름순, originalPath: 원래 위치순, deletedAt: 삭제일순, sizeBytes: 크기순, modifiedAt: 수정일순)',
+      example: 'deletedAt',
+    }),
+    ApiQuery({
+      name: 'sortOrder',
+      required: false,
+      enum: ['asc', 'desc'],
+      description: '정렬 순서 (asc: 오름차순, desc: 내림차순)',
+      example: 'desc',
+    }),
+    ApiQuery({
+      name: 'page',
+      required: false,
+      type: Number,
+      description: '페이지 번호 (1부터 시작)',
+      example: 1,
+    }),
+    ApiQuery({
+      name: 'pageSize',
+      required: false,
+      type: Number,
+      description: '페이지 크기 (1~100, 기본값: 50)',
+      example: 50,
+    }),
     ApiResponse({
       status: 200,
       description: '휴지통 목록 조회 성공',
@@ -62,11 +106,22 @@ export const ApiTrashList = () =>
               },
             },
           },
-          totalCount: { type: 'number', example: 42 },
-          totalSizeBytes: { type: 'number', example: 524288000 },
+          totalSizeBytes: { type: 'number', description: '휴지통 전체 크기 (bytes)', example: 524288000 },
+          pagination: {
+            type: 'object',
+            properties: {
+              page: { type: 'number', description: '현재 페이지 번호', example: 1 },
+              pageSize: { type: 'number', description: '현재 페이지 크기', example: 50 },
+              totalItems: { type: 'number', description: '전체 항목 개수', example: 125 },
+              totalPages: { type: 'number', description: '전체 페이지 수', example: 3 },
+              hasNext: { type: 'boolean', description: '다음 페이지 존재 여부', example: true },
+              hasPrev: { type: 'boolean', description: '이전 페이지 존재 여부', example: false },
+            },
+          },
         },
       },
     }),
+    ApiResponse({ status: 400, description: '잘못된 쿼리 파라미터' }),
   );
 
 /**
