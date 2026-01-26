@@ -134,15 +134,32 @@ export const ApiFolderContents = () =>
       description: `
 폴더 내의 하위 폴더와 파일 목록을 조회합니다.
 
-### 정렬 옵션
-- \`name\`: 이름순 (기본값)
-- \`createdAt\`: 생성일순
-- \`updatedAt\`: 수정일순
-- \`size\`: 크기순 (파일만)
+### 정렬 옵션 (sortBy)
+| 값 | 설명 |
+|---|---|
+| \`name\` | 이름순 (기본값) |
+| \`type\` | 유형순 (mimeType 기준, 폴더는 'folder'로 처리) |
+| \`createdAt\` | 생성일순 |
+| \`updatedAt\` | 수정일순 |
+| \`size\` | 크기순 (파일만 해당, 폴더는 0으로 처리) |
+
+### 정렬 순서 (sortOrder)
+| 값 | 설명 |
+|---|---|
+| \`asc\` | 오름차순 (기본값) |
+| \`desc\` | 내림차순 |
 
 ### 페이지네이션
-- page: 페이지 번호 (1부터 시작)
-- limit: 페이지당 항목 수 (기본값: 50)
+- \`page\`: 페이지 번호 (1부터 시작, 기본값: 1)
+- \`pageSize\`: 페이지 크기 (기본값: 50, 최대: 100)
+
+### 응답 페이지네이션 정보
+- \`page\`: 현재 페이지 번호
+- \`pageSize\`: 현재 페이지 크기
+- \`totalItems\`: 전체 항목 개수 (폴더 + 파일)
+- \`totalPages\`: 전체 페이지 수
+- \`hasNext\`: 다음 페이지 존재 여부
+- \`hasPrev\`: 이전 페이지 존재 여부
       `,
     }),
     ApiParam({
@@ -150,10 +167,34 @@ export const ApiFolderContents = () =>
       description: '폴더 ID',
       example: 'folder_abc123',
     }),
-    ApiQuery({ name: 'sortBy', required: false, enum: ['name', 'createdAt', 'updatedAt', 'size'], description: '정렬 기준' }),
-    ApiQuery({ name: 'sortOrder', required: false, enum: ['asc', 'desc'], description: '정렬 순서' }),
-    ApiQuery({ name: 'page', required: false, type: Number, description: '페이지 번호' }),
-    ApiQuery({ name: 'limit', required: false, type: Number, description: '페이지당 항목 수' }),
+    ApiQuery({
+      name: 'sortBy',
+      required: false,
+      enum: ['name', 'type', 'createdAt', 'updatedAt', 'size'],
+      description: '정렬 기준 (name: 이름순, type: 유형순, createdAt: 생성일순, updatedAt: 수정일순, size: 크기순)',
+      example: 'name',
+    }),
+    ApiQuery({
+      name: 'sortOrder',
+      required: false,
+      enum: ['asc', 'desc'],
+      description: '정렬 순서 (asc: 오름차순, desc: 내림차순)',
+      example: 'asc',
+    }),
+    ApiQuery({
+      name: 'page',
+      required: false,
+      type: Number,
+      description: '페이지 번호 (1부터 시작)',
+      example: 1,
+    }),
+    ApiQuery({
+      name: 'pageSize',
+      required: false,
+      type: Number,
+      description: '페이지 크기 (1~100, 기본값: 50)',
+      example: 50,
+    }),
     ApiResponse({
       status: 200,
       description: '폴더 내용 조회 성공',
@@ -181,6 +222,12 @@ export const ApiFolderContents = () =>
                 id: { type: 'string' },
                 name: { type: 'string' },
                 path: { type: 'string' },
+                storageStatus: {
+                  type: 'object',
+                  properties: {
+                    nas: { type: 'string', nullable: true },
+                  },
+                },
                 fileCount: { type: 'number' },
                 folderCount: { type: 'number' },
                 updatedAt: { type: 'string' },
@@ -196,6 +243,13 @@ export const ApiFolderContents = () =>
                 name: { type: 'string' },
                 size: { type: 'number' },
                 mimeType: { type: 'string' },
+                storageStatus: {
+                  type: 'object',
+                  properties: {
+                    cache: { type: 'string', nullable: true },
+                    nas: { type: 'string', nullable: true },
+                  },
+                },
                 updatedAt: { type: 'string' },
               },
             },
@@ -203,15 +257,18 @@ export const ApiFolderContents = () =>
           pagination: {
             type: 'object',
             properties: {
-              page: { type: 'number' },
-              limit: { type: 'number' },
-              totalFolders: { type: 'number' },
-              totalFiles: { type: 'number' },
+              page: { type: 'number', description: '현재 페이지 번호', example: 1 },
+              pageSize: { type: 'number', description: '현재 페이지 크기', example: 50 },
+              totalItems: { type: 'number', description: '전체 항목 개수 (폴더 + 파일)', example: 125 },
+              totalPages: { type: 'number', description: '전체 페이지 수', example: 3 },
+              hasNext: { type: 'boolean', description: '다음 페이지 존재 여부', example: true },
+              hasPrev: { type: 'boolean', description: '이전 페이지 존재 여부', example: false },
             },
           },
         },
       },
     }),
+    ApiResponse({ status: 400, description: '잘못된 쿼리 파라미터' }),
     ApiResponse({ status: 404, description: '폴더를 찾을 수 없음' }),
   );
 

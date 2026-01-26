@@ -6,7 +6,7 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { FileStorageObjectOrmEntity } from '../entities/file-storage-object.orm-entity';
-import { IFileStorageObjectRepository } from '../../../domain/file/repositories/file.repository.interface';
+import { IFileStorageObjectRepository, TransactionOptions } from '../../../domain/file/repositories/file.repository.interface';
 import {
   FileStorageObjectEntity,
   StorageType,
@@ -19,6 +19,15 @@ export class FileStorageObjectRepository implements IFileStorageObjectRepository
     @InjectRepository(FileStorageObjectOrmEntity)
     private readonly repository: Repository<FileStorageObjectOrmEntity>,
   ) {}
+
+  /**
+   * 트랜잭션이 있으면 해당 매니저의 리포지토리를, 없으면 기본 리포지토리 반환
+   */
+  private getRepository(options?: TransactionOptions): Repository<FileStorageObjectOrmEntity> {
+    return options?.queryRunner
+      ? options.queryRunner.manager.getRepository(FileStorageObjectOrmEntity)
+      : this.repository;
+  }
 
   /**
    * ORM Entity -> Domain Entity 변환
@@ -59,8 +68,10 @@ export class FileStorageObjectRepository implements IFileStorageObjectRepository
   async findByFileIdAndType(
     fileId: string,
     storageType: StorageType,
+    options?: TransactionOptions,
   ): Promise<FileStorageObjectEntity | null> {
-    const orm = await this.repository.findOne({
+    const repo = this.getRepository(options);
+    const orm = await repo.findOne({
       where: { fileId, storageType },
     });
     return orm ? this.toDomain(orm) : null;
@@ -69,8 +80,10 @@ export class FileStorageObjectRepository implements IFileStorageObjectRepository
   async findByFileIdAndTypeForUpdate(
     fileId: string,
     storageType: StorageType,
+    options?: TransactionOptions,
   ): Promise<FileStorageObjectEntity | null> {
-    const orm = await this.repository
+    const repo = this.getRepository(options);
+    const orm = await repo
       .createQueryBuilder('fso')
       .where('fso.fileId = :fileId', { fileId })
       .andWhere('fso.storageType = :storageType', { storageType })
@@ -79,31 +92,37 @@ export class FileStorageObjectRepository implements IFileStorageObjectRepository
     return orm ? this.toDomain(orm) : null;
   }
 
-  async findByFileId(fileId: string): Promise<FileStorageObjectEntity[]> {
-    const orms = await this.repository.find({ where: { fileId } });
+  async findByFileId(fileId: string, options?: TransactionOptions): Promise<FileStorageObjectEntity[]> {
+    const repo = this.getRepository(options);
+    const orms = await repo.find({ where: { fileId } });
     return orms.map((orm) => this.toDomain(orm));
   }
 
-  async save(storageObject: FileStorageObjectEntity): Promise<FileStorageObjectEntity> {
+  async save(storageObject: FileStorageObjectEntity, options?: TransactionOptions): Promise<FileStorageObjectEntity> {
+    const repo = this.getRepository(options);
     const orm = this.toOrm(storageObject);
-    const saved = await this.repository.save(orm);
+    const saved = await repo.save(orm);
     return this.toDomain(saved);
   }
 
-  async delete(id: string): Promise<void> {
-    await this.repository.delete(id);
+  async delete(id: string, options?: TransactionOptions): Promise<void> {
+    const repo = this.getRepository(options);
+    await repo.delete(id);
   }
 
-  async deleteByFileId(fileId: string): Promise<void> {
-    await this.repository.delete({ fileId });
+  async deleteByFileId(fileId: string, options?: TransactionOptions): Promise<void> {
+    const repo = this.getRepository(options);
+    await repo.delete({ fileId });
   }
 
   async updateStatusByFileIds(
     fileIds: string[],
     storageType: StorageType,
     status: string,
+    options?: TransactionOptions,
   ): Promise<number> {
-    const result = await this.repository
+    const repo = this.getRepository(options);
+    const result = await repo
       .createQueryBuilder()
       .update(FileStorageObjectOrmEntity)
       .set({ availabilityStatus: status, updatedAt: new Date() })

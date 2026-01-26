@@ -3,6 +3,7 @@
  * 파일 도메인의 영속성 계층 추상화
  */
 
+import type { QueryRunner } from 'typeorm';
 import { FileEntity, FileState } from '../entities/file.entity';
 import { FileStorageObjectEntity, StorageType } from '../../storage/file/file-storage-object.entity';
 
@@ -17,28 +18,35 @@ export interface FindFileOptions {
 }
 
 /**
+ * 트랜잭션 옵션
+ */
+export interface TransactionOptions {
+  queryRunner?: QueryRunner;
+}
+
+/**
  * 파일 리포지토리 인터페이스
  */
 export interface IFileRepository {
   /**
    * ID로 파일 조회
    */
-  findById(id: string): Promise<FileEntity | null>;
+  findById(id: string, options?: TransactionOptions): Promise<FileEntity | null>;
 
   /**
-   * ID로 파일 조회 (락 획득)
+   * ID로 파일 조회 (락 획득) - 트랜잭션 필수
    */
-  findByIdForUpdate(id: string): Promise<FileEntity | null>;
+  findByIdForUpdate(id: string, options?: TransactionOptions): Promise<FileEntity | null>;
 
   /**
    * 조건으로 파일 조회
    */
-  findOne(options: FindFileOptions): Promise<FileEntity | null>;
+  findOne(options: FindFileOptions, txOptions?: TransactionOptions): Promise<FileEntity | null>;
 
   /**
    * 폴더 내 파일 목록 조회
    */
-  findByFolderId(folderId: string, state?: FileState): Promise<FileEntity[]>;
+  findByFolderId(folderId: string, state?: FileState, options?: TransactionOptions): Promise<FileEntity[]>;
 
   /**
    * 동일 파일명 존재 확인
@@ -48,22 +56,23 @@ export interface IFileRepository {
     name: string,
     mimeType: string,
     excludeFileId?: string,
+    options?: TransactionOptions,
   ): Promise<boolean>;
 
   /**
    * 파일 저장
    */
-  save(file: FileEntity): Promise<FileEntity>;
+  save(file: FileEntity, options?: TransactionOptions): Promise<FileEntity>;
 
   /**
    * 파일 삭제
    */
-  delete(id: string): Promise<void>;
+  delete(id: string, options?: TransactionOptions): Promise<void>;
 
   /**
    * 다수 파일 상태 일괄 변경
    */
-  updateStateByFolderIds(folderIds: string[], state: FileState): Promise<number>;
+  updateStateByFolderIds(folderIds: string[], state: FileState, options?: TransactionOptions): Promise<number>;
 }
 
 /**
@@ -76,35 +85,37 @@ export interface IFileStorageObjectRepository {
   findByFileIdAndType(
     fileId: string,
     storageType: StorageType,
+    options?: TransactionOptions,
   ): Promise<FileStorageObjectEntity | null>;
 
   /**
-   * 파일 ID와 스토리지 타입으로 조회 (락 획득)
+   * 파일 ID와 스토리지 타입으로 조회 (락 획득) - 트랜잭션 필수
    */
   findByFileIdAndTypeForUpdate(
     fileId: string,
     storageType: StorageType,
+    options?: TransactionOptions,
   ): Promise<FileStorageObjectEntity | null>;
 
   /**
    * 파일 ID로 모든 스토리지 객체 조회
    */
-  findByFileId(fileId: string): Promise<FileStorageObjectEntity[]>;
+  findByFileId(fileId: string, options?: TransactionOptions): Promise<FileStorageObjectEntity[]>;
 
   /**
    * 저장
    */
-  save(storageObject: FileStorageObjectEntity): Promise<FileStorageObjectEntity>;
+  save(storageObject: FileStorageObjectEntity, options?: TransactionOptions): Promise<FileStorageObjectEntity>;
 
   /**
    * 삭제
    */
-  delete(id: string): Promise<void>;
+  delete(id: string, options?: TransactionOptions): Promise<void>;
 
   /**
    * 파일 ID로 모든 스토리지 객체 삭제
    */
-  deleteByFileId(fileId: string): Promise<void>;
+  deleteByFileId(fileId: string, options?: TransactionOptions): Promise<void>;
 
   /**
    * 다수 파일의 스토리지 상태 일괄 변경
@@ -113,6 +124,7 @@ export interface IFileStorageObjectRepository {
     fileIds: string[],
     storageType: StorageType,
     status: string,
+    options?: TransactionOptions,
   ): Promise<number>;
 }
 

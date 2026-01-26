@@ -1,4 +1,5 @@
-import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
+import { DataSource, QueryRunner } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import {
   FileEntity,
@@ -13,6 +14,7 @@ import {
   ConflictStrategy,
   FILE_REPOSITORY,
   FILE_STORAGE_OBJECT_REPOSITORY,
+  TransactionOptions,
 } from '../../domain/file';
 import {
   FOLDER_REPOSITORY,
@@ -21,15 +23,20 @@ import {
   TrashMetadataFactory,
   TRASH_REPOSITORY,
 } from '../../domain/trash';
+import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 import type { IFileRepository, IFileStorageObjectRepository } from '../../domain/file';
 import type { IFolderRepository } from '../../domain/folder';
 import type { ITrashRepository } from '../../domain/trash';
+import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
+
 /**
  * 파일 관리 비즈니스 서비스
  * 파일명 변경, 파일 이동, 파일 삭제(휴지통) 처리
  */
 @Injectable()
 export class FileManageService {
+  private readonly logger = new Logger(FileManageService.name);
+
   constructor(
     @Inject(FILE_REPOSITORY)
     private readonly fileRepository: IFileRepository,
@@ -39,79 +46,116 @@ export class FileManageService {
     private readonly folderRepository: IFolderRepository,
     @Inject(TRASH_REPOSITORY)
     private readonly trashRepository: ITrashRepository,
+    @Inject(JOB_QUEUE_PORT)
+    private readonly jobQueue: IJobQueuePort,
+    private readonly dataSource: DataSource,
   ) {}
 
   /**
    * 파일명 변경
    * 
    * 처리 플로우:
-   * 1. 파일 락 획득
-   * 2. NAS 동기화 상태 체크
-   * 3. 동일 파일명 존재 확인
-   * 4. 파일명 업데이트
-   * 5. NAS 경로 + 동기화 상태 업데이트
-   * 6. Bull 큐 등록 (NAS 동기화)
+   * 1. 트랜잭션 시작
+   * 2. 파일 락 획득
+   * 3. NAS 동기화 상태 체크
+   * 4. 동일 파일명 존재 확인
+   * 5. 파일명 업데이트
+   * 6. NAS 경로 + 동기화 상태 업데이트
+   * 7. 트랜잭션 커밋
+   * 8. Bull 큐 등록 (NAS 동기화)
    */
   async rename(fileId: string, request: RenameFileRequest, userId: string): Promise<RenameFileResponse> {
     const { newName, conflictStrategy = ConflictStrategy.ERROR } = request;
 
-    // 1. 파일 조회 (락)
-    const file = await this.fileRepository.findByIdForUpdate(fileId);
-    if (!file) {
-      throw new NotFoundException({
-        code: 'FILE_NOT_FOUND',
-        message: '파일을 찾을 수 없습니다.',
-      });
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    let oldObjectKey: string | null = null;
+    let newObjectKey: string | null = null;
+
+    try {
+      const txOptions: TransactionOptions = { queryRunner };
+
+      // 1. 파일 조회 (락)
+      const file = await this.fileRepository.findByIdForUpdate(fileId, txOptions);
+      if (!file) {
+        throw new NotFoundException({
+          code: 'FILE_NOT_FOUND',
+          message: '파일을 찾을 수 없습니다.',
+        });
+      }
+
+      if (!file.isActive()) {
+        throw new BadRequestException({
+          code: 'FILE_NOT_ACTIVE',
+          message: '활성 상태의 파일만 이름을 변경할 수 있습니다.',
+        });
+      }
+
+      // 2. NAS 동기화 상태 체크
+      await this.checkNasSyncStatus(fileId, txOptions);
+
+      // 3. 동일 파일명 존재 확인
+      const finalName = await this.resolveFileNameForRename(
+        file.folderId,
+        newName,
+        file.mimeType,
+        fileId,
+        conflictStrategy,
+        txOptions,
+      );
+
+      // 4. 파일명 업데이트
+      file.rename(finalName);
+      await this.fileRepository.save(file, txOptions);
+
+      // 5. NAS 상태 업데이트
+      const nasObject = await this.fileStorageObjectRepository.findByFileIdAndType(
+        fileId,
+        StorageType.NAS,
+        txOptions,
+      );
+      if (nasObject) {
+        oldObjectKey = nasObject.objectKey;
+        newObjectKey = `${file.createdAt.getTime()}_${finalName}`; // 새 파일명
+        nasObject.updateObjectKey(newObjectKey);
+        nasObject.updateStatus(AvailabilityStatus.SYNCING);
+        await this.fileStorageObjectRepository.save(nasObject, txOptions);
+      }
+
+      await queryRunner.commitTransaction();
+      this.logger.debug(`File renamed: ${fileId} -> ${finalName}`);
+
+      // 6. Bull 큐 등록 (NAS_SYNC_RENAME) - 트랜잭션 커밋 후 실행
+      if (oldObjectKey && newObjectKey) {
+        await this.jobQueue.addJob('NAS_SYNC_RENAME', {
+          fileId,
+          oldObjectKey,
+          newObjectKey,
+        });
+        this.logger.debug(`NAS_SYNC_RENAME job added for file: ${fileId}`);
+      }
+
+      const folder = await this.folderRepository.findById(file.folderId);
+      const filePath = folder && folder.path !== '/' ? `${folder.path}/${finalName}` : `/${finalName}`;
+
+      return {
+        id: file.id,
+        name: file.name,
+        path: filePath,
+        storageStatus: {
+          nas: 'SYNCING',
+        },
+        updatedAt: file.updatedAt.toISOString(),
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error(`Failed to rename file: ${fileId}`, error);
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
-
-    if (!file.isActive()) {
-      throw new BadRequestException({
-        code: 'FILE_NOT_ACTIVE',
-        message: '활성 상태의 파일만 이름을 변경할 수 있습니다.',
-      });
-    }
-
-    // 2. NAS 동기화 상태 체크
-    await this.checkNasSyncStatus(fileId);
-
-    // 3. 동일 파일명 존재 확인
-    const finalName = await this.resolveFileNameForRename(
-      file.folderId,
-      newName,
-      file.mimeType,
-      fileId,
-      conflictStrategy,
-    );
-
-    // 4. 파일명 업데이트
-    file.rename(finalName);
-    await this.fileRepository.save(file);
-
-    // 5. NAS 상태 업데이트
-    const nasObject = await this.fileStorageObjectRepository.findByFileIdAndType(
-      fileId,
-      StorageType.NAS,
-    );
-    if (nasObject) {
-      nasObject.updateStatus(AvailabilityStatus.SYNCING);
-      await this.fileStorageObjectRepository.save(nasObject);
-    }
-
-    // 6. TODO: Bull 큐 등록 (NAS_SYNC_RENAME)
-    // await this.nasQueue.add('NAS_SYNC_RENAME', { fileId, oldName, newName });
-
-    const folder = await this.folderRepository.findById(file.folderId);
-    const filePath = folder ? `${folder.path}/${finalName}` : `/${finalName}`;
-
-    return {
-      id: file.id,
-      name: file.name,
-      path: filePath,
-      storageStatus: {
-        nas: 'SYNCING',
-      },
-      updatedAt: file.updatedAt.toISOString(),
-    };
   }
 
   /**
@@ -119,17 +163,19 @@ export class FileManageService {
    * 
    * 처리 플로우:
    * 1. 대상 폴더 존재 확인
-   * 2. 파일 락 획득
-   * 3. NAS 동기화 상태 체크
-   * 4. 동일 파일 존재 확인 + 충돌 처리
-   * 5. 파일 이동 (폴더 변경)
-   * 6. NAS 경로 + 동기화 상태 업데이트
-   * 7. Bull 큐 등록 (NAS 동기화)
+   * 2. 트랜잭션 시작
+   * 3. 파일 락 획득
+   * 4. NAS 동기화 상태 체크
+   * 5. 동일 파일 존재 확인 + 충돌 처리
+   * 6. 파일 이동 (폴더 변경)
+   * 7. NAS 경로 + 동기화 상태 업데이트
+   * 8. 트랜잭션 커밋
+   * 9. Bull 큐 등록 (NAS 동기화)
    */
   async move(fileId: string, request: MoveFileRequest, userId: string): Promise<MoveFileResponse> {
     const { targetFolderId, conflictStrategy = MoveConflictStrategy.ERROR } = request;
 
-    // 1. 대상 폴더 존재 확인
+    // 1. 대상 폴더 존재 확인 (트랜잭션 밖에서 확인)
     const targetFolder = await this.folderRepository.findById(targetFolderId);
     if (!targetFolder || !targetFolder.isActive()) {
       throw new NotFoundException({
@@ -138,90 +184,130 @@ export class FileManageService {
       });
     }
 
-    // 2. 파일 조회 (락)
-    const file = await this.fileRepository.findByIdForUpdate(fileId);
-    if (!file) {
-      throw new NotFoundException({
-        code: 'FILE_NOT_FOUND',
-        message: '파일을 찾을 수 없습니다.',
-      });
-    }
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
 
-    if (!file.isActive()) {
-      throw new BadRequestException({
-        code: 'FILE_NOT_ACTIVE',
-        message: '활성 상태의 파일만 이동할 수 있습니다.',
-      });
-    }
+    let sourcePath: string | null = null;
+    let targetPath: string | null = null;
+    let originalFolderId: string | null = null;
 
-    // 3. NAS 동기화 상태 체크
-    await this.checkNasSyncStatus(fileId);
+    try {
+      const txOptions: TransactionOptions = { queryRunner };
 
-    // 4. 충돌 처리
-    const { finalName, skipped } = await this.resolveConflictForMove(
-      targetFolderId,
-      file.name,
-      file.mimeType,
-      conflictStrategy,
-    );
+      // 2. 파일 조회 (락)
+      const file = await this.fileRepository.findByIdForUpdate(fileId, txOptions);
+      if (!file) {
+        throw new NotFoundException({
+          code: 'FILE_NOT_FOUND',
+          message: '파일을 찾을 수 없습니다.',
+        });
+      }
 
-    if (skipped) {
+      if (!file.isActive()) {
+        throw new BadRequestException({
+          code: 'FILE_NOT_ACTIVE',
+          message: '활성 상태의 파일만 이동할 수 있습니다.',
+        });
+      }
+
+      // 원래 폴더 ID 저장 (원복용)
+      originalFolderId = file.folderId;
+
+      // 3. NAS 동기화 상태 체크
+      await this.checkNasSyncStatus(fileId, txOptions);
+
+      // 4. 충돌 처리
+      const { finalName, skipped } = await this.resolveConflictForMove(
+        targetFolderId,
+        file.name,
+        file.mimeType,
+        conflictStrategy,
+        txOptions,
+      );
+
+      if (skipped) {
+        await queryRunner.rollbackTransaction();
+        return {
+          id: file.id,
+          name: file.name,
+          folderId: file.folderId,
+          path: '',
+          skipped: true,
+          reason: '동일한 이름의 파일이 이미 존재합니다.',
+          storageStatus: { nas: 'SYNCING' },
+          updatedAt: file.updatedAt.toISOString(),
+        };
+      }
+
+      // 5. 파일 이동
+      file.moveTo(targetFolderId);
+      if (finalName !== file.name) {
+        file.rename(finalName);
+      }
+      await this.fileRepository.save(file, txOptions);
+
+      // 6. NAS 상태 업데이트
+      const nasObject = await this.fileStorageObjectRepository.findByFileIdAndType(
+        fileId,
+        StorageType.NAS,
+        txOptions,
+      );
+      if (nasObject) {
+        sourcePath = nasObject.objectKey;
+        targetPath = finalName; // 새 경로 (폴더 경로 + 파일명)
+        nasObject.updateStatus(AvailabilityStatus.SYNCING);
+        await this.fileStorageObjectRepository.save(nasObject, txOptions);
+      }
+
+      await queryRunner.commitTransaction();
+      this.logger.debug(`File moved: ${fileId} -> folder ${targetFolderId}`);
+
+      // 7. Bull 큐 등록 (NAS_SYNC_MOVE) - 트랜잭션 커밋 후 실행
+      if (sourcePath && targetPath && originalFolderId) {
+        await this.jobQueue.addJob('NAS_SYNC_MOVE', {
+          fileId,
+          sourcePath,
+          targetPath,
+          originalFolderId,
+          targetFolderId,
+        });
+        this.logger.debug(`NAS_SYNC_MOVE job added for file: ${fileId}`);
+      }
+
+      const filePath = `${targetFolder.path}/${finalName}`;
+
       return {
         id: file.id,
         name: file.name,
         folderId: file.folderId,
-        path: '',
-        skipped: true,
-        reason: '동일한 이름의 파일이 이미 존재합니다.',
-        storageStatus: { nas: 'SYNCING' },
+        path: filePath,
+        storageStatus: {
+          nas: 'SYNCING',
+        },
         updatedAt: file.updatedAt.toISOString(),
       };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error(`Failed to move file: ${fileId}`, error);
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
-
-    // 5. 파일 이동
-    file.moveTo(targetFolderId);
-    if (finalName !== file.name) {
-      file.rename(finalName);
-    }
-    await this.fileRepository.save(file);
-
-    // 6. NAS 상태 업데이트
-    const nasObject = await this.fileStorageObjectRepository.findByFileIdAndType(
-      fileId,
-      StorageType.NAS,
-    );
-    if (nasObject) {
-      nasObject.updateStatus(AvailabilityStatus.SYNCING);
-      await this.fileStorageObjectRepository.save(nasObject);
-    }
-
-    // 7. TODO: Bull 큐 등록 (NAS_SYNC_MOVE)
-    // await this.nasQueue.add('NAS_SYNC_MOVE', { fileId, sourceFolder, targetFolder });
-
-    const filePath = `${targetFolder.path}/${finalName}`;
-
-    return {
-      id: file.id,
-      name: file.name,
-      folderId: file.folderId,
-      path: filePath,
-      storageStatus: {
-        nas: 'SYNCING',
-      },
-      updatedAt: file.updatedAt.toISOString(),
-    };
   }
 
   /**
    * 파일 삭제 (휴지통 이동)
    * 
    * 처리 플로우:
-   * 1. 파일 락 획득
-   * 2. NAS 동기화 상태 체크
-   * 3. 파일 상태 변경 (TRASHED)
-   * 4. trash_metadata 생성
-   * 5. NAS 상태 업데이트 (MOVING)
-   * 6. Bull 큐 등록 (NAS 휴지통 이동)
+   * 1. 트랜잭션 시작
+   * 2. 파일 락 획득
+   * 3. NAS 동기화 상태 체크
+   * 4. 파일 상태 변경 (TRASHED)
+   * 5. trash_metadata 생성
+   * 6. NAS 상태 업데이트 (MOVING)
+   * 7. 트랜잭션 커밋
+   * 8. Bull 큐 등록 (NAS 휴지통 이동)
    */
   async delete(fileId: string, userId: string): Promise<{
     id: string;
@@ -229,78 +315,110 @@ export class FileManageService {
     state: FileState;
     trashedAt: string;
   }> {
-    // 1. 파일 조회 (락)
-    const file = await this.fileRepository.findByIdForUpdate(fileId);
-    if (!file) {
-      throw new NotFoundException({
-        code: 'FILE_NOT_FOUND',
-        message: '파일을 찾을 수 없습니다.',
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    let currentObjectKey: string | null = null;
+    let trashPath: string | null = null;
+
+    try {
+      const txOptions: TransactionOptions = { queryRunner };
+
+      // 1. 파일 조회 (락)
+      const file = await this.fileRepository.findByIdForUpdate(fileId, txOptions);
+      if (!file) {
+        throw new NotFoundException({
+          code: 'FILE_NOT_FOUND',
+          message: '파일을 찾을 수 없습니다.',
+        });
+      }
+
+      if (file.isTrashed()) {
+        throw new BadRequestException({
+          code: 'FILE_ALREADY_TRASHED',
+          message: '이미 휴지통에 있는 파일입니다.',
+        });
+      }
+
+      if (!file.isActive()) {
+        throw new BadRequestException({
+          code: 'FILE_NOT_ACTIVE',
+          message: '활성 상태의 파일만 삭제할 수 있습니다.',
+        });
+      }
+
+      // 2. NAS 동기화 상태 체크
+      await this.checkNasSyncStatus(fileId, txOptions);
+
+      // 3. 원래 경로 저장
+      const folder = await this.folderRepository.findById(file.folderId);
+      const originalPath = folder ? `${folder.path}/${file.name}` : `/${file.name}`;
+
+      // 4. 파일 상태 변경
+      file.delete();
+      await this.fileRepository.save(file, txOptions);
+
+      // 5. trash_metadata 생성
+      const trashMetadata = TrashMetadataFactory.createForFile({
+        id: uuidv4(),
+        fileId: file.id,
+        originalPath,
+        originalFolderId: file.folderId,
+        deletedBy: userId,
       });
+      await this.trashRepository.save(trashMetadata);
+
+      // 6. NAS 상태 업데이트
+      const nasObject = await this.fileStorageObjectRepository.findByFileIdAndType(
+        fileId,
+        StorageType.NAS,
+        txOptions,
+      );
+      if (nasObject) {
+        currentObjectKey = nasObject.objectKey;
+          // 휴지통 경로: .trash/{fileId}_{fileName}
+          trashPath = `.trash/${file.createdAt.getTime()}_${file.name}`; // 1769417075898_222.txt
+        nasObject.updateStatus(AvailabilityStatus.MOVING);
+        await this.fileStorageObjectRepository.save(nasObject, txOptions);
+      }
+
+      await queryRunner.commitTransaction();
+      this.logger.debug(`File deleted (moved to trash): ${fileId}`);
+
+      // 7. Bull 큐 등록 (NAS_MOVE_TO_TRASH) - 트랜잭션 커밋 후 실행
+      if (currentObjectKey && trashPath) {
+        await this.jobQueue.addJob('NAS_MOVE_TO_TRASH', {
+          fileId,
+          currentObjectKey,
+          trashPath,
+        });
+        this.logger.debug(`NAS_MOVE_TO_TRASH job added for file: ${fileId}`);
+      }
+
+      return {
+        id: file.id,
+        name: file.name,
+        state: file.state,
+        trashedAt: file.updatedAt.toISOString(),
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      this.logger.error(`Failed to delete file: ${fileId}`, error);
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
-
-    if (file.isTrashed()) {
-      throw new BadRequestException({
-        code: 'FILE_ALREADY_TRASHED',
-        message: '이미 휴지통에 있는 파일입니다.',
-      });
-    }
-
-    if (!file.isActive()) {
-      throw new BadRequestException({
-        code: 'FILE_NOT_ACTIVE',
-        message: '활성 상태의 파일만 삭제할 수 있습니다.',
-      });
-    }
-
-    // 2. NAS 동기화 상태 체크
-    await this.checkNasSyncStatus(fileId);
-
-    // 3. 원래 경로 저장
-    const folder = await this.folderRepository.findById(file.folderId);
-    const originalPath = folder ? `${folder.path}/${file.name}` : `/${file.name}`;
-
-    // 4. 파일 상태 변경
-    file.delete();
-    await this.fileRepository.save(file);
-
-    // 5. trash_metadata 생성
-    const trashMetadata = TrashMetadataFactory.createForFile({
-      id: uuidv4(),
-      fileId: file.id,
-      originalPath,
-      originalFolderId: file.folderId,
-      deletedBy: userId,
-    });
-    await this.trashRepository.save(trashMetadata);
-
-    // 6. NAS 상태 업데이트
-    const nasObject = await this.fileStorageObjectRepository.findByFileIdAndType(
-      fileId,
-      StorageType.NAS,
-    );
-    if (nasObject) {
-      nasObject.updateStatus(AvailabilityStatus.MOVING);
-      await this.fileStorageObjectRepository.save(nasObject);
-    }
-
-    // 7. TODO: Bull 큐 등록 (NAS_MOVE_TO_TRASH)
-    // await this.nasQueue.add('NAS_MOVE_TO_TRASH', { fileId, trashMetadataId });
-
-    return {
-      id: file.id,
-      name: file.name,
-      state: file.state,
-      trashedAt: file.updatedAt.toISOString(),
-    };
   }
 
   /**
    * NAS 동기화 상태 체크
    */
-  private async checkNasSyncStatus(fileId: string): Promise<void> {
+  private async checkNasSyncStatus(fileId: string, txOptions?: TransactionOptions): Promise<void> {
     const nasObject = await this.fileStorageObjectRepository.findByFileIdAndTypeForUpdate(
       fileId,
       StorageType.NAS,
+      txOptions,
     );
 
     if (nasObject && nasObject.isSyncing()) {
@@ -320,12 +438,14 @@ export class FileManageService {
     mimeType: string,
     excludeFileId: string,
     conflictStrategy: ConflictStrategy,
+    txOptions?: TransactionOptions,
   ): Promise<string> {
     const exists = await this.fileRepository.existsByNameInFolder(
       folderId,
       newName,
       mimeType,
       excludeFileId,
+      txOptions,
     );
 
     if (!exists) {
@@ -340,7 +460,7 @@ export class FileManageService {
     }
 
     // RENAME 전략
-    return this.generateUniqueFileName(folderId, newName, mimeType, excludeFileId);
+    return this.generateUniqueFileName(folderId, newName, mimeType, excludeFileId, txOptions);
   }
 
   /**
@@ -351,11 +471,14 @@ export class FileManageService {
     fileName: string,
     mimeType: string,
     conflictStrategy: MoveConflictStrategy,
+    txOptions?: TransactionOptions,
   ): Promise<{ finalName: string; skipped: boolean }> {
     const exists = await this.fileRepository.existsByNameInFolder(
       targetFolderId,
       fileName,
       mimeType,
+      undefined,
+      txOptions,
     );
 
     if (!exists) {
@@ -377,6 +500,8 @@ export class FileManageService {
           targetFolderId,
           fileName,
           mimeType,
+          undefined,
+          txOptions,
         );
         return { finalName: uniqueName, skipped: false };
 
@@ -397,6 +522,7 @@ export class FileManageService {
     baseName: string,
     mimeType: string,
     excludeFileId?: string,
+    txOptions?: TransactionOptions,
   ): Promise<string> {
     const lastDot = baseName.lastIndexOf('.');
     const nameWithoutExt = lastDot > 0 ? baseName.substring(0, lastDot) : baseName;
@@ -406,7 +532,7 @@ export class FileManageService {
     let newName = `${nameWithoutExt} (${counter})${ext}`;
 
     while (
-      await this.fileRepository.existsByNameInFolder(folderId, newName, mimeType, excludeFileId)
+      await this.fileRepository.existsByNameInFolder(folderId, newName, mimeType, excludeFileId, txOptions)
     ) {
       counter++;
       newName = `${nameWithoutExt} (${counter})${ext}`;

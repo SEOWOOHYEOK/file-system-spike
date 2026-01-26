@@ -8,6 +8,9 @@ import {
   BreadcrumbItem,
   FolderListItem,
   FileListItemInFolder,
+  PaginationInfo,
+  SortBy,
+  SortOrder,
   FOLDER_REPOSITORY,
   FOLDER_STORAGE_OBJECT_REPOSITORY
 } from '../../domain/folder';
@@ -108,14 +111,15 @@ export class FolderQueryService {
     folderId: string,
     query: GetFolderContentsQuery,
   ): Promise<FolderContentsResponse> {
+    // 1. 기본값 설정 (유효성 검증은 DTO에서 처리)
     const {
-      sortBy = 'name',
-      sortOrder = 'asc',
+      sortBy = SortBy.NAME,
+      sortOrder = SortOrder.ASC,
       page = 1,
-      limit = 50,
+      pageSize = 50,
     } = query;
 
-    // 1. 폴더 존재 확인
+    // 2. 폴더 존재 확인
     const folder = await this.folderRepository.findById(folderId);
     if (!folder || folder.isTrashed()) {
       throw new NotFoundException({
@@ -124,29 +128,43 @@ export class FolderQueryService {
       });
     }
 
-    // 2. 브레드크럼 생성
+    // 3. 브레드크럼 생성
     const breadcrumbs = await this.getBreadcrumbs(folderId);
 
-    // 3. 하위 폴더 조회
+    // 4. 하위 폴더 조회
     const subFolders = await this.folderRepository.findByParentId(folderId, FolderState.ACTIVE);
     const folderListItems = await this.mapToFolderListItems(subFolders);
 
-    // 4. 파일 조회
+    // 5. 파일 조회
     const files = await this.fileRepository.findByFolderId(folderId, FileState.ACTIVE);
     const fileListItems = await this.mapToFileListItems(files);
 
-    // 5. 정렬
+    // 6. 정렬
     const sortedFolders = this.sortItems(folderListItems, sortBy, sortOrder);
     const sortedFiles = this.sortItems(fileListItems, sortBy, sortOrder);
 
-    // 6. 페이지네이션 (폴더 먼저, 그 다음 파일)
-    const offset = (page - 1) * limit;
-    const paginatedFolders = sortedFolders.slice(offset, offset + limit);
-    const remainingLimit = limit - paginatedFolders.length;
+    // 7. 페이지네이션 계산
+    const totalItems = sortedFolders.length + sortedFiles.length;
+    const totalPages = Math.ceil(totalItems / pageSize);
+    const offset = (page - 1) * pageSize;
+
+    // 8. 페이지네이션 적용 (폴더 먼저, 그 다음 파일)
+    const paginatedFolders = sortedFolders.slice(offset, offset + pageSize);
+    const remainingPageSize = pageSize - paginatedFolders.length;
     const fileOffset = Math.max(0, offset - sortedFolders.length);
-    const paginatedFiles = remainingLimit > 0
-      ? sortedFiles.slice(fileOffset, fileOffset + remainingLimit)
+    const paginatedFiles = remainingPageSize > 0
+      ? sortedFiles.slice(fileOffset, fileOffset + remainingPageSize)
       : [];
+
+    // 9. 페이지네이션 정보 생성
+    const pagination: PaginationInfo = {
+      page,
+      pageSize,
+      totalItems,
+      totalPages,
+      hasNext: page < totalPages,
+      hasPrev: page > 1,
+    };
 
     return {
       folderId: folder.id,
@@ -154,12 +172,7 @@ export class FolderQueryService {
       breadcrumbs,
       folders: paginatedFolders,
       files: paginatedFiles,
-      pagination: {
-        page,
-        limit,
-        totalFolders: sortedFolders.length,
-        totalFiles: sortedFiles.length,
-      },
+      pagination,
     };
   }
 
@@ -230,26 +243,42 @@ export class FolderQueryService {
   /**
    * 아이템 정렬
    */
-  private sortItems<T extends { name: string; updatedAt: string }>(
+  private sortItems<T extends { name: string; updatedAt: string; size?: number; mimeType?: string }>(
     items: T[],
-    sortBy: string,
-    sortOrder: string,
+    sortBy: SortBy,
+    sortOrder: SortOrder,
   ): T[] {
     return [...items].sort((a, b) => {
       let comparison = 0;
 
       switch (sortBy) {
-        case 'name':
+        case SortBy.NAME:
           comparison = a.name.localeCompare(b.name);
           break;
-        case 'updatedAt':
+        case SortBy.TYPE:
+          // 폴더는 mimeType이 없으므로 'folder'로 처리
+          const typeA = a.mimeType ?? 'folder';
+          const typeB = b.mimeType ?? 'folder';
+          comparison = typeA.localeCompare(typeB);
+          break;
+        case SortBy.CREATED_AT:
+          // createdAt이 없으면 updatedAt으로 대체
           comparison = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+          break;
+        case SortBy.UPDATED_AT:
+          comparison = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+          break;
+        case SortBy.SIZE:
+          // 폴더는 size가 없으므로 0으로 처리
+          const sizeA = a.size ?? 0;
+          const sizeB = b.size ?? 0;
+          comparison = sizeA - sizeB;
           break;
         default:
           comparison = a.name.localeCompare(b.name);
       }
 
-      return sortOrder === 'desc' ? -comparison : comparison;
+      return sortOrder === SortOrder.DESC ? -comparison : comparison;
     });
   }
 }

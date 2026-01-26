@@ -9,8 +9,16 @@ export * from '../storage/folder/folder-storage-object.entity';
 // DTO
 export * from './dto';
 
-// 리포지토리 인터페이스
-export * from './repositories/folder.repository.interface';
+// 리포지토리 인터페이스 (TransactionOptions는 file에서 이미 export됨)
+export type {
+  FindFolderOptions,
+  IFolderRepository,
+  IFolderStorageObjectRepository,
+} from './repositories/folder.repository.interface';
+export {
+  FOLDER_REPOSITORY,
+  FOLDER_STORAGE_OBJECT_REPOSITORY,
+} from './repositories/folder.repository.interface';
 
 // 도메인 서비스
 export * from './service';

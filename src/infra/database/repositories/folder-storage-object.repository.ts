@@ -6,7 +6,10 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { FolderStorageObjectOrmEntity } from '../entities/folder-storage-object.orm-entity';
-import { IFolderStorageObjectRepository } from '../../../domain/folder/repositories/folder.repository.interface';
+import {
+  IFolderStorageObjectRepository,
+  TransactionOptions,
+} from '../../../domain/folder/repositories/folder.repository.interface';
 import {
   FolderStorageObjectEntity,
   FolderAvailabilityStatus,
@@ -49,13 +52,19 @@ export class FolderStorageObjectRepository implements IFolderStorageObjectReposi
     return orm;
   }
 
-  async findByFolderId(folderId: string): Promise<FolderStorageObjectEntity | null> {
-    const orm = await this.repository.findOne({ where: { folderId } });
+  async findByFolderId(folderId: string, options?: TransactionOptions): Promise<FolderStorageObjectEntity | null> {
+    const repo = options?.queryRunner
+      ? options.queryRunner.manager.getRepository(FolderStorageObjectOrmEntity)
+      : this.repository;
+    const orm = await repo.findOne({ where: { folderId } });
     return orm ? this.toDomain(orm) : null;
   }
 
-  async findByFolderIdForUpdate(folderId: string): Promise<FolderStorageObjectEntity | null> {
-    const orm = await this.repository
+  async findByFolderIdForUpdate(folderId: string, options?: TransactionOptions): Promise<FolderStorageObjectEntity | null> {
+    const repo = options?.queryRunner
+      ? options.queryRunner.manager.getRepository(FolderStorageObjectOrmEntity)
+      : this.repository;
+    const orm = await repo
       .createQueryBuilder('fso')
       .where('fso.folderId = :folderId', { folderId })
       .setLock('pessimistic_write')
@@ -63,9 +72,23 @@ export class FolderStorageObjectRepository implements IFolderStorageObjectReposi
     return orm ? this.toDomain(orm) : null;
   }
 
-  async save(storageObject: FolderStorageObjectEntity): Promise<FolderStorageObjectEntity> {
+  async findByObjectKeyPrefix(prefix: string, options?: TransactionOptions): Promise<FolderStorageObjectEntity[]> {
+    const repo = options?.queryRunner
+      ? options.queryRunner.manager.getRepository(FolderStorageObjectOrmEntity)
+      : this.repository;
+    const orms = await repo
+      .createQueryBuilder('fso')
+      .where('fso.objectKey LIKE :prefix', { prefix: `${prefix}%` })
+      .getMany();
+    return orms.map(orm => this.toDomain(orm));
+  }
+
+  async save(storageObject: FolderStorageObjectEntity, options?: TransactionOptions): Promise<FolderStorageObjectEntity> {
+    const repo = options?.queryRunner
+      ? options.queryRunner.manager.getRepository(FolderStorageObjectOrmEntity)
+      : this.repository;
     const orm = this.toOrm(storageObject);
-    const saved = await this.repository.save(orm);
+    const saved = await repo.save(orm);
     return this.toDomain(saved);
   }
 

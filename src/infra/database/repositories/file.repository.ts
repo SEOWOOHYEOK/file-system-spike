@@ -9,6 +9,7 @@ import { FileOrmEntity } from '../entities/file.orm-entity';
 import {
   IFileRepository,
   FindFileOptions,
+  TransactionOptions,
 } from '../../../domain/file/repositories/file.repository.interface';
 import { FileEntity, FileState } from '../../../domain/file/entities/file.entity';
 
@@ -18,6 +19,15 @@ export class FileRepository implements IFileRepository {
     @InjectRepository(FileOrmEntity)
     private readonly repository: Repository<FileOrmEntity>,
   ) {}
+
+  /**
+   * 트랜잭션이 있으면 해당 매니저의 리포지토리를, 없으면 기본 리포지토리 반환
+   */
+  private getRepository(options?: TransactionOptions): Repository<FileOrmEntity> {
+    return options?.queryRunner
+      ? options.queryRunner.manager.getRepository(FileOrmEntity)
+      : this.repository;
+  }
 
   /**
    * ORM Entity -> Domain Entity 변환
@@ -51,13 +61,15 @@ export class FileRepository implements IFileRepository {
     return orm;
   }
 
-  async findById(id: string): Promise<FileEntity | null> {
-    const orm = await this.repository.findOne({ where: { id } });
+  async findById(id: string, options?: TransactionOptions): Promise<FileEntity | null> {
+    const repo = this.getRepository(options);
+    const orm = await repo.findOne({ where: { id } });
     return orm ? this.toDomain(orm) : null;
   }
 
-  async findByIdForUpdate(id: string): Promise<FileEntity | null> {
-    const orm = await this.repository
+  async findByIdForUpdate(id: string, options?: TransactionOptions): Promise<FileEntity | null> {
+    const repo = this.getRepository(options);
+    const orm = await repo
       .createQueryBuilder('file')
       .where('file.id = :id', { id })
       .setLock('pessimistic_write')
@@ -65,22 +77,24 @@ export class FileRepository implements IFileRepository {
     return orm ? this.toDomain(orm) : null;
   }
 
-  async findOne(options: FindFileOptions): Promise<FileEntity | null> {
+  async findOne(findOptions: FindFileOptions, options?: TransactionOptions): Promise<FileEntity | null> {
+    const repo = this.getRepository(options);
     const where: any = {};
-    if (options.folderId) where.folderId = options.folderId;
-    if (options.name) where.name = options.name;
-    if (options.mimeType) where.mimeType = options.mimeType;
-    if (options.state) where.state = options.state;
+    if (findOptions.folderId) where.folderId = findOptions.folderId;
+    if (findOptions.name) where.name = findOptions.name;
+    if (findOptions.mimeType) where.mimeType = findOptions.mimeType;
+    if (findOptions.state) where.state = findOptions.state;
 
-    const orm = await this.repository.findOne({ where });
+    const orm = await repo.findOne({ where });
     return orm ? this.toDomain(orm) : null;
   }
 
-  async findByFolderId(folderId: string, state?: FileState): Promise<FileEntity[]> {
+  async findByFolderId(folderId: string, state?: FileState, options?: TransactionOptions): Promise<FileEntity[]> {
+    const repo = this.getRepository(options);
     const where: any = { folderId };
     if (state) where.state = state;
 
-    const orms = await this.repository.find({ where });
+    const orms = await repo.find({ where });
     return orms.map((orm) => this.toDomain(orm));
   }
 
@@ -89,8 +103,10 @@ export class FileRepository implements IFileRepository {
     name: string,
     mimeType: string,
     excludeFileId?: string,
+    options?: TransactionOptions,
   ): Promise<boolean> {
-    const qb = this.repository
+    const repo = this.getRepository(options);
+    const qb = repo
       .createQueryBuilder('file')
       .where('file.folderId = :folderId', { folderId })
       .andWhere('file.name = :name', { name })
@@ -105,18 +121,21 @@ export class FileRepository implements IFileRepository {
     return count > 0;
   }
 
-  async save(file: FileEntity): Promise<FileEntity> {
+  async save(file: FileEntity, options?: TransactionOptions): Promise<FileEntity> {
+    const repo = this.getRepository(options);
     const orm = this.toOrm(file);
-    const saved = await this.repository.save(orm);
+    const saved = await repo.save(orm);
     return this.toDomain(saved);
   }
 
-  async delete(id: string): Promise<void> {
-    await this.repository.delete(id);
+  async delete(id: string, options?: TransactionOptions): Promise<void> {
+    const repo = this.getRepository(options);
+    await repo.delete(id);
   }
 
-  async updateStateByFolderIds(folderIds: string[], state: FileState): Promise<number> {
-    const result = await this.repository
+  async updateStateByFolderIds(folderIds: string[], state: FileState, options?: TransactionOptions): Promise<number> {
+    const repo = this.getRepository(options);
+    const result = await repo
       .createQueryBuilder()
       .update(FileOrmEntity)
       .set({ state, updatedAt: new Date() })

@@ -94,17 +94,25 @@ export class FileController {
       'Content-Length': file.sizeBytes,
     });
 
-    // 스트림 파이프 (실제 구현 시)
+    // 스트림 파이프
     if (stream) {
       stream.pipe(res);
-      stream.on('end', async () => {
-        await this.fileDownloadService.releaseLease(fileId);
-      });
-      stream.on('error', async () => {
-        await this.fileDownloadService.releaseLease(fileId);
-      });
+      
+      // lease 해제 핸들러 (중복 해제 방지)
+      let leaseReleased = false;
+      const releaseLeaseOnce = async () => {
+        if (!leaseReleased) {
+          leaseReleased = true;
+          await this.fileDownloadService.releaseLease(fileId);
+        }
+      };
+
+      // 스트림 종료/오류/클라이언트 연결 종료 시 lease 해제
+      stream.on('end', releaseLeaseOnce);
+      stream.on('error', releaseLeaseOnce);
+      stream.on('close', releaseLeaseOnce);
     } else {
-      // 임시: 스트림이 없으면 빈 응답
+      // 스트림이 없으면 빈 응답
       res.end();
     }
   }

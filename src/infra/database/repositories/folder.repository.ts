@@ -10,6 +10,7 @@ import { FileOrmEntity } from '../entities/file.orm-entity';
 import {
   IFolderRepository,
   FindFolderOptions,
+  TransactionOptions,
 } from '../../../domain/folder/repositories/folder.repository.interface';
 import { FolderEntity, FolderState } from '../../../domain/folder/entities/folder.entity';
 
@@ -52,13 +53,19 @@ export class FolderRepository implements IFolderRepository {
     return orm;
   }
 
-  async findById(id: string): Promise<FolderEntity | null> {
-    const orm = await this.repository.findOne({ where: { id } });
+  async findById(id: string, options?: TransactionOptions): Promise<FolderEntity | null> {
+    const repo = options?.queryRunner
+      ? options.queryRunner.manager.getRepository(FolderOrmEntity)
+      : this.repository;
+    const orm = await repo.findOne({ where: { id } });
     return orm ? this.toDomain(orm) : null;
   }
 
-  async findByIdForUpdate(id: string): Promise<FolderEntity | null> {
-    const orm = await this.repository
+  async findByIdForUpdate(id: string, options?: TransactionOptions): Promise<FolderEntity | null> {
+    const repo = options?.queryRunner
+      ? options.queryRunner.manager.getRepository(FolderOrmEntity)
+      : this.repository;
+    const orm = await repo
       .createQueryBuilder('folder')
       .where('folder.id = :id', { id })
       .setLock('pessimistic_write')
@@ -140,9 +147,12 @@ export class FolderRepository implements IFolderRepository {
     return ancestors.reverse(); // 루트부터 현재 폴더 순서로
   }
 
-  async save(folder: FolderEntity): Promise<FolderEntity> {
+  async save(folder: FolderEntity, options?: TransactionOptions): Promise<FolderEntity> {
+    const repo = options?.queryRunner
+      ? options.queryRunner.manager.getRepository(FolderOrmEntity)
+      : this.repository;
     const orm = this.toOrm(folder);
-    const saved = await this.repository.save(orm);
+    const saved = await repo.save(orm);
     return this.toDomain(saved);
   }
 
@@ -160,9 +170,12 @@ export class FolderRepository implements IFolderRepository {
     return result.affected || 0;
   }
 
-  async updatePathByPrefix(oldPrefix: string, newPrefix: string): Promise<number> {
-    const result = await this.repository
-      .createQueryBuilder()
+  async updatePathByPrefix(oldPrefix: string, newPrefix: string, options?: TransactionOptions): Promise<number> {
+    const queryBuilder = options?.queryRunner
+      ? options.queryRunner.manager.createQueryBuilder()
+      : this.repository.createQueryBuilder();
+
+    const result = await queryBuilder
       .update(FolderOrmEntity)
       .set({
         path: () => `REPLACE(path, '${oldPrefix}', '${newPrefix}')`,

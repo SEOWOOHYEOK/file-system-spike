@@ -3,6 +3,7 @@
  * 폴더 도메인의 영속성 계층 추상화
  */
 
+import type { QueryRunner } from 'typeorm';
 import { FolderEntity, FolderState } from '../entities/folder.entity';
 import { FolderStorageObjectEntity } from '../../storage/folder/folder-storage-object.entity';
 
@@ -17,18 +18,25 @@ export interface FindFolderOptions {
 }
 
 /**
+ * 트랜잭션 옵션
+ */
+export interface TransactionOptions {
+  queryRunner?: QueryRunner;
+}
+
+/**
  * 폴더 리포지토리 인터페이스
  */
 export interface IFolderRepository {
   /**
    * ID로 폴더 조회
    */
-  findById(id: string): Promise<FolderEntity | null>;
+  findById(id: string, options?: TransactionOptions): Promise<FolderEntity | null>;
 
   /**
-   * ID로 폴더 조회 (락 획득)
+   * ID로 폴더 조회 (락 획득) - 트랜잭션 필수
    */
-  findByIdForUpdate(id: string): Promise<FolderEntity | null>;
+  findByIdForUpdate(id: string, options?: TransactionOptions): Promise<FolderEntity | null>;
 
   /**
    * 조건으로 폴더 조회
@@ -62,7 +70,7 @@ export interface IFolderRepository {
   /**
    * 폴더 저장
    */
-  save(folder: FolderEntity): Promise<FolderEntity>;
+  save(folder: FolderEntity, options?: TransactionOptions): Promise<FolderEntity>;
 
   /**
    * 폴더 삭제
@@ -77,7 +85,7 @@ export interface IFolderRepository {
   /**
    * 경로 일괄 업데이트 (하위 폴더)
    */
-  updatePathByPrefix(oldPrefix: string, newPrefix: string): Promise<number>;
+  updatePathByPrefix(oldPrefix: string, newPrefix: string, options?: TransactionOptions): Promise<number>;
 
   /**
    * 폴더 + 하위 통계 조회 (파일 수, 폴더 수, 전체 크기)
@@ -96,17 +104,22 @@ export interface IFolderStorageObjectRepository {
   /**
    * 폴더 ID로 조회
    */
-  findByFolderId(folderId: string): Promise<FolderStorageObjectEntity | null>;
+  findByFolderId(folderId: string, options?: TransactionOptions): Promise<FolderStorageObjectEntity | null>;
 
   /**
-   * 폴더 ID로 조회 (락 획득)
+   * 폴더 ID로 조회 (락 획득) - 트랜잭션 필수
    */
-  findByFolderIdForUpdate(folderId: string): Promise<FolderStorageObjectEntity | null>;
+  findByFolderIdForUpdate(folderId: string, options?: TransactionOptions): Promise<FolderStorageObjectEntity | null>;
+
+  /**
+   * objectKey prefix로 조회 (하위 폴더 일괄 조회)
+   */
+  findByObjectKeyPrefix(prefix: string, options?: TransactionOptions): Promise<FolderStorageObjectEntity[]>;
 
   /**
    * 저장
    */
-  save(storageObject: FolderStorageObjectEntity): Promise<FolderStorageObjectEntity>;
+  save(storageObject: FolderStorageObjectEntity, options?: TransactionOptions): Promise<FolderStorageObjectEntity>;
 
   /**
    * 삭제

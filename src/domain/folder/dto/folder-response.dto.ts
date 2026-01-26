@@ -2,6 +2,8 @@
  * 폴더 응답 관련 DTO
  */
 
+import { Transform } from 'class-transformer';
+import { IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
 import { FolderState } from '../entities/folder.entity';
 import { FolderAvailabilityStatus } from '../../storage/folder/folder-storage-object.entity';
 
@@ -69,6 +71,24 @@ export interface FileListItemInFolder {
 }
 
 /**
+ * 페이지네이션 정보 DTO
+ */
+export interface PaginationInfo {
+  /** 현재 페이지 번호 */
+  page: number;
+  /** 현재 페이지 크기 */
+  pageSize: number;
+  /** 전체 항목 개수 (폴더 + 파일) */
+  totalItems: number;
+  /** 전체 페이지 수 */
+  totalPages: number;
+  /** 다음 페이지 존재 여부 */
+  hasNext: boolean;
+  /** 이전 페이지 존재 여부 */
+  hasPrev: boolean;
+}
+
+/**
  * 폴더 내용 응답 DTO
  */
 export class FolderContentsResponse {
@@ -80,20 +100,55 @@ export class FolderContentsResponse {
   folders: FolderListItem[];
   /** 파일 목록 */
   files: FileListItemInFolder[];
-  pagination: {
-    page: number;
-    limit: number;
-    totalFolders: number;
-    totalFiles: number;
-  };
+  /** 페이지네이션 정보 */
+  pagination: PaginationInfo;
+}
+
+/**
+ * 정렬 기준
+ */
+export enum SortBy {
+  NAME = 'name',
+  TYPE = 'type',
+  CREATED_AT = 'createdAt',
+  UPDATED_AT = 'updatedAt',
+  SIZE = 'size',
+}
+
+/**
+ * 정렬 순서
+ */
+export enum SortOrder {
+  ASC = 'asc',
+  DESC = 'desc',
 }
 
 /**
  * 폴더 내용 조회 쿼리 파라미터
  */
 export class GetFolderContentsQuery {
-  sortBy?: 'name' | 'createdAt' | 'updatedAt' | 'size';
-  sortOrder?: 'asc' | 'desc';
+  /** 정렬 기준 (name, type, createdAt, updatedAt, size) */
+  @IsOptional()
+  @IsEnum(SortBy, { message: '정렬 기준이 올바르지 않습니다. 허용 값: name, type, createdAt, updatedAt, size' })
+  sortBy?: SortBy;
+
+  /** 정렬 순서 (asc, desc) */
+  @IsOptional()
+  @IsEnum(SortOrder, { message: '정렬 순서가 올바르지 않습니다. 허용 값: asc, desc' })
+  sortOrder?: SortOrder;
+
+  /** 페이지 번호 (1부터 시작, 기본값: 1) */
+  @IsOptional()
+  @Transform(({ value }) => parseInt(value, 10))
+  @IsInt({ message: '페이지 번호는 정수여야 합니다.' })
+  @Min(1, { message: '페이지 번호는 1 이상이어야 합니다.' })
   page?: number;
-  limit?: number;
+
+  /** 페이지 크기 (기본값: 50, 최대: 100) */
+  @IsOptional()
+  @Transform(({ value }) => parseInt(value, 10))
+  @IsInt({ message: '페이지 크기는 정수여야 합니다.' })
+  @Min(1, { message: '페이지 크기는 1 이상이어야 합니다.' })
+  @Max(100, { message: '페이지 크기는 100 이하여야 합니다.' })
+  pageSize?: number;
 }

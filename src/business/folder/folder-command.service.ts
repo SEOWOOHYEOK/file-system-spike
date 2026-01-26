@@ -1,4 +1,5 @@
 import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException, OnModuleInit, Logger } from '@nestjs/common';
+import { DataSource } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import {
   FolderEntity,
@@ -16,6 +17,7 @@ import {
   FOLDER_REPOSITORY,
   FOLDER_STORAGE_OBJECT_REPOSITORY,
 } from '../../domain/folder';
+import type { TransactionOptions } from '../../domain/folder/repositories/folder.repository.interface';
 import {
   FILE_REPOSITORY,
   FILE_STORAGE_OBJECT_REPOSITORY,
@@ -24,6 +26,7 @@ import {
   TrashMetadataFactory,
   TRASH_REPOSITORY,
 } from '../../domain/trash';
+import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 
 import type {
   IFileRepository,
@@ -36,6 +39,7 @@ import type {
 import type {
   ITrashRepository,
 } from '../../domain/trash';
+import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 
 
 
@@ -48,6 +52,7 @@ export class FolderCommandService implements OnModuleInit {
   private readonly logger = new Logger(FolderCommandService.name);
 
   constructor(
+    private readonly dataSource: DataSource,
     @Inject(FOLDER_REPOSITORY)
     private readonly folderRepository: IFolderRepository,
     @Inject(FOLDER_STORAGE_OBJECT_REPOSITORY)
@@ -58,6 +63,8 @@ export class FolderCommandService implements OnModuleInit {
     private readonly fileStorageObjectRepository: IFileStorageObjectRepository,
     @Inject(TRASH_REPOSITORY)
     private readonly trashRepository: ITrashRepository,
+    @Inject(JOB_QUEUE_PORT)
+    private readonly jobQueue: IJobQueuePort,
   ) { }
 
   async onModuleInit() {
@@ -77,7 +84,7 @@ export class FolderCommandService implements OnModuleInit {
         const folderId = uuidv4();
         const folder = new FolderEntity({
           id: folderId,
-          name: '/',
+          name: '',
           parentId: null,
           path: '/',
           state: FolderState.ACTIVE,
@@ -135,7 +142,7 @@ export class FolderCommandService implements OnModuleInit {
 
     // 4. 폴더 생성
     const folderId = uuidv4();
-    const folderPath = parentPath ? `${parentPath}/${finalName}` : `/${finalName}`;
+    const folderPath = parentPath && parentPath !== '/' ? `${parentPath}/${finalName}` : `/${finalName}`;
 
     const folder = new FolderEntity({
       id: folderId,
@@ -161,8 +168,12 @@ export class FolderCommandService implements OnModuleInit {
 
     await this.folderStorageObjectRepository.save(storageObject);
 
-    // 6. TODO: Bull 큐 등록 (NAS_SYNC_MKDIR)
-    // await this.nasQueue.add('NAS_SYNC_MKDIR', { folderId, path: folderPath });
+    // 6. Bull 큐 등록 (NAS_SYNC_MKDIR)
+    await this.jobQueue.addJob('NAS_SYNC_MKDIR', {
+      folderId,
+      path: folderPath,
+    });
+    this.logger.debug(`NAS_SYNC_MKDIR job added for folder: ${folderId}`);
 
     return {
       id: folder.id,
@@ -185,58 +196,89 @@ export class FolderCommandService implements OnModuleInit {
     // 1. 폴더명 유효성 검사
     this.validateFolderName(newName);
 
-    // 2. 폴더 조회 (락)
-    const folder = await this.folderRepository.findByIdForUpdate(folderId);
-    if (!folder) {
-      throw new NotFoundException({
-        code: 'FOLDER_NOT_FOUND',
-        message: '폴더를 찾을 수 없습니다.',
+    // QueryRunner 트랜잭션 시작
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const txOptions: TransactionOptions = { queryRunner };
+
+      // 2. 폴더 조회 (락)
+      const folder = await this.folderRepository.findByIdForUpdate(folderId, txOptions);
+      if (!folder) {
+        throw new NotFoundException({
+          code: 'FOLDER_NOT_FOUND',
+          message: '폴더를 찾을 수 없습니다.',
+        });
+      }
+
+      if (!folder.isActive()) {
+        throw new BadRequestException({
+          code: 'FOLDER_NOT_ACTIVE',
+          message: '활성 상태의 폴더만 이름을 변경할 수 있습니다.',
+        });
+      }
+
+      // 3. NAS 동기화 상태 체크
+      await this.checkNasSyncStatus(folderId, txOptions);
+
+      // 4. 동일 이름 폴더 존재 확인
+      const finalName = await this.resolveFolderNameForRename(
+        folder.parentId,
+        newName,
+        folderId,
+        conflictStrategy,
+      );
+
+      // 5. 새 경로 계산
+      const oldPath = folder.path;
+      const parentPath = folder.parentId
+        ? oldPath.substring(0, oldPath.lastIndexOf('/'))
+        : '';
+      const newPath = parentPath ? `${parentPath}/${finalName}` : `/${finalName}`;
+
+      // 6. 폴더명 업데이트
+      folder.rename(finalName, newPath);
+      await this.folderRepository.save(folder, txOptions);
+
+      // 7. 하위 폴더 경로 일괄 업데이트
+      await this.folderRepository.updatePathByPrefix(oldPath, newPath, txOptions);
+
+      // 8. NAS 스토리지 상태 업데이트
+      const storageObject = await this.folderStorageObjectRepository.findByFolderId(folderId, txOptions);
+      if (storageObject) {
+        storageObject.updateStatus(FolderAvailabilityStatus.SYNCING);
+        storageObject.updateObjectKey(newPath);
+        await this.folderStorageObjectRepository.save(storageObject, txOptions);
+      }
+
+      // 트랜잭션 커밋
+      await queryRunner.commitTransaction();
+
+      // 9. Bull 큐 등록 (NAS_SYNC_RENAME_DIR) - 커밋 후 등록
+      await this.jobQueue.addJob('NAS_SYNC_RENAME_DIR', {
+        folderId,
+        oldPath,
+        newPath,
       });
+      this.logger.debug(`NAS_SYNC_RENAME_DIR job added for folder: ${folderId}`);
+
+      return {
+        id: folder.id,
+        name: folder.name,
+        path: folder.path,
+        storageStatus: {
+          nas: 'SYNCING',
+        },
+        updatedAt: folder.updatedAt.toISOString(),
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
-
-    if (!folder.isActive()) {
-      throw new BadRequestException({
-        code: 'FOLDER_NOT_ACTIVE',
-        message: '활성 상태의 폴더만 이름을 변경할 수 있습니다.',
-      });
-    }
-
-    // 3. NAS 동기화 상태 체크
-    await this.checkNasSyncStatus(folderId);
-
-    // 4. 동일 이름 폴더 존재 확인
-    const finalName = await this.resolveFolderNameForRename(
-      folder.parentId,
-      newName,
-      folderId,
-      conflictStrategy,
-    );
-
-    // 5. 새 경로 계산
-    const oldPath = folder.path;
-    const parentPath = folder.parentId
-      ? oldPath.substring(0, oldPath.lastIndexOf('/'))
-      : '';
-    const newPath = parentPath ? `${parentPath}/${finalName}` : `/${finalName}`;
-
-    // 6. 폴더명 업데이트
-    folder.rename(finalName, newPath);
-    await this.folderRepository.save(folder);
-
-    // 7. 하위 폴더 경로 일괄 업데이트
-    await this.folderRepository.updatePathByPrefix(oldPath, newPath);
-
-
-
-    return {
-      id: folder.id,
-      name: folder.name,
-      path: folder.path,
-      storageStatus: {
-        nas: 'SYNCING',
-      },
-      updatedAt: folder.updatedAt.toISOString(),
-    };
   }
 
   /**
@@ -254,88 +296,116 @@ export class FolderCommandService implements OnModuleInit {
       });
     }
 
-    // 2. 폴더 조회 (락)
-    const folder = await this.folderRepository.findByIdForUpdate(folderId);
-    if (!folder) {
-      throw new NotFoundException({
-        code: 'FOLDER_NOT_FOUND',
-        message: '폴더를 찾을 수 없습니다.',
+    // QueryRunner 트랜잭션 시작
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const txOptions: TransactionOptions = { queryRunner };
+
+      // 2. 폴더 조회 (락)
+      const folder = await this.folderRepository.findByIdForUpdate(folderId, txOptions);
+      if (!folder) {
+        throw new NotFoundException({
+          code: 'FOLDER_NOT_FOUND',
+          message: '폴더를 찾을 수 없습니다.',
+        });
+      }
+
+      if (!folder.isActive()) {
+        throw new BadRequestException({
+          code: 'FOLDER_NOT_ACTIVE',
+          message: '활성 상태의 폴더만 이동할 수 있습니다.',
+        });
+      }
+
+      // 원래 부모 폴더 ID 저장 (원복용)
+      const originalParentId = folder.parentId;
+
+      // 3. 순환 이동 방지 체크
+      if (targetParent.path.startsWith(folder.path + '/') || targetParent.id === folder.id) {
+        throw new ConflictException({
+          code: 'CIRCULAR_MOVE',
+          message: '자기 자신 또는 하위 폴더로 이동할 수 없습니다.',
+        });
+      }
+
+      // 4. NAS 동기화 상태 체크
+      await this.checkNasSyncStatus(folderId, txOptions);
+
+      // 5. 충돌 처리
+      const { finalName, skipped } = await this.resolveConflictForMove(
+        targetParentId,
+        folder.name,
+        conflictStrategy,
+      );
+
+      if (skipped) {
+        await queryRunner.rollbackTransaction();
+        return {
+          id: folder.id,
+          name: folder.name,
+          parentId: folder.parentId || '',
+          path: folder.path,
+          skipped: true,
+          reason: '동일한 이름의 폴더가 이미 존재합니다.',
+          storageStatus: { nas: 'SYNCING' },
+          updatedAt: folder.updatedAt.toISOString(),
+        };
+      }
+
+      // 6. 새 경로 계산
+      const oldPath = folder.path;
+      const newPath = `${targetParent.path}/${finalName}`;
+
+      // 7. 폴더 이동
+      folder.moveTo(targetParentId, newPath);
+      if (finalName !== folder.name) {
+        folder.rename(finalName, newPath);
+      }
+      await this.folderRepository.save(folder, txOptions);
+
+      // 8. 하위 폴더 경로 일괄 업데이트
+      await this.folderRepository.updatePathByPrefix(oldPath, newPath, txOptions);
+
+      // 9. NAS 상태 업데이트
+      const storageObject = await this.folderStorageObjectRepository.findByFolderId(folderId, txOptions);
+      if (storageObject) {
+        storageObject.updateStatus(FolderAvailabilityStatus.SYNCING);
+        storageObject.updateObjectKey(newPath);
+        await this.folderStorageObjectRepository.save(storageObject, txOptions);
+      }
+
+      // 트랜잭션 커밋
+      await queryRunner.commitTransaction();
+
+      // 10. Bull 큐 등록 (NAS_SYNC_MOVE_DIR) - 커밋 후 등록
+      await this.jobQueue.addJob('NAS_SYNC_MOVE_DIR', {
+        folderId,
+        oldPath,
+        newPath,
+        originalParentId,
+        targetParentId,
       });
-    }
+      this.logger.debug(`NAS_SYNC_MOVE_DIR job added for folder: ${folderId}`);
 
-    if (!folder.isActive()) {
-      throw new BadRequestException({
-        code: 'FOLDER_NOT_ACTIVE',
-        message: '활성 상태의 폴더만 이동할 수 있습니다.',
-      });
-    }
-
-    // 3. 순환 이동 방지 체크
-    if (targetParent.path.startsWith(folder.path + '/') || targetParent.id === folder.id) {
-      throw new ConflictException({
-        code: 'CIRCULAR_MOVE',
-        message: '자기 자신 또는 하위 폴더로 이동할 수 없습니다.',
-      });
-    }
-
-    // 4. NAS 동기화 상태 체크
-    await this.checkNasSyncStatus(folderId);
-
-    // 5. 충돌 처리
-    const { finalName, skipped } = await this.resolveConflictForMove(
-      targetParentId,
-      folder.name,
-      conflictStrategy,
-    );
-
-    if (skipped) {
       return {
         id: folder.id,
         name: folder.name,
         parentId: folder.parentId || '',
         path: folder.path,
-        skipped: true,
-        reason: '동일한 이름의 폴더가 이미 존재합니다.',
-        storageStatus: { nas: 'SYNCING' },
+        storageStatus: {
+          nas: 'SYNCING',
+        },
         updatedAt: folder.updatedAt.toISOString(),
       };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
-
-    // 6. 새 경로 계산
-    const oldPath = folder.path;
-    const newPath = `${targetParent.path}/${finalName}`;
-
-    // 7. 폴더 이동
-    folder.moveTo(targetParentId, newPath);
-    if (finalName !== folder.name) {
-      folder.rename(finalName, newPath);
-    }
-    await this.folderRepository.save(folder);
-
-    // 8. 하위 폴더 경로 일괄 업데이트
-    await this.folderRepository.updatePathByPrefix(oldPath, newPath);
-
-    // 9. NAS 상태 업데이트
-    const storageObject = await this.folderStorageObjectRepository.findByFolderId(folderId);
-    if (storageObject) {
-      storageObject.updateStatus(FolderAvailabilityStatus.SYNCING);
-      storageObject.updateObjectKey(newPath);
-      await this.folderStorageObjectRepository.save(storageObject);
-    }
-
-    // 10. TODO: Bull 큐 등록 (NAS_SYNC_MOVE_DIR)
-    // await this.nasQueue.add('NAS_SYNC_MOVE_DIR', { folderId, oldPath, newPath });
-
-    return {
-      id: folder.id,
-      name: folder.name,
-      parentId: folder.parentId || '',
-      path: folder.path,
-      storageStatus: {
-        nas: 'SYNCING',
-      },
-      updatedAt: folder.updatedAt.toISOString(),
-    };
   }
 
   /**
@@ -347,60 +417,88 @@ export class FolderCommandService implements OnModuleInit {
     state: FolderState;
     trashedAt: string;
   }> {
-    // 1. 폴더 조회 (락)
-    const folder = await this.folderRepository.findByIdForUpdate(folderId);
-    if (!folder) {
-      throw new NotFoundException({
-        code: 'FOLDER_NOT_FOUND',
-        message: '폴더를 찾을 수 없습니다.',
+    // QueryRunner 트랜잭션 시작
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    try {
+      const txOptions: TransactionOptions = { queryRunner };
+
+      // 1. 폴더 조회 (락)
+      const folder = await this.folderRepository.findByIdForUpdate(folderId, txOptions);
+      if (!folder) {
+        throw new NotFoundException({
+          code: 'FOLDER_NOT_FOUND',
+          message: '폴더를 찾을 수 없습니다.',
+        });
+      }
+
+      if (folder.isTrashed()) {
+        throw new BadRequestException({
+          code: 'FOLDER_ALREADY_TRASHED',
+          message: '이미 휴지통에 있는 폴더입니다.',
+        });
+      }
+
+      if (!folder.isActive()) {
+        throw new BadRequestException({
+          code: 'FOLDER_NOT_ACTIVE',
+          message: '활성 상태의 폴더만 삭제할 수 있습니다.',
+        });
+      }
+
+      // 2. NAS 동기화 상태 체크
+      await this.checkNasSyncStatus(folderId, txOptions);
+
+      // 3. 현재 경로 저장
+      const currentPath = folder.path;
+
+      // 4. 폴더 상태 변경 (TRASHED)
+      folder.delete();
+      await this.folderRepository.save(folder, txOptions);
+
+      // 5. trash_metadata 생성 (최상위 폴더만)
+      const trashMetadata = TrashMetadataFactory.createForFolder({
+        id: uuidv4(),
+        folderId: folder.id,
+        originalPath: folder.path,
+        originalParentId: folder.parentId,
+        deletedBy: userId,
       });
-    }
+      await this.trashRepository.save(trashMetadata);
 
-    if (folder.isTrashed()) {
-      throw new BadRequestException({
-        code: 'FOLDER_ALREADY_TRASHED',
-        message: '이미 휴지통에 있는 폴더입니다.',
+      // 6. NAS 상태 업데이트
+      const storageObject = await this.folderStorageObjectRepository.findByFolderId(folderId, txOptions);
+      const trashPath = `.trash/${folder.id}_${folder.name}`;
+      if (storageObject) {
+        storageObject.updateStatus(FolderAvailabilityStatus.SYNCING);
+        await this.folderStorageObjectRepository.save(storageObject, txOptions);
+      }
+
+      // 트랜잭션 커밋
+      await queryRunner.commitTransaction();
+
+      // 7. Bull 큐 등록 (NAS_FOLDER_TO_TRASH) - 커밋 후 등록
+      await this.jobQueue.addJob('NAS_FOLDER_TO_TRASH', {
+        folderId,
+        currentPath,
+        trashPath,
       });
+      this.logger.debug(`NAS_FOLDER_TO_TRASH job added for folder: ${folderId}`);
+
+      return {
+        id: folder.id,
+        name: folder.name,
+        state: folder.state,
+        trashedAt: folder.updatedAt.toISOString(),
+      };
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
-
-    if (!folder.isActive()) {
-      throw new BadRequestException({
-        code: 'FOLDER_NOT_ACTIVE',
-        message: '활성 상태의 폴더만 삭제할 수 있습니다.',
-      });
-    }
-
-    // // 3. 하위 폴더 조회
-    // const descendants = await this.folderRepository.findAllDescendants(folderId, FolderState.ACTIVE);
-    // const allFolderIds = [folderId, ...descendants.map(f => f.id)];
-
-    // // 4. 폴더 상태 변경 (TRASHED)
-    // folder.delete();
-    // await this.folderRepository.save(folder);
-    // await this.folderRepository.updateStateByIds(descendants.map(f => f.id), FolderState.TRASHED);
-
-    // // 5. 하위 파일 상태 변경 (TRASHED)
-    // const affectedFileCount = await this.fileRepository.updateStateByFolderIds(
-    //   allFolderIds,
-    //   FileState.TRASHED,
-    // );
-
-    // 6. trash_metadata 생성 (최상위 폴더만)
-    const trashMetadata = TrashMetadataFactory.createForFolder({
-      id: uuidv4(),
-      folderId: folder.id,
-      originalPath: folder.path,
-      originalParentId: folder.parentId,
-      deletedBy: userId,
-    });
-    await this.trashRepository.save(trashMetadata);
-
-    return {
-      id: folder.id,
-      name: folder.name,
-      state: folder.state,
-      trashedAt: folder.updatedAt.toISOString(),
-    };
   }
 
   /**
@@ -435,8 +533,9 @@ export class FolderCommandService implements OnModuleInit {
   /**
    * NAS 동기화 상태 체크
    */
-  private async checkNasSyncStatus(folderId: string): Promise<void> {
-    const storageObject = await this.folderStorageObjectRepository.findByFolderIdForUpdate(folderId);
+  private async checkNasSyncStatus(folderId: string, options?: TransactionOptions): Promise<void> {
+    // 상태 체크만 하므로 lock 불필요 - findByFolderId 사용
+    const storageObject = await this.folderStorageObjectRepository.findByFolderId(folderId, options);
 
     if (storageObject && storageObject.isSyncing()) {
       throw new ConflictException({

@@ -1,10 +1,20 @@
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 import { Logger } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // 전역 유효성 검증 파이프 설정
+  app.useGlobalPipes(
+    new ValidationPipe({
+      transform: true, // 자동 타입 변환 활성화
+      // whitelist: true, // DTO에 정의되지 않은 속성 제거
+      // forbidNonWhitelisted: false, // 정의되지 않은 속성 허용 (경고 없음)
+    }),
+  );
 
   // Swagger 설정
   const config = new DocumentBuilder()
