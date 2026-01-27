@@ -79,6 +79,10 @@ describe('FolderCommandService', () => {
     save: jest.fn(),
   };
 
+  const mockSyncEventRepository = {
+    save: jest.fn(),
+  };
+
   const mockJobQueue = {
     addJob: jest.fn(),
   };
@@ -106,6 +110,7 @@ describe('FolderCommandService', () => {
       mockFileRepository as any,
       mockFileStorageObjectRepository as any,
       mockTrashRepository as any,
+      mockSyncEventRepository as any,
       mockJobQueue as any,
     );
   });
@@ -142,6 +147,7 @@ describe('FolderCommandService', () => {
       mockFolderRepository.existsByNameInParent.mockResolvedValue(false);
       mockFolderRepository.save.mockResolvedValue(undefined);
       mockFolderStorageObjectRepository.save.mockResolvedValue(undefined);
+      mockSyncEventRepository.save.mockResolvedValue(undefined);
       mockJobQueue.addJob.mockResolvedValue(undefined);
 
       // ═══════════════════════════════════════════════════════
@@ -163,10 +169,12 @@ describe('FolderCommandService', () => {
       expect(result.name).toBe('new-folder');
       expect(result.path).toBe('/new-folder');
       expect(result.storageStatus.nas).toBe('SYNCING');
+      expect(mockSyncEventRepository.save).toHaveBeenCalled();
       expect(mockJobQueue.addJob).toHaveBeenCalledWith(
         'NAS_SYNC_MKDIR',
         expect.objectContaining({
           path: '/new-folder',
+          syncEventId: 'mock-uuid',
         }),
       );
     });
@@ -398,11 +406,13 @@ describe('FolderCommandService', () => {
         '/parent/new-name',
         expect.anything(),
       );
+      expect(mockSyncEventRepository.save).toHaveBeenCalled();
       expect(mockJobQueue.addJob).toHaveBeenCalledWith(
         'NAS_SYNC_RENAME_DIR',
         expect.objectContaining({
           oldPath: '/parent/old-name',
           newPath: '/parent/new-name',
+          syncEventId: 'mock-uuid',
         }),
       );
     });
@@ -592,11 +602,13 @@ describe('FolderCommandService', () => {
       // ═══════════════════════════════════════════════════════
       expect(result.parentId).toBe('target-parent-id');
       expect(result.path).toBe('/target-parent/folder-to-move');
+      expect(mockSyncEventRepository.save).toHaveBeenCalled();
       expect(mockJobQueue.addJob).toHaveBeenCalledWith(
         'NAS_SYNC_MOVE_DIR',
         expect.objectContaining({
           oldPath: '/old-parent/folder-to-move',
           newPath: '/target-parent/folder-to-move',
+          syncEventId: 'mock-uuid',
         }),
       );
     });
@@ -823,6 +835,7 @@ describe('FolderCommandService', () => {
       mockFolderRepository.save.mockResolvedValue(undefined);
       mockTrashRepository.save.mockResolvedValue(undefined);
       mockFolderStorageObjectRepository.save.mockResolvedValue(undefined);
+      mockSyncEventRepository.save.mockResolvedValue(undefined);
       mockJobQueue.addJob.mockResolvedValue(undefined);
 
       // ═══════════════════════════════════════════════════════
@@ -834,10 +847,12 @@ describe('FolderCommandService', () => {
       // ✅ THEN (결과 검증)
       // ═══════════════════════════════════════════════════════
       expect(result.state).toBe(FolderState.TRASHED);
+      expect(mockSyncEventRepository.save).toHaveBeenCalled();
       expect(mockJobQueue.addJob).toHaveBeenCalledWith(
         'NAS_FOLDER_TO_TRASH',
         expect.objectContaining({
           folderId: 'folder-1',
+          syncEventId: 'mock-uuid',
         }),
       );
     });

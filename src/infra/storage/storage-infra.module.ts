@@ -16,8 +16,8 @@ import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.por
 import { NAS_STORAGE_PORT } from '../../domain/storage/ports/nas-storage.port';
 import { LocalCacheAdapter } from './cache/local/local-cache.adapter';
 import { SeaweedFSCacheAdapter } from './cache/seaweedfs/seaweedfs-cache.adapter';
-import { NfsNasAdapter } from './nas/new/nfs-nas.adapter';
-import { NasClientProvider } from './nas/new/nas-client.provider';
+import { NfsNasAdapter } from './nas/nfs-nas.adapter';
+import { NasClientProvider } from './nas/nas-client.provider';
 
 /**
  * 캐시 스토리지 타입
@@ -52,14 +52,15 @@ export type CacheStorageType = 'local' | 'seaweedfs';
     // ============================================
     // NAS 스토리지 Provider
     // ============================================
+    NasClientProvider, // Provider로 등록해야 OnModuleInit이 호출됨
     {
       provide: NAS_STORAGE_PORT,
-      useFactory: (configService: ConfigService) => {
+      useFactory: (nasClientProvider: NasClientProvider) => {
         const logger = new Logger('StorageInfraModule');
         logger.log('Initializing NAS storage adapter: NFS');
-        return new NfsNasAdapter(new NasClientProvider(configService));
+        return new NfsNasAdapter(nasClientProvider);
       },
-      inject: [ConfigService],
+      inject: [NasClientProvider],
     },
   ],
   exports: [CACHE_STORAGE_PORT, NAS_STORAGE_PORT],

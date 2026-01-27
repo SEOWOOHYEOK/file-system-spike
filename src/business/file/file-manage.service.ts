@@ -142,12 +142,13 @@ export class FileManageService {
       const filePath = folder && folder.path !== '/' ? `${folder.path}/${finalName}` : `/${finalName}`;
 
       const syncEventId = uuidv4();
-      const syncEvent = SyncEventFactory.createRenameEvent({
+      const syncEvent = SyncEventFactory.createFileRenameEvent({
         id: syncEventId,
         fileId,
         sourcePath: oldObjectKey || '',
         targetPath: newObjectKey || '',
-        metadata: { oldName: oldObjectKey, newName: finalName },
+        oldName: oldObjectKey || '',
+        newName: finalName,
       });
       await this.syncEventRepository.save(syncEvent);
 
@@ -295,12 +296,13 @@ export class FileManageService {
       const targetPathWithFolder = `${targetFolder.path}/${targetPath ?? ''}`;
 
       const syncEventId = uuidv4();
-      const syncEvent = SyncEventFactory.createMoveEvent({
+      const syncEvent = SyncEventFactory.createFileMoveEvent({
         id: syncEventId,
         fileId,
         sourcePath: sourcePathWithFolder,
         targetPath: targetPathWithFolder,
-        metadata: { originalFolderId, targetFolderId },
+        originalFolderId: originalFolderId || '',
+        targetFolderId,
       });
       await this.syncEventRepository.save(syncEvent);
 
@@ -426,18 +428,19 @@ export class FileManageService {
         currentObjectKey = nasObject.objectKey;
           // 휴지통 경로: .trash/{fileId}_{fileName}
           trashPath = `.trash/${file.createdAt.getTime()}_${file.name}`; // 1769417075898_222.txt
-        nasObject.updateStatus(AvailabilityStatus.MOVING);
+        nasObject.updateStatus(AvailabilityStatus.SYNCING);
         await this.fileStorageObjectRepository.save(nasObject, txOptions);
       }
 
       // 7. sync_events 생성 (문서 요구사항)
       const syncEventId = uuidv4();
-      const syncEvent = SyncEventFactory.createTrashEvent({
+      const syncEvent = SyncEventFactory.createFileTrashEvent({
         id: syncEventId,
         fileId,
         sourcePath: originalPath,
         targetPath: trashPath || '',
-        metadata: { originalPath, originalFolderId: file.folderId },
+        originalPath,
+        originalFolderId: file.folderId,
       });
       await this.syncEventRepository.save(syncEvent);
 

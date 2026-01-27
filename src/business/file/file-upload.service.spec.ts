@@ -5,6 +5,7 @@
  *
  * 🎯 테스트 대상:
  *   - FileUploadService.upload
+ *   - FileUploadService.uploadMany
  *
  * 📋 비즈니스 맥락:
  *   - 문서 기준: docs/000.FLOW/파일/005-1.파일_처리_FLOW.md
@@ -467,5 +468,75 @@ describe('FileUploadService', () => {
     ).rejects.toMatchObject({
       response: { code: 'FOLDER_SYNC_FAILED' },
     });
+  });
+
+  /**
+   * 📌 테스트 시나리오: 다중 파일 업로드
+   *
+   * 🎯 검증 목적:
+   *   - 여러 파일을 한 번에 업로드할 수 있어야 함
+   *   - 각 파일에 대해 개별적으로 upload 로직이 수행되어야 함
+   *
+   * ✅ 기대 결과:
+   *   - 모든 파일이 정상적으로 업로드되고 결과 배열이 반환됨
+   */
+  it('다중 파일 업로드 시 모든 파일이 정상적으로 처리되어야 한다', async () => {
+    // ═══════════════════════════════════════════════════════
+    // 📥 GIVEN (사전 조건 설정)
+    // ═══════════════════════════════════════════════════════
+    const uploadCreatedAt = new Date('2024-01-02T12:34:56Z');
+    jest.useFakeTimers().setSystemTime(uploadCreatedAt);
+
+    mockFileRepository.existsByNameInFolder.mockResolvedValue(false);
+    mockFileRepository.save.mockImplementation((file: FileEntity) => file);
+    mockFileStorageObjectRepository.save.mockResolvedValue(undefined);
+    mockSyncEventRepository.save.mockResolvedValue(undefined);
+    mockCacheStorage.파일쓰기.mockResolvedValue(undefined);
+    mockJobQueue.addJob.mockResolvedValue(undefined);
+
+    const folder = new FolderEntity({
+      id: 'folder-1',
+      name: 'test',
+      parentId: null,
+      path: '/test',
+      state: FolderState.ACTIVE,
+      createdAt: uploadCreatedAt,
+      updatedAt: uploadCreatedAt,
+    });
+    mockFolderRepository.findById.mockResolvedValue(folder);
+    mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(null);
+
+    const files = [
+      {
+        originalname: 'file1.txt',
+        mimetype: 'text/plain',
+        size: 10,
+        buffer: Buffer.from('a'),
+      } as Express.Multer.File,
+      {
+        originalname: 'file2.txt',
+        mimetype: 'text/plain',
+        size: 20,
+        buffer: Buffer.from('b'),
+      } as Express.Multer.File,
+    ];
+
+    // ═══════════════════════════════════════════════════════
+    // 🎬 WHEN (테스트 실행)
+    // ═══════════════════════════════════════════════════════
+    const results = await service.uploadMany({
+      files,
+      folderId: 'folder-1',
+      conflictStrategy: ConflictStrategy.ERROR,
+    });
+
+    // ═══════════════════════════════════════════════════════
+    // ✅ THEN (결과 검증)
+    // ═══════════════════════════════════════════════════════
+    expect(results).toHaveLength(2);
+    expect(results[0].name).toBe('file1.txt');
+    expect(results[1].name).toBe('file2.txt');
+    expect(mockFileRepository.save).toHaveBeenCalledTimes(2);
+    expect(mockJobQueue.addJob).toHaveBeenCalledTimes(2);
   });
 });

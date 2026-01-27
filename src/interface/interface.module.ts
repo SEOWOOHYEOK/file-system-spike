@@ -5,13 +5,14 @@ import { FileController } from './controller/file/file.controller';
 import { FolderController } from './controller/folder/folder.controller';
 import { AuthController } from './controller/auth/auth.controller';
 import { TrashController } from './trash/trash.controller';
+import { AdminController } from './controller/admin/admin.controller';
 import { BusinessModule } from '../business/business.module';
 import { SSOModule } from '../integrations/sso/sso.module';
 import { OrganizationMigrationModule } from '../integrations/migration/migration.module';
 
 /**
  * 인터페이스 레이어 통합 모듈
- * 파일, 폴더, 휴지통, 인증 컨트롤러를 통합합니다.
+ * 파일, 폴더, 휴지통, 인증, Admin 컨트롤러를 통합합니다.
  */
 @Module({
   imports: [
@@ -31,6 +32,6 @@ import { OrganizationMigrationModule } from '../integrations/migration/migration
       inject: [ConfigService],
     }),
   ],
-  controllers: [FileController, FolderController, TrashController, AuthController],
+  controllers: [FileController, FolderController, TrashController, AuthController, AdminController],
 })
 export class InterfaceModule {}

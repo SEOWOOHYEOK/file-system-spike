@@ -6,19 +6,20 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { FileStorageObjectOrmEntity } from '../entities/file-storage-object.orm-entity';
-import { IFileStorageObjectRepository, TransactionOptions } from '../../../domain/file/repositories/file.repository.interface';
+import { TransactionOptions } from '../../../domain/file/repositories/file.repository.interface';
 import {
   FileStorageObjectEntity,
   StorageType,
   AvailabilityStatus,
 } from '../../../domain/storage/file/file-storage-object.entity';
+import type { IFileStorageObjectRepository } from '../../../domain/file/repositories/file.repository.interface';
 
 @Injectable()
 export class FileStorageObjectRepository implements IFileStorageObjectRepository {
   constructor(
     @InjectRepository(FileStorageObjectOrmEntity)
     private readonly repository: Repository<FileStorageObjectOrmEntity>,
-  ) {}
+  ) { }
 
   /**
    * 트랜잭션이 있으면 해당 매니저의 리포지토리를, 없으면 기본 리포지토리 반환
@@ -130,5 +131,73 @@ export class FileStorageObjectRepository implements IFileStorageObjectRepository
       .andWhere('storageType = :storageType', { storageType })
       .execute();
     return result.affected || 0;
+  }
+
+  /**
+   * 스토리지 타입별로 페이징 조회 (일관성 검증용)
+   */
+  async findByStorageType(
+    storageType: StorageType,
+    limit: number,
+    offset: number,
+    options?: TransactionOptions,
+  ): Promise<FileStorageObjectEntity[]> {
+    const repo = this.getRepository(options);
+    const orms = await repo.find({
+      where: { storageType },
+      take: limit,
+      skip: offset,
+      order: { createdAt: 'DESC' },
+    });
+    return orms.map((orm) => this.toDomain(orm));
+  }
+
+  /**
+   * 샘플링 조회 - 랜덤 샘플 (일관성 검증용)
+   */
+  async findRandomSamples(
+    storageType: StorageType,
+    count: number,
+    options?: TransactionOptions,
+  ): Promise<FileStorageObjectEntity[]> {
+    const repo = this.getRepository(options);
+    const total = await repo.count({ where: { storageType } });
+
+    if (total === 0) {
+      return [];
+    }
+
+    // 랜덤 오프셋 생성
+    const randomOffsets: number[] = [];
+    for (let i = 0; i < count && i < total; i++) {
+      randomOffsets.push(Math.floor(Math.random() * total));
+    }
+
+    const uniqueOffsets = [...new Set(randomOffsets)];
+    const results: FileStorageObjectEntity[] = [];
+
+    for (const offset of uniqueOffsets) {
+      const orms = await repo.find({
+        where: { storageType },
+        take: 1,
+        skip: offset,
+      });
+      if (orms.length > 0) {
+        results.push(this.toDomain(orms[0]));
+      }
+    }
+
+    return results;
+  }
+
+  /**
+   * 스토리지 타입별 전체 개수 조회
+   */
+  async countByStorageType(
+    storageType: StorageType,
+    options?: TransactionOptions,
+  ): Promise<number> {
+    const repo = this.getRepository(options);
+    return repo.count({ where: { storageType } });
   }
 }

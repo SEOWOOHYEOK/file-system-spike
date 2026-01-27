@@ -22,10 +22,8 @@ export enum StorageType {
 export enum AvailabilityStatus {
   AVAILABLE = 'AVAILABLE',//사용가능
   SYNCING = 'SYNCING',//동기화중
-  MOVING = 'MOVING',//이동중
-  PENDING = 'PENDING',//대기중
   MISSING = 'MISSING',//누락
-  EVICTING = 'EVICTING',//추방중
+  EVICTING = 'EVICTING',//추방중(캐싱제거중)
   ERROR = 'ERROR',//실패
 }
 

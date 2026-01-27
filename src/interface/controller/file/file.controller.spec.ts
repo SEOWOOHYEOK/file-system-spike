@@ -176,6 +176,91 @@ describe('FileController', () => {
 
   /**
    * ============================================================
+   * 📦 다중 파일 업로드 응답 테스트
+   * ============================================================
+   *
+   * 🎯 테스트 대상:
+   *   - POST /files/upload/many
+   *
+   * 📋 비즈니스 맥락:
+   *   - 여러 파일을 한 번에 업로드하고 결과를 배열로 반환
+   * ============================================================
+   */
+  describe('POST /files/upload/many - 다중 파일 업로드', () => {
+    /**
+     * 📌 테스트 시나리오: 다중 파일 업로드 응답 확인
+     *
+     * 🎯 검증 목적:
+     *   - 여러 파일이 정상적으로 처리되고 결과 배열이 반환되는지 확인
+     *
+     * ✅ 기대 결과:
+     *   - 결과 배열의 길이가 입력 파일 수와 동일
+     *   - 각 결과에 필수 필드 포함
+     */
+    it('다중 파일 업로드 시 결과 배열을 반환해야 함', async () => {
+      // Arrange
+      const mockFiles = [
+        {
+          originalname: 'file1.txt',
+          mimetype: 'text/plain',
+          size: 1024,
+          buffer: Buffer.from('test1'),
+        } as Express.Multer.File,
+        {
+          originalname: 'file2.txt',
+          mimetype: 'text/plain',
+          size: 2048,
+          buffer: Buffer.from('test2'),
+        } as Express.Multer.File,
+      ];
+
+      const mockResponses = [
+        {
+          id: 'file-uuid-1',
+          name: 'file1.txt',
+          folderId: 'folder-uuid-456',
+          path: '/test/file1.txt',
+          size: 1024,
+          mimeType: 'text/plain',
+          storageStatus: { cache: 'AVAILABLE' as const, nas: 'SYNCING' as const },
+          createdAt: new Date().toISOString(),
+          syncEventId: 'sync-event-uuid-1',
+        },
+        {
+          id: 'file-uuid-2',
+          name: 'file2.txt',
+          folderId: 'folder-uuid-456',
+          path: '/test/file2.txt',
+          size: 2048,
+          mimeType: 'text/plain',
+          storageStatus: { cache: 'AVAILABLE' as const, nas: 'SYNCING' as const },
+          createdAt: new Date().toISOString(),
+          syncEventId: 'sync-event-uuid-2',
+        },
+      ];
+
+      // @ts-ignore
+      fileUploadService.uploadMany = jest.fn().mockResolvedValue(mockResponses);
+
+      // Act
+      // @ts-ignore
+      const result = await controller.uploadMany(mockFiles, 'folder-uuid-456');
+
+      // Assert
+      expect(result).toHaveLength(2);
+      expect(result[0].name).toBe('file1.txt');
+      expect(result[1].name).toBe('file2.txt');
+      // @ts-ignore
+      expect(fileUploadService.uploadMany).toHaveBeenCalledWith({
+        files: mockFiles,
+        folderId: 'folder-uuid-456',
+        conflictStrategy: undefined,
+      });
+    });
+  });
+
+  /**
+   * ============================================================
    * 📦 파일명 변경 응답 테스트
    * ============================================================
    *

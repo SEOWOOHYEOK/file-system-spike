@@ -128,6 +128,33 @@ export interface IFileStorageObjectRepository {
     status: string,
     options?: TransactionOptions,
   ): Promise<number>;
+
+  /**
+   * 스토리지 타입별로 페이징 조회 (일관성 검증용)
+   */
+  findByStorageType(
+    storageType: StorageType,
+    limit: number,
+    offset: number,
+    options?: TransactionOptions,
+  ): Promise<FileStorageObjectEntity[]>;
+
+  /**
+   * 샘플링 조회 - 랜덤 샘플 (일관성 검증용)
+   */
+  findRandomSamples(
+    storageType: StorageType,
+    count: number,
+    options?: TransactionOptions,
+  ): Promise<FileStorageObjectEntity[]>;
+
+  /**
+   * 스토리지 타입별 전체 개수 조회
+   */
+  countByStorageType(
+    storageType: StorageType,
+    options?: TransactionOptions,
+  ): Promise<number>;
 }
 
 /**

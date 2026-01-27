@@ -23,6 +23,18 @@ export interface UploadFileRequest {
 }
 
 /**
+ * 다중 파일 업로드 요청 DTO
+ */
+export interface UploadFilesRequest {
+  /** 업로드할 파일 목록 */
+  files: Express.Multer.File[];
+  /** 대상 폴더 ID */
+  folderId: string;
+  /** 충돌 전략 (기본값: ERROR) */
+  conflictStrategy?: ConflictStrategy;
+}
+
+/**
  * 파일 업로드 응답 DTO
  *
  * 문서: docs/000.FLOW/파일/005-1.파일_처리_FLOW.md

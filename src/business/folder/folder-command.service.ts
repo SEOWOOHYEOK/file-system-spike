@@ -26,6 +26,10 @@ import {
   TrashMetadataFactory,
   TRASH_REPOSITORY,
 } from '../../domain/trash';
+import {
+  SyncEventFactory,
+  SYNC_EVENT_REPOSITORY,
+} from '../../domain/sync-event';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 
 import type {
@@ -39,6 +43,7 @@ import type {
 import type {
   ITrashRepository,
 } from '../../domain/trash';
+import type { ISyncEventRepository } from '../../domain/sync-event';
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 
 
@@ -63,6 +68,8 @@ export class FolderCommandService implements OnModuleInit {
     private readonly fileStorageObjectRepository: IFileStorageObjectRepository,
     @Inject(TRASH_REPOSITORY)
     private readonly trashRepository: ITrashRepository,
+    @Inject(SYNC_EVENT_REPOSITORY)
+    private readonly syncEventRepository: ISyncEventRepository,
     @Inject(JOB_QUEUE_PORT)
     private readonly jobQueue: IJobQueuePort,
   ) { }
@@ -168,10 +175,22 @@ export class FolderCommandService implements OnModuleInit {
 
     await this.folderStorageObjectRepository.save(storageObject);
 
-    // 6. Bull 큐 등록 (NAS_SYNC_MKDIR)
+    // 6. sync_events 생성
+    const syncEventId = uuidv4();
+    const syncEvent = SyncEventFactory.createFolderCreateEvent({
+      id: syncEventId,
+      folderId,
+      targetPath: folderPath,
+      folderName: finalName,
+      parentId,
+    });
+    await this.syncEventRepository.save(syncEvent);
+
+    // 7. Bull 큐 등록 (NAS_SYNC_MKDIR)
     await this.jobQueue.addJob('NAS_SYNC_MKDIR', {
       folderId,
       path: folderPath,
+      syncEventId,
     });
     this.logger.debug(`NAS_SYNC_MKDIR job added for folder: ${folderId}`);
 
@@ -256,11 +275,24 @@ export class FolderCommandService implements OnModuleInit {
       // 트랜잭션 커밋
       await queryRunner.commitTransaction();
 
-      // 9. Bull 큐 등록 (NAS_SYNC_RENAME_DIR) - 커밋 후 등록
+      // 9. sync_events 생성
+      const syncEventId = uuidv4();
+      const syncEvent = SyncEventFactory.createFolderRenameEvent({
+        id: syncEventId,
+        folderId,
+        sourcePath: oldPath,
+        targetPath: newPath,
+        oldName: folder.name,
+        newName: finalName,
+      });
+      await this.syncEventRepository.save(syncEvent);
+
+      // 10. Bull 큐 등록 (NAS_SYNC_RENAME_DIR) - 커밋 후 등록
       await this.jobQueue.addJob('NAS_SYNC_RENAME_DIR', {
         folderId,
         oldPath,
         newPath,
+        syncEventId,
       });
       this.logger.debug(`NAS_SYNC_RENAME_DIR job added for folder: ${folderId}`);
 
@@ -380,13 +412,26 @@ export class FolderCommandService implements OnModuleInit {
       // 트랜잭션 커밋
       await queryRunner.commitTransaction();
 
-      // 10. Bull 큐 등록 (NAS_SYNC_MOVE_DIR) - 커밋 후 등록
+      // 10. sync_events 생성
+      const syncEventId = uuidv4();
+      const syncEvent = SyncEventFactory.createFolderMoveEvent({
+        id: syncEventId,
+        folderId,
+        sourcePath: oldPath,
+        targetPath: newPath,
+        originalParentId,
+        targetParentId,
+      });
+      await this.syncEventRepository.save(syncEvent);
+
+      // 11. Bull 큐 등록 (NAS_SYNC_MOVE_DIR) - 커밋 후 등록
       await this.jobQueue.addJob('NAS_SYNC_MOVE_DIR', {
         folderId,
         oldPath,
         newPath,
         originalParentId,
         targetParentId,
+        syncEventId,
       });
       this.logger.debug(`NAS_SYNC_MOVE_DIR job added for folder: ${folderId}`);
 
@@ -494,11 +539,24 @@ export class FolderCommandService implements OnModuleInit {
       // 트랜잭션 커밋
       await queryRunner.commitTransaction();
 
-      // 7. Bull 큐 등록 (NAS_FOLDER_TO_TRASH) - 커밋 후 등록
+      // 7. sync_events 생성
+      const syncEventId = uuidv4();
+      const syncEvent = SyncEventFactory.createFolderTrashEvent({
+        id: syncEventId,
+        folderId,
+        sourcePath: currentPath,
+        targetPath: trashPath,
+        originalPath: currentPath,
+        originalParentId: folder.parentId,
+      });
+      await this.syncEventRepository.save(syncEvent);
+
+      // 8. Bull 큐 등록 (NAS_FOLDER_TO_TRASH) - 커밋 후 등록
       await this.jobQueue.addJob('NAS_FOLDER_TO_TRASH', {
         folderId,
         currentPath,
         trashPath,
+        syncEventId,
       });
       this.logger.debug(`NAS_FOLDER_TO_TRASH job added for folder: ${folderId}`);
 

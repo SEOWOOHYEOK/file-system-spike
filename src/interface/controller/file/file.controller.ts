@@ -8,6 +8,8 @@ import {
   Body,
   Query,
   UploadedFile,
+  UploadedFiles,
+  FilesInterceptor,
   UseInterceptors,
   Res,
   HttpCode,
@@ -63,6 +65,25 @@ export class FileController {
   ): Promise<UploadFileResponse> {
     return this.fileUploadService.upload({
       file,
+      folderId,
+      conflictStrategy,
+    });
+  }
+
+  /**
+   * POST /files/upload/many - 다중 파일 업로드
+   */
+  @Post('upload/many')
+  // @ApiFileUpload() // TODO: 다중 파일용 Swagger 데코레이터 필요
+  @UseInterceptors(FilesInterceptor('files'))
+  @HttpCode(HttpStatus.CREATED)
+  async uploadMany(
+    @UploadedFiles() files: Express.Multer.File[],
+    @Body('folderId') folderId: string,
+    @Body('conflictStrategy') conflictStrategy?: ConflictStrategy,
+  ): Promise<UploadFileResponse[]> {
+    return this.fileUploadService.uploadMany({
+      files,
       folderId,
       conflictStrategy,
     });

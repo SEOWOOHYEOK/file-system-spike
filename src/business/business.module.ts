@@ -3,10 +3,11 @@ import { FileBusinessModule } from './file/file.module';
 import { FolderBusinessModule } from './folder/folder.module';
 import { TrashBusinessModule } from './trash/trash.module';
 import { WorkerModule } from './worker/worker.module';
+import { AdminBusinessModule } from './admin/admin.module';
 
 /**
  * 비즈니스 레이어 통합 모듈
- * 파일, 폴더, 휴지통 비즈니스 모듈을 통합합니다.
+ * 파일, 폴더, 휴지통, Admin 비즈니스 모듈을 통합합니다.
  */
 @Module({
   imports: [
@@ -14,12 +15,14 @@ import { WorkerModule } from './worker/worker.module';
     FolderBusinessModule,
     TrashBusinessModule,
     WorkerModule,
+    AdminBusinessModule,
   ],
   exports: [
     FileBusinessModule,
     FolderBusinessModule,
     TrashBusinessModule,
     WorkerModule,
+    AdminBusinessModule,
   ],
 })
 export class BusinessModule {}

@@ -7,6 +7,7 @@ import {
   StorageType,
   AvailabilityStatus,
   UploadFileRequest,
+  UploadFilesRequest,
   UploadFileResponse,
   ConflictStrategy,
   FILE_REPOSITORY,
@@ -51,7 +52,7 @@ export class FileUploadService {
     private readonly cacheStorage: ICacheStoragePort,
     @Inject(JOB_QUEUE_PORT)
     private readonly jobQueue: IJobQueuePort,
-  ) {}
+  ) { }
 
   /**
    * 파일 업로드
@@ -115,12 +116,13 @@ export class FileUploadService {
 
     // 8. sync_events 생성 (문서 요구사항)
     const syncEventId = uuidv4();
-    const syncEvent = SyncEventFactory.createSyncEvent({
+    const syncEvent = SyncEventFactory.createFileCreateEvent({
       id: syncEventId,
       fileId,
       sourcePath: fileId, // 캐시 objectKey
       targetPath: nasPath, // NAS 경로
-      metadata: { fileName: finalFileName, folderId },
+      fileName: finalFileName,
+      folderId,
     });
     await this.syncEventRepository.save(syncEvent);
 
@@ -144,6 +146,29 @@ export class FileUploadService {
   }
 
   /**
+   * 다중 파일 업로드
+   * 
+   * 처리 플로우:
+   * 1. 각 파일에 대해 순차적으로 upload 메서드 호출
+   * 2. 모든 결과를 배열로 반환
+   */
+  async uploadMany(request: UploadFilesRequest): Promise<UploadFileResponse[]> {
+    const { files, folderId, conflictStrategy } = request;
+    const results: UploadFileResponse[] = [];
+
+    for (const file of files) {
+      const result = await this.upload({
+        file,
+        folderId,
+        conflictStrategy,
+      });
+      results.push(result);
+    }
+
+    return results;
+  }
+
+  /**
    * 업로드 요청 검증
    */
   private async validateUploadRequest(
@@ -151,7 +176,7 @@ export class FileUploadService {
     folderId: string,
   ): Promise<void> {
     // 파일 크기 체크 (100MB 미만)
-    const MAX_SIZE = 100 * 1024 * 1024; // 100MB
+    const MAX_SIZE = 10 * 100 * 1024 * 1024; // 100MB
     if (file.size >= MAX_SIZE) {
       throw new BadRequestException({
         code: 'FILE_TOO_LARGE',

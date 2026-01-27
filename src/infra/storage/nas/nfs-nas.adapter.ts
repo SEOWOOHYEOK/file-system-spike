@@ -12,7 +12,7 @@ import * as path from 'path';
 import * as crypto from 'crypto';
 import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
-import type { INasStoragePort } from '../../../../domain/storage/ports/nas-storage.port';
+import type { INasStoragePort } from '../../../domain/storage/ports/nas-storage.port';
 import { NasClientProvider } from './nas-client.provider';
 import { InternalServerErrorException } from '@nestjs/common/exceptions/internal-server-error.exception'
 import { NotFoundException } from '@nestjs/common/exceptions/not-found.exception';
@@ -113,6 +113,13 @@ export class NfsNasAdapter implements INasStoragePort {
     
     try {
       await fs.writeFile(filePath, data);
+      
+      // 파일 저장 검증
+      const stats = await fs.stat(filePath);
+      if (stats.size === 0 && data.length > 0) {
+         throw new Error('파일이 생성되었으나 내용이 비어있습니다.');
+      }
+
       this.logger.debug(`📝 파일 저장 완료: ${objectKey} (${data.length} bytes)`);
     } catch (error: any) {
       throw new InternalServerErrorException(`파일 저장 실패: ${error.message}`);
@@ -126,6 +133,17 @@ export class NfsNasAdapter implements INasStoragePort {
     try {
       const writeStream = fsSync.createWriteStream(filePath);
       await pipeline(stream, writeStream);
+
+      
+      // 파일 저장 검증
+      const stats = await fs.stat(filePath);
+      if (stats.size === 0) {
+         // 스트림의 경우 원본 크기를 모를 수 있으나, 0바이트 파일은 의심스러움 (빈 파일 업로드가 아니라면)
+         // 여기서는 경고만 하거나, 비즈니스 로직에 따라 에러 처리
+         this.logger.warn(`⚠️ 0바이트 파일이 저장되었습니다: ${objectKey}`);
+         throw new Error('파일이 생성되었으나 내용이 비어있습니다.');
+      }
+
       this.logger.debug(`📝 파일 스트림 저장 완료: ${objectKey}`);
     } catch (error: any) {
       throw new InternalServerErrorException(`파일 스트림 저장 실패: ${error.message}`);
