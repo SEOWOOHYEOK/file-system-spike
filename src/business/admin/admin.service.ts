@@ -3,26 +3,26 @@
  * Admin API의 비즈니스 로직을 조율합니다.
  */
 import { Injectable } from '@nestjs/common';
-import { CacheHealthCheckDomainService, CacheHealthResult } from '../../domain/admin/services/cache-health-check-domain.service';
-import { NasHealthCheckDomainService, NasHealthResult } from '../../domain/admin/services/nas-health-check-domain.service';
+import { CacheHealthCheckService, CacheHealthResult } from '../../infra/storage/cache/cache-health-check.service';
+import { NasHealthCheckService, NasHealthResult } from '../../infra/storage/nas/nas-health-check.service';
 import {
-  AdminStorageConsistencyDomainService,
+  StorageConsistencyService,
   StorageConsistencyResult,
   ConsistencyCheckParams,
-} from '../../domain/admin/services/admin-storage-consistency-domain.service';
+} from './storage-consistency.service';
 import {
-  AdminSyncEventDomainService,
+  SyncEventStatsService,
   FindSyncEventsParams,
-} from '../../domain/admin/services/admin-sync-event-domain.service';
-import { SyncEventsResponseDto } from '../../domain/admin/dto';
+} from './sync-event-stats.service';
+import { SyncEventsResponseDto } from '../../interface/controller/admin/dto';
 
 @Injectable()
 export class AdminService {
   constructor(
-    private readonly cacheHealthCheckDomainService: CacheHealthCheckDomainService,
-    private readonly nasHealthCheckDomainService: NasHealthCheckDomainService,
-    private readonly storageConsistencyDomainService: AdminStorageConsistencyDomainService,
-    private readonly syncEventDomainService: AdminSyncEventDomainService,
+    private readonly cacheHealthCheckService: CacheHealthCheckService,
+    private readonly nasHealthCheckService: NasHealthCheckService,
+    private readonly storageConsistencyService: StorageConsistencyService,
+    private readonly syncEventStatsService: SyncEventStatsService,
   ) {}
 
   /**
@@ -30,7 +30,7 @@ export class AdminService {
    * @returns Cache Health Check 결과
    */
   async checkCacheHealth(): Promise<CacheHealthResult> {
-    return this.cacheHealthCheckDomainService.checkHealth();
+    return this.cacheHealthCheckService.checkHealth();
   }
 
   /**
@@ -38,7 +38,7 @@ export class AdminService {
    * @returns NAS Health Check 결과 (용량 정보 포함)
    */
   async checkNasHealth(): Promise<NasHealthResult> {
-    return this.nasHealthCheckDomainService.checkHealth();
+    return this.nasHealthCheckService.checkHealth();
   }
 
   /**
@@ -48,7 +48,7 @@ export class AdminService {
    * @returns 일관성 검증 결과
    */
   async checkStorageConsistency(params: ConsistencyCheckParams): Promise<StorageConsistencyResult> {
-    return this.storageConsistencyDomainService.checkConsistency(params);
+    return this.storageConsistencyService.checkConsistency(params);
   }
 
   /**
@@ -58,7 +58,7 @@ export class AdminService {
    * @returns 동기화 이벤트 조회 결과
    */
   async getSyncEvents(params: FindSyncEventsParams): Promise<SyncEventsResponseDto> {
-    const result = await this.syncEventDomainService.findSyncEvents(params);
+    const result = await this.syncEventStatsService.findSyncEvents(params);
 
     // 페이징 정보의 hasMore 계산
     const hasMore = params.offset + params.limit < result.summary.total;

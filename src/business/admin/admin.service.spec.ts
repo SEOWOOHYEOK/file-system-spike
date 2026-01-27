@@ -18,10 +18,10 @@
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { AdminService } from '../../business/admin/admin.service';
-import { CacheHealthCheckDomainService } from '../../domain/admin/services/cache-health-check-domain.service';
-import { NasHealthCheckDomainService } from '../../domain/admin/services/nas-health-check-domain.service';
-import { AdminStorageConsistencyDomainService } from '../../domain/admin/services/admin-storage-consistency-domain.service';
-import { AdminSyncEventDomainService } from '../../domain/admin/services/admin-sync-event-domain.service';
+import { CacheHealthCheckService } from '../../infra/storage/cache/cache-health-check.service';
+import { NasHealthCheckService } from '../../infra/storage/nas/nas-health-check.service';
+import { StorageConsistencyService } from './storage-consistency.service';
+import { SyncEventStatsService } from './sync-event-stats.service';
 import { StorageType } from '../../domain/storage/file/file-storage-object.entity';
 import {
   SyncEventStatus,
@@ -31,43 +31,43 @@ import {
 
 describe('AdminService', () => {
   let service: AdminService;
-  let cacheHealthCheckDomainService: jest.Mocked<CacheHealthCheckDomainService>;
-  let nasHealthCheckDomainService: jest.Mocked<NasHealthCheckDomainService>;
-  let storageConsistencyDomainService: jest.Mocked<AdminStorageConsistencyDomainService>;
-  let syncEventDomainService: jest.Mocked<AdminSyncEventDomainService>;
+  let cacheHealthCheckService: jest.Mocked<CacheHealthCheckService>;
+  let nasHealthCheckService: jest.Mocked<NasHealthCheckService>;
+  let storageConsistencyService: jest.Mocked<StorageConsistencyService>;
+  let syncEventStatsService: jest.Mocked<SyncEventStatsService>;
 
   /**
    * 🎭 Mock 설정
-   * 📍 cacheHealthCheckDomainService.checkHealth:
+   * 📍 cacheHealthCheckService.checkHealth:
    *   - 실제 동작: 캐시 스토리지에 연결하여 상태 확인
    *   - Mock 이유: 도메인 서비스 로직은 별도 테스트에서 검증
    *
-   * 📍 nasHealthCheckDomainService.checkHealth:
+   * 📍 nasHealthCheckService.checkHealth:
    *   - 실제 동작: PowerShell로 NAS 연결 및 용량 확인
    *   - Mock 이유: 도메인 서비스 로직은 별도 테스트에서 검증
    *
-   * 📍 storageConsistencyDomainService.checkConsistency:
+   * 📍 storageConsistencyService.checkConsistency:
    *   - 실제 동작: DB와 스토리지 일관성 검증
    *   - Mock 이유: 도메인 서비스 로직은 별도 테스트에서 검증
    *
-   * 📍 syncEventDomainService.findProblematicEvents:
+   * 📍 syncEventStatsService.findProblematicEvents:
    *   - 실제 동작: 문제 있는 동기화 이벤트 조회
    *   - Mock 이유: 도메인 서비스 로직은 별도 테스트에서 검증
    */
   beforeEach(async () => {
-    cacheHealthCheckDomainService = {
+    cacheHealthCheckService = {
       checkHealth: jest.fn(),
     } as any;
 
-    nasHealthCheckDomainService = {
+    nasHealthCheckService = {
       checkHealth: jest.fn(),
     } as any;
 
-    storageConsistencyDomainService = {
+    storageConsistencyService = {
       checkConsistency: jest.fn(),
     } as any;
 
-    syncEventDomainService = {
+    syncEventStatsService = {
       findSyncEvents: jest.fn(),
     } as any;
 
@@ -75,20 +75,20 @@ describe('AdminService', () => {
       providers: [
         AdminService,
         {
-          provide: CacheHealthCheckDomainService,
-          useValue: cacheHealthCheckDomainService,
+          provide: CacheHealthCheckService,
+          useValue: cacheHealthCheckService,
         },
         {
-          provide: NasHealthCheckDomainService,
-          useValue: nasHealthCheckDomainService,
+          provide: NasHealthCheckService,
+          useValue: nasHealthCheckService,
         },
         {
-          provide: AdminStorageConsistencyDomainService,
-          useValue: storageConsistencyDomainService,
+          provide: StorageConsistencyService,
+          useValue: storageConsistencyService,
         },
         {
-          provide: AdminSyncEventDomainService,
-          useValue: syncEventDomainService,
+          provide: SyncEventStatsService,
+          useValue: syncEventStatsService,
         },
       ],
     }).compile();
@@ -118,7 +118,7 @@ describe('AdminService', () => {
         checkedAt: new Date(),
       };
 
-      cacheHealthCheckDomainService.checkHealth.mockResolvedValue(mockResult);
+      cacheHealthCheckService.checkHealth.mockResolvedValue(mockResult);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
@@ -129,7 +129,7 @@ describe('AdminService', () => {
       // ✅ THEN (결과 검증)
       // ═══════════════════════════════════════════════════════
       expect(result).toEqual(mockResult);
-      expect(cacheHealthCheckDomainService.checkHealth).toHaveBeenCalledTimes(1);
+      expect(cacheHealthCheckService.checkHealth).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -163,7 +163,7 @@ describe('AdminService', () => {
         },
       };
 
-      nasHealthCheckDomainService.checkHealth.mockResolvedValue(mockResult);
+      nasHealthCheckService.checkHealth.mockResolvedValue(mockResult);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
@@ -175,7 +175,7 @@ describe('AdminService', () => {
       // ═══════════════════════════════════════════════════════
       expect(result).toEqual(mockResult);
       expect(result.capacity).toBeDefined();
-      expect(nasHealthCheckDomainService.checkHealth).toHaveBeenCalledTimes(1);
+      expect(nasHealthCheckService.checkHealth).toHaveBeenCalledTimes(1);
     });
 
     /**
@@ -199,7 +199,7 @@ describe('AdminService', () => {
         error: 'No mapped drive found for UNC path',
       };
 
-      nasHealthCheckDomainService.checkHealth.mockResolvedValue(mockResult);
+      nasHealthCheckService.checkHealth.mockResolvedValue(mockResult);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
@@ -245,7 +245,7 @@ describe('AdminService', () => {
         checkedAt: new Date(),
       };
 
-      storageConsistencyDomainService.checkConsistency.mockResolvedValue(mockResult);
+      storageConsistencyService.checkConsistency.mockResolvedValue(mockResult);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
@@ -261,7 +261,7 @@ describe('AdminService', () => {
       // ✅ THEN (결과 검증)
       // ═══════════════════════════════════════════════════════
       expect(result).toEqual(mockResult);
-      expect(storageConsistencyDomainService.checkConsistency).toHaveBeenCalledTimes(1);
+      expect(storageConsistencyService.checkConsistency).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -312,7 +312,7 @@ describe('AdminService', () => {
         },
       };
 
-      syncEventDomainService.findSyncEvents.mockResolvedValue(mockDomainResult);
+      syncEventStatsService.findSyncEvents.mockResolvedValue(mockDomainResult);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
@@ -334,7 +334,7 @@ describe('AdminService', () => {
       expect(result.pagination.limit).toBe(100);
       expect(result.pagination.offset).toBe(0);
       expect(result.checkedAt).toBeInstanceOf(Date);
-      expect(syncEventDomainService.findSyncEvents).toHaveBeenCalledTimes(1);
+      expect(syncEventStatsService.findSyncEvents).toHaveBeenCalledTimes(1);
     });
 
     /**
@@ -363,7 +363,7 @@ describe('AdminService', () => {
         },
       };
 
-      syncEventDomainService.findSyncEvents.mockResolvedValue(mockDomainResult);
+      syncEventStatsService.findSyncEvents.mockResolvedValue(mockDomainResult);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
@@ -379,7 +379,7 @@ describe('AdminService', () => {
       // ═══════════════════════════════════════════════════════
       // ✅ THEN (결과 검증)
       // ═══════════════════════════════════════════════════════
-      expect(syncEventDomainService.findSyncEvents).toHaveBeenCalledWith({
+      expect(syncEventStatsService.findSyncEvents).toHaveBeenCalledWith({
         status: SyncEventStatus.FAILED,
         eventType: SyncEventType.CREATE,
         hours: 24,
@@ -429,7 +429,7 @@ describe('AdminService', () => {
         },
       };
 
-      syncEventDomainService.findSyncEvents.mockResolvedValue(mockDomainResult);
+      syncEventStatsService.findSyncEvents.mockResolvedValue(mockDomainResult);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)

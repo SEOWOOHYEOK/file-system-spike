@@ -12,7 +12,7 @@ import {
   StorageConsistencyResponseDto,
   SyncEventsQueryDto,
   SyncEventsResponseDto,
-} from '../../../domain/admin/dto';
+} from './dto';
 
 @ApiTags('Admin')
 @Controller('v1/admin')

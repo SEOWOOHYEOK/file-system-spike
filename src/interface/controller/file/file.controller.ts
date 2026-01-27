@@ -9,14 +9,13 @@ import {
   Query,
   UploadedFile,
   UploadedFiles,
-  FilesInterceptor,
   UseInterceptors,
   Res,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { FileUploadService, FileDownloadService, FileManageService } from '../../../business/file';
 import {
@@ -31,6 +30,7 @@ import {
 } from '../../../domain/file';
 import {
   ApiFileUpload,
+  ApiFilesUpload,
   ApiFileInfo,
   ApiFileDownload,
   ApiFileRename,
@@ -74,7 +74,7 @@ export class FileController {
    * POST /files/upload/many - 다중 파일 업로드
    */
   @Post('upload/many')
-  // @ApiFileUpload() // TODO: 다중 파일용 Swagger 데코레이터 필요
+  @ApiFilesUpload()
   @UseInterceptors(FilesInterceptor('files'))
   @HttpCode(HttpStatus.CREATED)
   async uploadMany(

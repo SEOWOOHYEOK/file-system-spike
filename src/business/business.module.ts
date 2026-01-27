@@ -4,10 +4,13 @@ import { FolderBusinessModule } from './folder/folder.module';
 import { TrashBusinessModule } from './trash/trash.module';
 import { WorkerModule } from './worker/worker.module';
 import { AdminBusinessModule } from './admin/admin.module';
+import { RoleModule } from './role/role.module';
+import { UserModule } from './user/user.module';
+import { ShareModule } from './share/share.module';
 
 /**
  * 비즈니스 레이어 통합 모듈
- * 파일, 폴더, 휴지통, Admin 비즈니스 모듈을 통합합니다.
+ * 파일, 폴더, 휴지통, Admin, User, Share 비즈니스 모듈을 통합합니다.
  */
 @Module({
   imports: [
@@ -16,6 +19,9 @@ import { AdminBusinessModule } from './admin/admin.module';
     TrashBusinessModule,
     WorkerModule,
     AdminBusinessModule,
+    RoleModule,
+    UserModule,
+    ShareModule,
   ],
   exports: [
     FileBusinessModule,
@@ -23,6 +29,9 @@ import { AdminBusinessModule } from './admin/admin.module';
     TrashBusinessModule,
     WorkerModule,
     AdminBusinessModule,
+    RoleModule,
+    UserModule,
+    ShareModule,
   ],
 })
 export class BusinessModule {}

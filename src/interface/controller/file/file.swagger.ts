@@ -87,6 +87,87 @@ export const ApiFileUpload = () =>
   );
 
 /**
+ * 다중 파일 업로드 API 문서
+ */
+export const ApiFilesUpload = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: '다중 파일 업로드',
+      description: `
+여러 개의 일반 파일을 업로드합니다 (각 파일 100MB 미만).
+
+### 충돌 전략 (conflictStrategy)
+- \`ERROR\`: 동일 이름 파일 존재 시 에러 (기본값)
+- \`RENAME\`: 자동 이름 변경 (예: file(1).txt)
+
+### 주의사항
+- 파일들은 순차적으로 처리됩니다.
+- 각 파일은 먼저 캐시 스토리지에 저장된 후 NAS로 동기화됩니다.
+- 업로드 직후 storageStatus는 { cache: 'AVAILABLE', nas: 'SYNCING' } 입니다.
+      `,
+    }),
+    ApiConsumes('multipart/form-data'),
+    ApiBody({
+      description: '업로드할 파일 목록과 대상 폴더 정보',
+      schema: {
+        type: 'object',
+        required: ['files', 'folderId'],
+        properties: {
+          files: {
+            type: 'array',
+            items: {
+              type: 'string',
+              format: 'binary',
+            },
+            description: '업로드할 파일 목록',
+          },
+          folderId: {
+            type: 'string',
+            description: '대상 폴더 ID',
+            example: 'folder_abc123',
+          },
+          conflictStrategy: {
+            type: 'string',
+            enum: ['ERROR', 'RENAME'],
+            description: '이름 충돌 시 처리 전략',
+            default: 'ERROR',
+          },
+        },
+      },
+    }),
+    ApiResponse({
+      status: 201,
+      description: '다중 파일 업로드 성공',
+      schema: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', example: 'file_abc123' },
+            name: { type: 'string', example: 'document.pdf' },
+            folderId: { type: 'string', example: 'folder_abc123' },
+            path: { type: 'string', example: '/documents/document.pdf' },
+            size: { type: 'number', example: 1024000 },
+            mimeType: { type: 'string', example: 'application/pdf' },
+            storageStatus: {
+              type: 'object',
+              properties: {
+                cache: { type: 'string', example: 'AVAILABLE' },
+                nas: { type: 'string', example: 'SYNCING' },
+              },
+            },
+            createdAt: { type: 'string', example: '2024-01-23T10:00:00.000Z' },
+          },
+        },
+      },
+    }),
+    ApiResponse({ status: 400, description: '잘못된 요청 (파일 없음, 폴더 ID 없음 등)' }),
+    ApiResponse({ status: 404, description: '대상 폴더를 찾을 수 없음' }),
+    ApiResponse({ status: 409, description: '동일한 이름의 파일이 이미 존재함 (ERROR 전략)' }),
+    ApiResponse({ status: 413, description: '파일 크기 초과' }),
+  );
+
+/**
  * 파일 정보 조회 API 문서
  */
 export const ApiFileInfo = () =>
