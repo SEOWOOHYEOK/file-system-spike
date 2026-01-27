@@ -24,6 +24,9 @@ export interface UploadFileRequest {
 
 /**
  * 파일 업로드 응답 DTO
+ *
+ * 문서: docs/000.FLOW/파일/005-1.파일_처리_FLOW.md
+ * 응답: 200 OK (fileId, name, path, syncEventId)
  */
 export interface UploadFileResponse {
   id: string;
@@ -37,4 +40,6 @@ export interface UploadFileResponse {
     nas: 'SYNCING';
   };
   createdAt: string;
+  /** sync_events 테이블 INSERT 후 반환된 ID */
+  syncEventId: string;
 }

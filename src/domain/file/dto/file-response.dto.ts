@@ -40,3 +40,18 @@ export interface FileListItem {
   storageStatus: StorageStatusDto;
   updatedAt: string;
 }
+
+/**
+ * 파일 삭제(휴지통 이동) 응답 DTO
+ *
+ * 문서: docs/000.FLOW/파일/005-1.파일_처리_FLOW.md
+ * 응답: 200 OK (id, name, state=TRASHED, syncEventId)
+ */
+export interface DeleteFileResponse {
+  id: string;
+  name: string;
+  state: FileState;
+  trashedAt: string;
+  /** sync_events 테이블 INSERT 후 반환된 ID */
+  syncEventId: string;
+}

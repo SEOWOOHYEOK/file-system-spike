@@ -1,4 +1,4 @@
-import { Injectable, Inject, BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable, Inject, BadRequestException, ConflictException, NotFoundException, InternalServerErrorException } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import {
   FileEntity,
@@ -13,13 +13,20 @@ import {
   FILE_STORAGE_OBJECT_REPOSITORY,
 } from '../../domain/file';
 import {
-  FOLDER_REPOSITORY,  
+  FOLDER_REPOSITORY,
+  FOLDER_STORAGE_OBJECT_REPOSITORY,
+  FolderAvailabilityStatus,
 } from '../../domain/folder';
+import {
+  SyncEventFactory,
+  SYNC_EVENT_REPOSITORY,
+} from '../../domain/sync-event';
 import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 
 import type { IFileRepository, IFileStorageObjectRepository } from '../../domain/file';
-import type { IFolderRepository } from '../../domain/folder';
+import type { IFolderRepository, IFolderStorageObjectRepository } from '../../domain/folder';
+import type { ISyncEventRepository } from '../../domain/sync-event';
 import type { ICacheStoragePort } from '../../domain/storage/ports/cache-storage.port';
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 
@@ -36,6 +43,10 @@ export class FileUploadService {
     private readonly fileStorageObjectRepository: IFileStorageObjectRepository,
     @Inject(FOLDER_REPOSITORY)
     private readonly folderRepository: IFolderRepository,
+    @Inject(FOLDER_STORAGE_OBJECT_REPOSITORY)
+    private readonly folderStorageObjectRepository: IFolderStorageObjectRepository,
+    @Inject(SYNC_EVENT_REPOSITORY)
+    private readonly syncEventRepository: ISyncEventRepository,
     @Inject(CACHE_STORAGE_PORT)
     private readonly cacheStorage: ICacheStoragePort,
     @Inject(JOB_QUEUE_PORT)
@@ -73,32 +84,48 @@ export class FileUploadService {
     // 1. 요청 검증
     await this.validateUploadRequest(file, folderId);
 
-    // 2. 동일 파일명 체크
+    // 2. 업로드 타임스탬프 생성 (중복 체크에 사용)
+    const uploadCreatedAt = new Date();
+
+    // 3. 동일 파일명 체크 (createdAt 포함)
     const finalFileName = await this.resolveFileName(
       folderId,
       file.originalname,
       file.mimetype,
       conflictStrategy,
+      uploadCreatedAt,
     );
 
-    // 3. UUID 미리 생성
+    // 4. UUID 미리 생성
     const fileId = uuidv4();
 
-    // 4. SeaweedFS 저장 (infra 레이어에서 구현)
+    // 5. SeaweedFS 저장 (infra 레이어에서 구현)
     await this.cacheStorage.파일쓰기(fileId, file.buffer);
 
-    // 5. DB 저장
-    const fileEntity = await this.createFileEntity(fileId, finalFileName, folderId, file);
-    await this.createStorageObjects(fileId);
+    // 6. DB 저장
+    const fileEntity = await this.createFileEntity(fileId, finalFileName, folderId, file, uploadCreatedAt);
+    const nasObjectKey = this.buildNasObjectKey(uploadCreatedAt, finalFileName);
+    await this.createStorageObjects(fileId, nasObjectKey);
 
-    // 6. Bull 큐 등록 (NAS 동기화)
-    await this.jobQueue.addJob('NAS_SYNC_UPLOAD', { fileId });
-
-    // 7. 폴더 경로 조회하여 응답
+    // 7. 폴더 경로 조회
     const folder = await this.folderRepository.findById(folderId);
-    // 루트 폴더인 경우 path가 '/'이므로 슬래시 중복 방지 로직 필요
     const folderPath = folder ? folder.path : '';
     const filePath = folderPath === '/' ? `/${finalFileName}` : `${folderPath}/${finalFileName}`;
+    const nasPath = folderPath === '/' ? `/${nasObjectKey}` : `${folderPath}/${nasObjectKey}`;
+
+    // 8. sync_events 생성 (문서 요구사항)
+    const syncEventId = uuidv4();
+    const syncEvent = SyncEventFactory.createSyncEvent({
+      id: syncEventId,
+      fileId,
+      sourcePath: fileId, // 캐시 objectKey
+      targetPath: nasPath, // NAS 경로
+      metadata: { fileName: finalFileName, folderId },
+    });
+    await this.syncEventRepository.save(syncEvent);
+
+    // 9. Bull 큐 등록 (NAS 동기화)
+    await this.jobQueue.addJob('NAS_SYNC_UPLOAD', { fileId, syncEventId });
 
     return {
       id: fileEntity.id,
@@ -112,6 +139,7 @@ export class FileUploadService {
         nas: 'SYNCING',
       },
       createdAt: fileEntity.createdAt.toISOString(),
+      syncEventId,
     };
   }
 
@@ -139,6 +167,26 @@ export class FileUploadService {
         message: '대상 폴더를 찾을 수 없습니다.',
       });
     }
+
+    // 폴더 NAS 상태 확인
+    const folderStorage = await this.folderStorageObjectRepository.findByFolderId(folderId);
+    if (folderStorage) {
+      if (
+        folderStorage.availabilityStatus === FolderAvailabilityStatus.SYNCING ||
+        folderStorage.availabilityStatus === FolderAvailabilityStatus.MOVING
+      ) {
+        throw new ConflictException({
+          code: 'FOLDER_SYNC_IN_PROGRESS',
+          message: '폴더가 동기화 중입니다. 잠시 후 다시 시도해주세요.',
+        });
+      }
+      if (folderStorage.availabilityStatus === FolderAvailabilityStatus.ERROR) {
+        throw new InternalServerErrorException({
+          code: 'FOLDER_SYNC_FAILED',
+          message: '폴더 동기화에 실패했습니다. 관리자에게 문의해주세요.',
+        });
+      }
+    }
   }
 
   /**
@@ -149,11 +197,15 @@ export class FileUploadService {
     originalName: string,
     mimeType: string,
     conflictStrategy: ConflictStrategy,
+    createdAt?: Date,
   ): Promise<string> {
     const exists = await this.fileRepository.existsByNameInFolder(
       folderId,
       originalName,
       mimeType,
+      undefined,
+      undefined,
+      createdAt,
     );
 
     if (!exists) {
@@ -168,7 +220,7 @@ export class FileUploadService {
     }
 
     // RENAME 전략: 자동 이름 변경
-    return this.generateUniqueFileName(folderId, originalName, mimeType);
+    return this.generateUniqueFileName(folderId, originalName, mimeType, createdAt);
   }
 
   /**
@@ -178,6 +230,7 @@ export class FileUploadService {
     folderId: string,
     baseName: string,
     mimeType: string,
+    createdAt?: Date,
   ): Promise<string> {
     const lastDot = baseName.lastIndexOf('.');
     const nameWithoutExt = lastDot > 0 ? baseName.substring(0, lastDot) : baseName;
@@ -186,7 +239,16 @@ export class FileUploadService {
     let counter = 1;
     let newName = `${nameWithoutExt} (${counter})${ext}`;
 
-    while (await this.fileRepository.existsByNameInFolder(folderId, newName, mimeType)) {
+    while (
+      await this.fileRepository.existsByNameInFolder(
+        folderId,
+        newName,
+        mimeType,
+        undefined,
+        undefined,
+        createdAt,
+      )
+    ) {
       counter++;
       newName = `${nameWithoutExt} (${counter})${ext}`;
     }
@@ -202,6 +264,7 @@ export class FileUploadService {
     fileName: string,
     folderId: string,
     file: Express.Multer.File,
+    createdAt: Date,
   ): Promise<FileEntity> {
     const fileEntity = new FileEntity({
       id: fileId,
@@ -210,8 +273,8 @@ export class FileUploadService {
       sizeBytes: file.size,
       mimeType: file.mimetype,
       state: FileState.ACTIVE,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt,
+      updatedAt: createdAt,
     });
 
     return this.fileRepository.save(fileEntity);
@@ -220,7 +283,7 @@ export class FileUploadService {
   /**
    * 스토리지 객체 생성
    */
-  private async createStorageObjects(fileId: string): Promise<void> {
+  private async createStorageObjects(fileId: string, nasObjectKey: string): Promise<void> {
     // 캐시 스토리지 객체 (AVAILABLE)
     const cacheObject = new FileStorageObjectEntity({
       id: uuidv4(),
@@ -239,7 +302,7 @@ export class FileUploadService {
       id: uuidv4(),
       fileId,
       storageType: StorageType.NAS,
-      objectKey: '', // NAS 경로는 동기화 완료 후 설정
+      objectKey: nasObjectKey,
       availabilityStatus: AvailabilityStatus.SYNCING,
       accessCount: 0,
       leaseCount: 0,
@@ -250,5 +313,20 @@ export class FileUploadService {
       this.fileStorageObjectRepository.save(cacheObject),
       this.fileStorageObjectRepository.save(nasObject),
     ]);
+  }
+
+  /**
+   * NAS objectKey 생성
+   * 형식: YYYYMMDDHHmmss__파일명 (UTC 기준)
+   */
+  private buildNasObjectKey(createdAt: Date, fileName: string): string {
+    const y = createdAt.getUTCFullYear().toString().padStart(4, '0');
+    const m = (createdAt.getUTCMonth() + 1).toString().padStart(2, '0');
+    const d = createdAt.getUTCDate().toString().padStart(2, '0');
+    const hh = createdAt.getUTCHours().toString().padStart(2, '0');
+    const mm = createdAt.getUTCMinutes().toString().padStart(2, '0');
+    const ss = createdAt.getUTCSeconds().toString().padStart(2, '0');
+    const timestamp = `${y}${m}${d}${hh}${mm}${ss}`;
+    return `${timestamp}__${fileName}`;
   }
 }

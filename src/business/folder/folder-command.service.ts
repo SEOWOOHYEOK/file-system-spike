@@ -448,7 +448,22 @@ export class FolderCommandService implements OnModuleInit {
         });
       }
 
-      // 2. NAS 동기화 상태 체크
+      // 2. 빈 폴더 체크 (정책: 빈 폴더만 삭제 가능)
+      // FLOW 4-1 step 3: check child contents (folders + files)
+      const statistics = await this.folderRepository.getStatistics(folderId);
+      const childFolderCount = statistics.folderCount;
+      const childFileCount = statistics.fileCount;
+
+      if (childFolderCount > 0 || childFileCount > 0) {
+        throw new ConflictException({
+          code: 'FOLDER_NOT_EMPTY',
+          message: `폴더가 비어있지 않아 삭제할 수 없습니다. (하위 폴더: ${childFolderCount}개, 파일: ${childFileCount}개)`,
+          childFolderCount,
+          childFileCount,
+        });
+      }
+
+      // 3. NAS 동기화 상태 체크
       await this.checkNasSyncStatus(folderId, txOptions);
 
       // 3. 현재 경로 저장

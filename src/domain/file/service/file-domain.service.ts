@@ -68,9 +68,10 @@ export class FileDomainService {
 
     /**
      * 동일 파일명 존재 확인
+     * @param createdAt 동일 createdAt 값도 체크할 경우 전달
      */
-    async 중복확인(folderId: string, name: string, mimeType: string, excludeFileId?: string): Promise<boolean> {
-        return this.fileRepository.existsByNameInFolder(folderId, name, mimeType, excludeFileId);
+    async 중복확인(folderId: string, name: string, mimeType: string, excludeFileId?: string, createdAt?: Date): Promise<boolean> {
+        return this.fileRepository.existsByNameInFolder(folderId, name, mimeType, excludeFileId, undefined, createdAt);
     }
 
     // ============================================

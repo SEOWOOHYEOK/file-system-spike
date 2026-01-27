@@ -20,6 +20,7 @@ import { FileUploadService, FileDownloadService, FileManageService } from '../..
 import {
   UploadFileResponse,
   FileInfoResponse,
+  DeleteFileResponse,
   RenameFileRequest,
   RenameFileResponse,
   MoveFileRequest,
@@ -40,7 +41,7 @@ import {
  * 파일 업로드, 다운로드, 조회, 관리 API
  */
 @ApiTags('Files')
-@Controller('files')
+@Controller('v1/files')
 export class FileController {
   constructor(
     private readonly fileUploadService: FileUploadService,
@@ -94,25 +95,20 @@ export class FileController {
       'Content-Length': file.sizeBytes,
     });
 
-    // 스트림 파이프
+    // 스트림 파이프 (실제 구현 시)
     if (stream) {
       stream.pipe(res);
-      
-      // lease 해제 핸들러 (중복 해제 방지)
-      let leaseReleased = false;
-      const releaseLeaseOnce = async () => {
-        if (!leaseReleased) {
-          leaseReleased = true;
-          await this.fileDownloadService.releaseLease(fileId);
-        }
-      };
-
-      // 스트림 종료/오류/클라이언트 연결 종료 시 lease 해제
-      stream.on('end', releaseLeaseOnce);
-      stream.on('error', releaseLeaseOnce);
-      stream.on('close', releaseLeaseOnce);
+      stream.on('end', async () => {
+        await this.fileDownloadService.releaseLease(fileId);
+      });
+      stream.on('error', async () => {
+        await this.fileDownloadService.releaseLease(fileId);
+      });
+      stream.on('close', async () => {
+        await this.fileDownloadService.releaseLease(fileId);
+      });
     } else {
-      // 스트림이 없으면 빈 응답
+      // 임시: 스트림이 없으면 빈 응답
       res.end();
     }
   }
@@ -147,15 +143,13 @@ export class FileController {
 
   /**
    * DELETE /files/:fileId - 파일 삭제 (휴지통 이동)
+   *
+   * 문서: docs/000.FLOW/파일/005-1.파일_처리_FLOW.md
+   * 응답: 200 OK (id, name, state=TRASHED, syncEventId)
    */
   @Delete(':fileId')
   @ApiFileDelete()
-  async delete(@Param('fileId') fileId: string): Promise<{
-    id: string;
-    name: string;
-    state: string;
-    trashedAt: string;
-  }> {
+  async delete(@Param('fileId') fileId: string): Promise<DeleteFileResponse> {
     // TODO: 실제 구현 시 인증된 사용자 ID 사용
     const userId = 'system';
     return this.fileManageService.delete(fileId, userId);

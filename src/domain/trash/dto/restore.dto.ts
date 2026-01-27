@@ -1,107 +1,154 @@
 /**
  * 휴지통 복원 관련 DTO
+ * 설계 문서: 060-1.휴지통_처리_FLOW.md
  */
+
+import { IsArray, IsBoolean, IsEnum, IsOptional, IsString, IsUUID, ValidateNested } from 'class-validator';
+import { Type } from 'class-transformer';
 
 /**
  * 복원 경로 상태
  */
-export enum PathStatus {
-  /** 경로 존재 */
+export enum RestorePathStatus {
+  /** 경로 존재 (복구 가능) */
   AVAILABLE = 'AVAILABLE',
-  /** 경로 없음 */
-  PATH_NOT_FOUND = 'PATH_NOT_FOUND',
+  /** 경로 없음 (경로 지정 필요) */
+  NOT_FOUND = 'NOT_FOUND',
 }
 
 /**
- * 파일 복원 정보 응답 DTO
+ * 복원 미리보기 요청 DTO
+ * POST /trash/restore/preview
  */
-export interface FileRestoreInfoResponse {
-  trashId: string;
+export class RestorePreviewRequest {
+  /** 특정 파일 ID 목록 (체크박스 선택) */
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  trashMetadataIds?: string[];
+}
+
+/**
+ * 복원 미리보기 응답 항목
+ */
+export interface RestorePreviewItem {
+  trashMetadataId: string;
+  fileId: string;
   fileName: string;
-  /** 원래 경로 정보 */
-  originalPath: string;
-  originalFolderId: string;
-  /** 경로 상태 */
-  pathStatus: PathStatus;
-  /** AVAILABLE인 경우 충돌 여부 */
-  hasConflict: boolean;
-  conflictFileName?: string;
+  mimeType: string;
+  sizeBytes: number;
+  deletedAt: Date;
+  
+  // 경로 상태 (★ 경로명 기준)
+  pathStatus: RestorePathStatus;
+  originalPath: string;               // "/projects/2024/reports/" (삭제 시점의 경로명)
+  originalFolderId: string;           // 삭제 시점의 폴더 ID (참고용)
+  resolveFolderId: string | null;     // ★ 경로명으로 찾은 현재 폴더 ID (AVAILABLE이면 값 있음)
+  
+  // 충돌 여부
+  hasConflict: boolean;               // 동일 파일 존재 여부
+  conflictFileId?: string;            // 충돌 파일 ID (hasConflict=true일 때)
 }
 
 /**
- * 폴더 복원 정보 응답 DTO
+ * 복원 미리보기 응답 DTO
  */
-export interface FolderRestoreInfoResponse {
-  trashId: string;
-  folderName: string;
-  /** 원래 경로 정보 */
-  originalPath: string;
-  originalParentId: string;
-  /** 상위 경로 상태 */
-  parentPathStatus: PathStatus;
-  /** AVAILABLE인 경우 충돌 여부 */
-  hasConflict: boolean;
-  conflictFolderId?: string;
-  conflictFolderName?: string;
-  /** 하위 항목 수 */
-  childCount: {
-    files: number;
-    folders: number;
+export interface RestorePreviewResponse {
+  totalCount: number;
+  items: RestorePreviewItem[];
+  
+  // 요약
+  summary: {
+    available: number;    // 경로 있는 파일 수 (복구 가능)
+    notFound: number;     // 경로 없는 파일 수 (경로 선택 필요)
+    conflict: number;     // 충돌 파일 수
   };
 }
 
 /**
- * 파일 복원 요청 DTO
+ * 복원 실행 요청 항목
  */
-export class FileRestoreRequest {
-  /** 충돌 시 새 파일명 (충돌 있을 때만 필수) */
-  newFileName?: string;
+export class RestoreExecuteItem {
+  @IsString()
+  trashMetadataId: string;
+
+  /** 
+   * 복구 경로 지정 (선택사항)
+   * - 미지정: preview에서 받은 resolveFolderId로 자동 복구 (pathStatus=AVAILABLE인 경우)
+   * - 지정: 해당 폴더로 복구 (pathStatus=NOT_FOUND인 경우 필수)
+   */
+  @IsOptional()
+  @IsString()
+  targetFolderId?: string;
+
+  /**
+   * 복구 제외 (선택사항)
+   * - true: 이 파일은 복구하지 않음
+   */
+  @IsOptional()
+  @IsBoolean()
+  exclude?: boolean;
 }
 
 /**
- * 폴더 복원 전략
+ * 복원 실행 요청 DTO
+ * POST /trash/restore/execute
  */
-export enum FolderRestoreStrategy {
-  /** 다른 위치 선택 */
-  CHOOSE_LOCATION = 'CHOOSE_LOCATION',
-  /** 원래 경로 생성 */
-  RECREATE_PATH = 'RECREATE_PATH',
+export class RestoreExecuteRequest {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RestoreExecuteItem)
+  items: RestoreExecuteItem[];
 }
 
 /**
- * 폴더 복원 요청 DTO
+ * 복원 실행 응답 DTO
  */
-export class FolderRestoreRequest {
-  /** 복원 전략 (PATH_NOT_FOUND인 경우 필수) */
-  restoreStrategy?: FolderRestoreStrategy;
-  /** CHOOSE_LOCATION인 경우 대상 폴더 ID */
-  targetParentId?: string;
-  /** 충돌 시 새 폴더명 */
-  newFolderName?: string;
-}
-
-/**
- * 복원 응답 DTO
- */
-export interface RestoreResponse {
-  id: string;
-  name: string;
-  path: string;
-  restoredAt: string;
-}
-
-/**
- * 전체 복원 응답 DTO
- */
-export interface RestoreAllResponse {
+export interface RestoreExecuteResponse {
   message: string;
-  restored: number;
-  skipped: number;
-  failed: number;
+  
+  // 결과 통계
+  queued: number;           // Bull Queue에 추가된 job 수
+  excluded: number;         // 사용자가 제외한 항목 수
+  skipped: number;          // 충돌로 skip된 항목 수
+  
+  // 생성된 sync_event ID 목록 (진행 상황 추적용)
+  syncEventIds: string[];
+  
+  // skip된 항목 상세
   skippedItems: {
-    id: string;
-    name: string;
-    reason: 'CONFLICT';
-    conflictWith: string;
+    trashMetadataId: string;
+    fileName: string;
+    reason: 'CONFLICT' | 'PATH_NOT_FOUND';
+    conflictFileId?: string;
+  }[];
+}
+
+/**
+ * 복원 상태 조회 응답 DTO
+ * GET /trash/restore/status
+ */
+export interface RestoreStatusResponse {
+  // 전체 요약
+  summary: {
+    total: number;
+    pending: number;      // 대기중
+    processing: number;   // 처리중
+    done: number;         // 완료
+    failed: number;       // 실패
+  };
+  
+  // 전체 완료 여부
+  isCompleted: boolean;   // pending=0 && processing=0
+  
+  // 개별 항목 상태
+  items: {
+    syncEventId: string;
+    fileId: string;
+    fileName: string;
+    status: 'PENDING' | 'PROCESSING' | 'DONE' | 'FAILED';
+    errorMessage?: string;
+    createdAt: Date;
+    processedAt?: Date;
   }[];
 }

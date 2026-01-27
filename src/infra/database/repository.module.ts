@@ -14,6 +14,7 @@ import {
   TrashMetadataOrmEntity,
   FileStorageObjectOrmEntity,
   FolderStorageObjectOrmEntity,
+  SyncEventOrmEntity,
 } from './entities';
 
 // Repository Implementations
@@ -25,6 +26,7 @@ import {
   TrashRepository,
   TrashQueryRepository,
 } from './repositories';
+import { SyncEventRepository } from './repositories/sync-event.repository';
 
 // Repository Tokens (from domain layer)
 import {
@@ -36,6 +38,7 @@ import {
   FOLDER_STORAGE_OBJECT_REPOSITORY,
 } from '../../domain/folder/repositories/folder.repository.interface';
 import { TRASH_REPOSITORY, TRASH_QUERY_SERVICE } from '../../domain/trash/repositories/trash.repository.interface';
+import { SYNC_EVENT_REPOSITORY } from '../../domain/sync-event';
 
 /**
  * TypeORM forFeature에 등록할 엔티티 목록
@@ -47,6 +50,7 @@ const entities = [
   TrashMetadataOrmEntity,
   FileStorageObjectOrmEntity,
   FolderStorageObjectOrmEntity,
+  SyncEventOrmEntity,
 ];
 
 @Module({
@@ -85,6 +89,11 @@ const entities = [
       provide: TRASH_QUERY_SERVICE,
       useClass: TrashQueryRepository,
     },
+    // Sync Event Repository
+    {
+      provide: SYNC_EVENT_REPOSITORY,
+      useClass: SyncEventRepository,
+    },
   ],
   exports: [
     FILE_REPOSITORY,
@@ -93,6 +102,7 @@ const entities = [
     FOLDER_STORAGE_OBJECT_REPOSITORY,
     TRASH_REPOSITORY,
     TRASH_QUERY_SERVICE,
+    SYNC_EVENT_REPOSITORY,
   ],
 })
 export class RepositoryModule {}

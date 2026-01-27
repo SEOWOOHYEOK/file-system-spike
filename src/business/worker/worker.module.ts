@@ -4,6 +4,7 @@ import { StorageInfraModule } from '../../infra/storage/storage-infra.module';
 import { RepositoryModule } from '../../infra/database/repository.module';
 import { NasSyncWorker } from './nas-file-sync.worker';
 import { NasFolderSyncWorker } from './nas-folder-sync.worker';
+import { TrashRestoreWorker } from './trash-restore.worker';
 
 @Module({
   imports: [
@@ -11,7 +12,7 @@ import { NasFolderSyncWorker } from './nas-folder-sync.worker';
     StorageInfraModule,
     RepositoryModule,
   ],
-  providers: [NasSyncWorker, NasFolderSyncWorker],
-  exports: [NasSyncWorker, NasFolderSyncWorker],
+  providers: [NasSyncWorker, NasFolderSyncWorker, TrashRestoreWorker],
+  exports: [NasSyncWorker, NasFolderSyncWorker, TrashRestoreWorker],
 })
 export class WorkerModule {}

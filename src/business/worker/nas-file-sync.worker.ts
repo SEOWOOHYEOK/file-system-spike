@@ -170,11 +170,12 @@ export class NasSyncWorker implements OnModuleInit {
       }
 
       // 2. NAS에서 파일 이름 변경
-      await this.nasStorage.파일이동(oldObjectKey, newObjectKey);
+      const targetObjectKey = this.buildRenameTarget(oldObjectKey, newObjectKey);
+      await this.nasStorage.파일이동(oldObjectKey, targetObjectKey);
 
       // 3. 상태 업데이트
       nasObject.updateStatus(AvailabilityStatus.AVAILABLE);
-      nasObject.updateObjectKey(newObjectKey);
+      nasObject.updateObjectKey(targetObjectKey);
       await this.fileStorageObjectRepository.save(nasObject);
 
       this.logger.log(`Successfully renamed file in NAS: ${fileId}, ${oldObjectKey} -> ${newObjectKey}`);
@@ -182,6 +183,52 @@ export class NasSyncWorker implements OnModuleInit {
       this.logger.error(`Failed to rename file in NAS: ${fileId}`, error);
       throw error;
     }
+  }
+
+  /**
+   * rename 대상 objectKey 계산
+   * - 기존 타임스탬프(prefix)를 유지
+   * - 새 파일명만 교체
+   */
+  private buildRenameTarget(oldObjectKey: string, newObjectKey: string): string {
+    const oldDir = path.posix.dirname(oldObjectKey);
+    const oldBase = path.posix.basename(oldObjectKey);
+    const newBase = path.posix.basename(newObjectKey);
+
+    const { prefix: oldPrefix, separator: oldSep } = this.parseTimestampPrefix(oldBase);
+    const newFileName = this.extractFileName(newBase);
+    const targetBase = oldPrefix ? `${oldPrefix}${oldSep}${newFileName}` : newFileName;
+
+    return oldDir === '.' ? targetBase : path.posix.join(oldDir, targetBase);
+  }
+
+  private parseTimestampPrefix(fileName: string): { prefix: string | null; separator: string } {
+    if (fileName.includes('__')) {
+      const [prefix] = fileName.split('__');
+      return { prefix, separator: '__' };
+    }
+    const underscoreIndex = fileName.indexOf('_');
+    if (underscoreIndex > 0) {
+      const prefix = fileName.substring(0, underscoreIndex);
+      if (/^\d{10,}$/.test(prefix)) {
+        return { prefix, separator: '_' };
+      }
+    }
+    return { prefix: null, separator: '_' };
+  }
+
+  private extractFileName(fileName: string): string {
+    if (fileName.includes('__')) {
+      return fileName.split('__').slice(1).join('__');
+    }
+    const underscoreIndex = fileName.indexOf('_');
+    if (underscoreIndex > 0) {
+      const prefix = fileName.substring(0, underscoreIndex);
+      if (/^\d{10,}$/.test(prefix)) {
+        return fileName.substring(underscoreIndex + 1);
+      }
+    }
+    return fileName;
   }
 
   /**

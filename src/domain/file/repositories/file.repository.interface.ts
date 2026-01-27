@@ -50,6 +50,7 @@ export interface IFileRepository {
 
   /**
    * 동일 파일명 존재 확인
+   * @param createdAt 동일 createdAt 값도 체크할 경우 전달
    */
   existsByNameInFolder(
     folderId: string,
@@ -57,6 +58,7 @@ export interface IFileRepository {
     mimeType: string,
     excludeFileId?: string,
     options?: TransactionOptions,
+    createdAt?: Date,
   ): Promise<boolean>;
 
   /**

@@ -98,12 +98,14 @@ export class FileRepository implements IFileRepository {
     return orms.map((orm) => this.toDomain(orm));
   }
 
+  //동일 파일 체크 로직
   async existsByNameInFolder(
     folderId: string,
     name: string,
     mimeType: string,
     excludeFileId?: string,
     options?: TransactionOptions,
+    createdAt?: Date,
   ): Promise<boolean> {
     const repo = this.getRepository(options);
     const qb = repo
@@ -115,6 +117,10 @@ export class FileRepository implements IFileRepository {
 
     if (excludeFileId) {
       qb.andWhere('file.id != :excludeFileId', { excludeFileId });
+    }
+
+    if (createdAt) {
+      qb.andWhere('file.createdAt = :createdAt', { createdAt });
     }
 
     const count = await qb.getCount();

@@ -8,15 +8,6 @@
 export interface PurgeResponse {
   id: string;
   name: string;
-  type: 'FILE' | 'FOLDER';
+  type: 'FILE'; // 폴더는 휴지통에 가지 않음
   purgedAt: string;
-}
-
-/**
- * 휴지통 비우기 응답 DTO
- */
-export interface EmptyTrashResponse {
-  message: string;
-  success: number;
-  failed: number;
 }

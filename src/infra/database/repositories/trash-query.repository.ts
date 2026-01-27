@@ -47,15 +47,24 @@ export class TrashQueryRepository implements ITrashQueryService {
 
     // Sort
     const sortBy = options?.sortBy || 'deletedAt';
-    const order = options?.order?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    const order: 'ASC' | 'DESC' = options?.order?.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+    
+    // 정렬용 가상 컬럼 추가
+    qb.addSelect('COALESCE(file.name, folder.name)', 'item_name');
+    qb.addSelect('COALESCE(file.sizeBytes, 0)', 'item_size');
+    qb.addSelect('COALESCE(file.updatedAt, folder.updatedAt)', 'item_modified_at');
     
     if (sortBy === 'name') {
-       // Coalesce name from file or folder
-       qb.orderBy('COALESCE(file.name, folder.name)', order);
-    } else if (sortBy === 'size') {
-       qb.orderBy('file.sizeBytes', order);
+       qb.orderBy('item_name', order);
+    } else if (sortBy === 'sizeBytes') {
+       qb.orderBy('item_size', order);
+    } else if (sortBy === 'modifiedAt') {
+       qb.orderBy('item_modified_at', order);
+    } else if (sortBy === 'originalPath') {
+       qb.orderBy('trash.originalPath', order);
     } else {
-       qb.orderBy(`trash.${sortBy}`, order);
+       // deletedAt (기본값)
+       qb.orderBy('trash.deletedAt', order);
     }
 
     // Pagination

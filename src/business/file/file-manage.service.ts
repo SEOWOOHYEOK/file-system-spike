@@ -10,6 +10,7 @@ import {
   RenameFileResponse,
   MoveFileRequest,
   MoveFileResponse,
+  DeleteFileResponse,
   MoveConflictStrategy,
   ConflictStrategy,
   FILE_REPOSITORY,
@@ -23,10 +24,15 @@ import {
   TrashMetadataFactory,
   TRASH_REPOSITORY,
 } from '../../domain/trash';
+import {
+  SyncEventFactory,
+  SYNC_EVENT_REPOSITORY,
+} from '../../domain/sync-event';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 import type { IFileRepository, IFileStorageObjectRepository } from '../../domain/file';
 import type { IFolderRepository } from '../../domain/folder';
 import type { ITrashRepository } from '../../domain/trash';
+import type { ISyncEventRepository } from '../../domain/sync-event';
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 
 /**
@@ -46,6 +52,8 @@ export class FileManageService {
     private readonly folderRepository: IFolderRepository,
     @Inject(TRASH_REPOSITORY)
     private readonly trashRepository: ITrashRepository,
+    @Inject(SYNC_EVENT_REPOSITORY)
+    private readonly syncEventRepository: ISyncEventRepository,
     @Inject(JOB_QUEUE_PORT)
     private readonly jobQueue: IJobQueuePort,
     private readonly dataSource: DataSource,
@@ -93,24 +101,28 @@ export class FileManageService {
         });
       }
 
-      // 2. NAS 동기화 상태 체크
+      // 2. 요청 검증 (파일명/확장자)
+      const sanitizedName = this.validateRenameRequest(file.name, newName);
+
+      // 3. NAS 동기화 상태 체크
       await this.checkNasSyncStatus(fileId, txOptions);
 
-      // 3. 동일 파일명 존재 확인
+      // 4. 동일 파일명 존재 확인
       const finalName = await this.resolveFileNameForRename(
         file.folderId,
-        newName,
+        sanitizedName,
         file.mimeType,
         fileId,
         conflictStrategy,
         txOptions,
+        file.createdAt,
       );
 
-      // 4. 파일명 업데이트
+      // 5. 파일명 업데이트
       file.rename(finalName);
       await this.fileRepository.save(file, txOptions);
 
-      // 5. NAS 상태 업데이트
+      // 6. NAS 상태 업데이트
       const nasObject = await this.fileStorageObjectRepository.findByFileIdAndType(
         fileId,
         StorageType.NAS,
@@ -118,27 +130,40 @@ export class FileManageService {
       );
       if (nasObject) {
         oldObjectKey = nasObject.objectKey;
-        newObjectKey = `${file.createdAt.getTime()}_${finalName}`; // 새 파일명
+        const timestamp = this.extractTimestampFromObjectKey(oldObjectKey) ?? this.formatTimestamp(file.createdAt);
+        newObjectKey = `${timestamp}__${finalName}`;
         nasObject.updateObjectKey(newObjectKey);
         nasObject.updateStatus(AvailabilityStatus.SYNCING);
         await this.fileStorageObjectRepository.save(nasObject, txOptions);
       }
 
+      // 7. sync_events 생성 (문서 요구사항)
+      const folder = await this.folderRepository.findById(file.folderId);
+      const filePath = folder && folder.path !== '/' ? `${folder.path}/${finalName}` : `/${finalName}`;
+
+      const syncEventId = uuidv4();
+      const syncEvent = SyncEventFactory.createRenameEvent({
+        id: syncEventId,
+        fileId,
+        sourcePath: oldObjectKey || '',
+        targetPath: newObjectKey || '',
+        metadata: { oldName: oldObjectKey, newName: finalName },
+      });
+      await this.syncEventRepository.save(syncEvent);
+
       await queryRunner.commitTransaction();
       this.logger.debug(`File renamed: ${fileId} -> ${finalName}`);
 
-      // 6. Bull 큐 등록 (NAS_SYNC_RENAME) - 트랜잭션 커밋 후 실행
+      // 8. Bull 큐 등록 (NAS_SYNC_RENAME) - 트랜잭션 커밋 후 실행
       if (oldObjectKey && newObjectKey) {
         await this.jobQueue.addJob('NAS_SYNC_RENAME', {
           fileId,
+          syncEventId,
           oldObjectKey,
           newObjectKey,
         });
         this.logger.debug(`NAS_SYNC_RENAME job added for file: ${fileId}`);
       }
-
-      const folder = await this.folderRepository.findById(file.folderId);
-      const filePath = folder && folder.path !== '/' ? `${folder.path}/${finalName}` : `/${finalName}`;
 
       return {
         id: file.id,
@@ -148,6 +173,7 @@ export class FileManageService {
           nas: 'SYNCING',
         },
         updatedAt: file.updatedAt.toISOString(),
+        syncEventId,
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -211,8 +237,10 @@ export class FileManageService {
         });
       }
 
-      // 원래 폴더 ID 저장 (원복용)
+      // 원래 폴더 ID/경로 저장 (원복용)
       originalFolderId = file.folderId;
+      const sourceFolder = await this.folderRepository.findById(file.folderId);
+      const sourceFolderPath = sourceFolder ? sourceFolder.path : '';
 
       // 3. NAS 동기화 상태 체크
       await this.checkNasSyncStatus(fileId, txOptions);
@@ -224,6 +252,7 @@ export class FileManageService {
         file.mimeType,
         conflictStrategy,
         txOptions,
+        file.createdAt,
       );
 
       if (skipped) {
@@ -255,18 +284,34 @@ export class FileManageService {
       );
       if (nasObject) {
         sourcePath = nasObject.objectKey;
-        targetPath = finalName; // 새 경로 (폴더 경로 + 파일명)
+        targetPath = nasObject.objectKey; // objectKey는 유지
         nasObject.updateStatus(AvailabilityStatus.SYNCING);
         await this.fileStorageObjectRepository.save(nasObject, txOptions);
       }
 
+      // 7. sync_events 생성 (문서 요구사항)
+      const filePath = `${targetFolder.path}/${finalName}`;
+      const sourcePathWithFolder = sourceFolderPath ? `${sourceFolderPath}/${targetPath ?? ''}` : targetPath ?? '';
+      const targetPathWithFolder = `${targetFolder.path}/${targetPath ?? ''}`;
+
+      const syncEventId = uuidv4();
+      const syncEvent = SyncEventFactory.createMoveEvent({
+        id: syncEventId,
+        fileId,
+        sourcePath: sourcePathWithFolder,
+        targetPath: targetPathWithFolder,
+        metadata: { originalFolderId, targetFolderId },
+      });
+      await this.syncEventRepository.save(syncEvent);
+
       await queryRunner.commitTransaction();
       this.logger.debug(`File moved: ${fileId} -> folder ${targetFolderId}`);
 
-      // 7. Bull 큐 등록 (NAS_SYNC_MOVE) - 트랜잭션 커밋 후 실행
+      // 8. Bull 큐 등록 (NAS_SYNC_MOVE) - 트랜잭션 커밋 후 실행
       if (sourcePath && targetPath && originalFolderId) {
         await this.jobQueue.addJob('NAS_SYNC_MOVE', {
           fileId,
+          syncEventId,
           sourcePath,
           targetPath,
           originalFolderId,
@@ -274,8 +319,6 @@ export class FileManageService {
         });
         this.logger.debug(`NAS_SYNC_MOVE job added for file: ${fileId}`);
       }
-
-      const filePath = `${targetFolder.path}/${finalName}`;
 
       return {
         id: file.id,
@@ -286,6 +329,7 @@ export class FileManageService {
           nas: 'SYNCING',
         },
         updatedAt: file.updatedAt.toISOString(),
+        syncEventId,
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -306,15 +350,14 @@ export class FileManageService {
    * 4. 파일 상태 변경 (TRASHED)
    * 5. trash_metadata 생성
    * 6. NAS 상태 업데이트 (MOVING)
-   * 7. 트랜잭션 커밋
-   * 8. Bull 큐 등록 (NAS 휴지통 이동)
+   * 7. sync_events 생성 (문서 요구사항)
+   * 8. 트랜잭션 커밋
+   * 9. Bull 큐 등록 (NAS 휴지통 이동)
+   *
+   * 문서: docs/000.FLOW/파일/005-1.파일_처리_FLOW.md
+   * 응답: 200 OK (id, name, state=TRASHED, syncEventId)
    */
-  async delete(fileId: string, userId: string): Promise<{
-    id: string;
-    name: string;
-    state: FileState;
-    trashedAt: string;
-  }> {
+  async delete(fileId: string, userId: string): Promise<DeleteFileResponse> {
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
     await queryRunner.startTransaction();
@@ -349,17 +392,26 @@ export class FileManageService {
       }
 
       // 2. NAS 동기화 상태 체크
-      await this.checkNasSyncStatus(fileId, txOptions);
+      const nasObject = await this.checkNasSyncStatus(fileId, txOptions);
 
-      // 3. 원래 경로 저장
+      // 3. lease_count 체크 (다운로드 중 여부)
+      // FLOW 4-1 step 4: 파일 사용 중 여부 확인
+      if (nasObject && nasObject.leaseCount > 0) {
+        throw new ConflictException({
+          code: 'FILE_IN_USE',
+          message: '파일을 사용 중인 사용자가 있어 삭제할 수 없습니다.',
+        });
+      }
+
+      // 4. 원래 경로 저장
       const folder = await this.folderRepository.findById(file.folderId);
-      const originalPath = folder ? `${folder.path}/${file.name}` : `/${file.name}`;
+      const originalPath = folder && folder.path !== '/' ? `${folder.path}/${file.name}` : `/${file.name}`;
 
-      // 4. 파일 상태 변경
+      // 5. 파일 상태 변경
       file.delete();
       await this.fileRepository.save(file, txOptions);
 
-      // 5. trash_metadata 생성
+      // 6. trash_metadata 생성
       const trashMetadata = TrashMetadataFactory.createForFile({
         id: uuidv4(),
         fileId: file.id,
@@ -369,12 +421,7 @@ export class FileManageService {
       });
       await this.trashRepository.save(trashMetadata);
 
-      // 6. NAS 상태 업데이트
-      const nasObject = await this.fileStorageObjectRepository.findByFileIdAndType(
-        fileId,
-        StorageType.NAS,
-        txOptions,
-      );
+      // 7. NAS 상태 업데이트 (nasObject는 checkNasSyncStatus에서 이미 조회됨)
       if (nasObject) {
         currentObjectKey = nasObject.objectKey;
           // 휴지통 경로: .trash/{fileId}_{fileName}
@@ -383,13 +430,25 @@ export class FileManageService {
         await this.fileStorageObjectRepository.save(nasObject, txOptions);
       }
 
+      // 7. sync_events 생성 (문서 요구사항)
+      const syncEventId = uuidv4();
+      const syncEvent = SyncEventFactory.createTrashEvent({
+        id: syncEventId,
+        fileId,
+        sourcePath: originalPath,
+        targetPath: trashPath || '',
+        metadata: { originalPath, originalFolderId: file.folderId },
+      });
+      await this.syncEventRepository.save(syncEvent);
+
       await queryRunner.commitTransaction();
       this.logger.debug(`File deleted (moved to trash): ${fileId}`);
 
-      // 7. Bull 큐 등록 (NAS_MOVE_TO_TRASH) - 트랜잭션 커밋 후 실행
+      // 8. Bull 큐 등록 (NAS_MOVE_TO_TRASH) - 트랜잭션 커밋 후 실행
       if (currentObjectKey && trashPath) {
         await this.jobQueue.addJob('NAS_MOVE_TO_TRASH', {
           fileId,
+          syncEventId,
           currentObjectKey,
           trashPath,
         });
@@ -401,6 +460,7 @@ export class FileManageService {
         name: file.name,
         state: file.state,
         trashedAt: file.updatedAt.toISOString(),
+        syncEventId,
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -413,8 +473,9 @@ export class FileManageService {
 
   /**
    * NAS 동기화 상태 체크
+   * @returns NAS storage object (lease_count 체크 등에 사용)
    */
-  private async checkNasSyncStatus(fileId: string, txOptions?: TransactionOptions): Promise<void> {
+  private async checkNasSyncStatus(fileId: string, txOptions?: TransactionOptions) {
     const nasObject = await this.fileStorageObjectRepository.findByFileIdAndTypeForUpdate(
       fileId,
       StorageType.NAS,
@@ -427,6 +488,8 @@ export class FileManageService {
         message: '파일이 동기화 중입니다. 잠시 후 다시 시도해주세요.',
       });
     }
+
+    return nasObject;
   }
 
   /**
@@ -439,6 +502,7 @@ export class FileManageService {
     excludeFileId: string,
     conflictStrategy: ConflictStrategy,
     txOptions?: TransactionOptions,
+    createdAt?: Date,
   ): Promise<string> {
     const exists = await this.fileRepository.existsByNameInFolder(
       folderId,
@@ -446,6 +510,7 @@ export class FileManageService {
       mimeType,
       excludeFileId,
       txOptions,
+      createdAt,
     );
 
     if (!exists) {
@@ -460,7 +525,7 @@ export class FileManageService {
     }
 
     // RENAME 전략
-    return this.generateUniqueFileName(folderId, newName, mimeType, excludeFileId, txOptions);
+    return this.generateUniqueFileName(folderId, newName, mimeType, excludeFileId, txOptions, createdAt);
   }
 
   /**
@@ -472,6 +537,7 @@ export class FileManageService {
     mimeType: string,
     conflictStrategy: MoveConflictStrategy,
     txOptions?: TransactionOptions,
+    createdAt?: Date,
   ): Promise<{ finalName: string; skipped: boolean }> {
     const exists = await this.fileRepository.existsByNameInFolder(
       targetFolderId,
@@ -479,6 +545,7 @@ export class FileManageService {
       mimeType,
       undefined,
       txOptions,
+      createdAt,
     );
 
     if (!exists) {
@@ -502,6 +569,7 @@ export class FileManageService {
           mimeType,
           undefined,
           txOptions,
+          createdAt,
         );
         return { finalName: uniqueName, skipped: false };
 
@@ -523,6 +591,7 @@ export class FileManageService {
     mimeType: string,
     excludeFileId?: string,
     txOptions?: TransactionOptions,
+    createdAt?: Date,
   ): Promise<string> {
     const lastDot = baseName.lastIndexOf('.');
     const nameWithoutExt = lastDot > 0 ? baseName.substring(0, lastDot) : baseName;
@@ -532,12 +601,81 @@ export class FileManageService {
     let newName = `${nameWithoutExt} (${counter})${ext}`;
 
     while (
-      await this.fileRepository.existsByNameInFolder(folderId, newName, mimeType, excludeFileId, txOptions)
+      await this.fileRepository.existsByNameInFolder(
+        folderId,
+        newName,
+        mimeType,
+        excludeFileId,
+        txOptions,
+        createdAt,
+      )
     ) {
       counter++;
       newName = `${nameWithoutExt} (${counter})${ext}`;
     }
 
     return newName;
+  }
+
+  /**
+   * rename 요청 검증
+   * - 빈 이름 금지
+   * - 확장자 변경 금지
+   */
+  private validateRenameRequest(originalName: string, newName?: string): string {
+    const trimmed = newName?.trim() ?? '';
+    if (!trimmed) {
+      throw new BadRequestException({
+        code: 'INVALID_FILE_NAME',
+        message: '파일명은 비어있을 수 없습니다.',
+      });
+    }
+
+    const originalExt = this.getFileExtension(originalName);
+    const newExt = this.getFileExtension(trimmed);
+    if (originalExt.toLowerCase() !== newExt.toLowerCase()) {
+      throw new BadRequestException({
+        code: 'FILE_EXTENSION_CHANGE_NOT_ALLOWED',
+        message: '파일 확장자는 변경할 수 없습니다.',
+      });
+    }
+
+    return trimmed;
+  }
+
+  /**
+   * 파일 확장자 추출 (없으면 빈 문자열)
+   */
+  private getFileExtension(fileName: string): string {
+    const lastDot = fileName.lastIndexOf('.');
+    if (lastDot <= 0 || lastDot === fileName.length - 1) {
+      return '';
+    }
+    return fileName.substring(lastDot + 1);
+  }
+
+  /**
+   * NAS objectKey에서 timestamp 추출
+   * 형식: YYYYMMDDHHmmss__파일명
+   */
+  private extractTimestampFromObjectKey(objectKey: string | null): string | null {
+    if (!objectKey) {
+      return null;
+    }
+    const [timestamp] = objectKey.split('__');
+    return timestamp && timestamp.length === 14 ? timestamp : null;
+  }
+
+  /**
+   * UTC 기준 타임스탬프 생성 (YYYYMMDDHHmmss)
+   */
+  private formatTimestamp(createdAt: Date): string {
+    const y = createdAt.getUTCFullYear().toString().padStart(4, '0');
+    const m = (createdAt.getUTCMonth() + 1).toString().padStart(2, '0');
+    const d = createdAt.getUTCDate().toString().padStart(2, '0');
+    const hh = createdAt.getUTCHours().toString().padStart(2, '0');
+    const mm = createdAt.getUTCMinutes().toString().padStart(2, '0');
+    const ss = createdAt.getUTCSeconds().toString().padStart(2, '0');
+    return `${y}${m}${d}${hh}${mm}${ss}`;
   }
 }

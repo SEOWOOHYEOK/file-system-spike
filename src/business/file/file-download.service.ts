@@ -110,7 +110,7 @@ export class FileDownloadService {
 
     if (file.isTrashed()) {
       throw new BadRequestException({
-        code: 'FILE_TRASHED',
+        code: 'FILE_IN_TRASH',
         message: '휴지통에 있는 파일입니다.',
       });
     }
@@ -158,8 +158,8 @@ export class FileDownloadService {
     // 3-D. 둘 다 없음 (캐시 없음 + NAS 없음)
     this.logger.error(`No storage found for file: ${fileId}`);
     // TODO: admin alert 전송
-    throw new NotFoundException({
-      code: 'FILE_STORAGE_NOT_FOUND',
+    throw new InternalServerErrorException({
+      code: 'FILE_NOT_FOUND_IN_STORAGE',
       message: '파일 스토리지를 찾을 수 없습니다. 관리자에게 문의하세요.',
     });
   }

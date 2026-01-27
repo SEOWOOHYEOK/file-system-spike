@@ -1,20 +1,22 @@
 /**
  * 휴지통 아이템 관련 DTO
+ * 설계 문서: 060-1.휴지통_처리_FLOW.md
  */
 
 import { Transform } from 'class-transformer';
-import { IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
-import { TrashItemType } from '../entities/trash-metadata.entity';
+import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { RestorePathStatus } from './restore.dto';
 
 /**
  * 휴지통 정렬 기준
  */
 export enum TrashSortBy {
   NAME = 'name',
-  ORIGINAL_PATH = 'originalPath',
-  DELETED_AT = 'deletedAt',
   SIZE = 'sizeBytes',
-  MODIFIED_AT = 'modifiedAt',
+  MIME_TYPE = 'mimeType',
+  DELETED_AT = 'deletedAt',
+  EXPIRES_AT = 'expiresAt',
+  DELETED_BY = 'deletedBy',
 }
 
 /**
@@ -26,45 +28,123 @@ export enum TrashSortOrder {
 }
 
 /**
- * 휴지통 아이템 DTO
+ * MIME 카테고리
  */
-export interface TrashItem {
-  type: TrashItemType;
-  id: string;
-  name: string;
-  /** 크기 (파일만, 폴더는 null) */
-  sizeBytes?: number;
-  mimeType?: string;
-  /** 휴지통 메타 ID (복구/삭제 시 사용) */
-  trashMetadataId: string;
-  /** 원래 위치 */
-  originalPath: string;
-  /** 삭제된 날짜 */
-  deletedAt: string;
-  /** 삭제자 */
-  deletedBy: string;
-  /** 수정한 날짜 (삭제 전 마지막 수정일) */
-  modifiedAt: string;
-  /** 자동 영구삭제 예정일 */
-  expiresAt: string;
+export enum MimeCategory {
+  IMAGE = 'image',
+  VIDEO = 'video',
+  AUDIO = 'audio',
+  DOCUMENT = 'document',
+  ARCHIVE = 'archive',
+  OTHER = 'other',
 }
 
 /**
- * 휴지통 페이지네이션 정보 DTO
+ * 휴지통 목록 조회 쿼리 파라미터
+ * GET /trash
  */
-export interface TrashPaginationInfo {
-  /** 현재 페이지 번호 */
-  page: number;
-  /** 현재 페이지 크기 */
-  pageSize: number;
-  /** 전체 항목 개수 */
-  totalItems: number;
-  /** 전체 페이지 수 */
-  totalPages: number;
-  /** 다음 페이지 존재 여부 */
-  hasNext: boolean;
-  /** 이전 페이지 존재 여부 */
-  hasPrev: boolean;
+export class TrashListQuery {
+  // === 페이지네이션 ===
+  @IsOptional()
+  @Transform(({ value }) => parseInt(value, 10))
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @IsOptional()
+  @Transform(({ value }) => parseInt(value, 10))
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  limit?: number = 20;
+
+  // === 정렬 ===
+  @IsOptional()
+  @IsEnum(TrashSortBy)
+  sortBy?: TrashSortBy = TrashSortBy.DELETED_AT;
+
+  @IsOptional()
+  @IsEnum(TrashSortOrder)
+  order?: TrashSortOrder = TrashSortOrder.DESC;
+
+  // === 검색 ===
+  @IsOptional()
+  @IsString()
+  search?: string;
+
+  // === 필터 ===
+  @IsOptional()
+  @IsString()
+  mimeType?: string;
+
+  @IsOptional()
+  @IsEnum(MimeCategory)
+  mimeCategory?: MimeCategory;
+
+  @IsOptional()
+  @IsString()
+  deletedBy?: string;
+
+  @IsOptional()
+  @IsString()
+  deletedAfter?: string;
+
+  @IsOptional()
+  @IsString()
+  deletedBefore?: string;
+
+  @IsOptional()
+  @IsString()
+  expiresAfter?: string;
+
+  @IsOptional()
+  @IsString()
+  expiresBefore?: string;
+
+  @IsOptional()
+  @Transform(({ value }) => parseInt(value, 10))
+  @IsInt()
+  minSize?: number;
+
+  @IsOptional()
+  @Transform(({ value }) => parseInt(value, 10))
+  @IsInt()
+  maxSize?: number;
+
+  @IsOptional()
+  @IsString()
+  originalFolderId?: string;
+}
+
+/**
+ * 휴지통 아이템 DTO
+ */
+export interface TrashItem {
+  type: 'FILE'; // 항상 FILE (폴더는 휴지통에 가지 않음)
+  id: string;                  // 파일 ID
+  name: string;                // 파일명
+  sizeBytes: number;           // 파일 크기
+  mimeType: string;            // MIME 타입
+  extension: string;           // 확장자
+  
+  trashMetadataId: string;     // 휴지통 메타 ID
+  originalPath: string;        // 원래 경로 (폴더 경로)
+  originalFolderId: string;    // 원래 폴더 ID (삭제 시점의 폴더 ID)
+  originalFolderName: string;  // 원래 폴더명
+  
+  deletedAt: Date;             // 삭제일시
+  deletedBy: string;           // 삭제자 ID
+  deletedByName: string;       // 삭제자 이름
+  expiresAt: Date;             // 자동 영구삭제 예정일
+  daysUntilExpiry: number;     // 만료까지 남은 일수
+  
+  createdAt: Date;             // 파일 생성일 (충돌 판단용)
+  
+  // ★ 복구 경로 상태 (경로명 기준)
+  restoreInfo: {
+    pathStatus: RestorePathStatus;  // AVAILABLE: 복구가능, NOT_FOUND: 복구 불가
+    resolveFolderId: string | null; // 경로명으로 찾은 현재 폴더 ID (있으면)
+  };
 }
 
 /**
@@ -72,74 +152,34 @@ export interface TrashPaginationInfo {
  */
 export interface TrashListResponse {
   items: TrashItem[];
-  /** 휴지통 전체 크기 */
-  totalSizeBytes: number;
-  /** 페이지네이션 정보 */
-  pagination: TrashPaginationInfo;
-}
-
-/**
- * 휴지통 목록 조회 쿼리 파라미터
- */
-export class GetTrashListQuery {
-  /** 정렬 기준 (name, originalPath, deletedAt, sizeBytes, modifiedAt) */
-  @IsOptional()
-  @IsEnum(TrashSortBy, { message: '정렬 기준이 올바르지 않습니다. 허용 값: name, originalPath, deletedAt, sizeBytes, modifiedAt' })
-  sortBy?: TrashSortBy;
-
-  /** 정렬 순서 (asc, desc) */
-  @IsOptional()
-  @IsEnum(TrashSortOrder, { message: '정렬 순서가 올바르지 않습니다. 허용 값: asc, desc' })
-  sortOrder?: TrashSortOrder;
-
-  /** 페이지 번호 (1부터 시작, 기본값: 1) */
-  @IsOptional()
-  @Transform(({ value }) => parseInt(value, 10))
-  @IsInt({ message: '페이지 번호는 정수여야 합니다.' })
-  @Min(1, { message: '페이지 번호는 1 이상이어야 합니다.' })
-  page?: number;
-
-  /** 페이지 크기 (기본값: 50, 최대: 100) */
-  @IsOptional()
-  @Transform(({ value }) => parseInt(value, 10))
-  @IsInt({ message: '페이지 크기는 정수여야 합니다.' })
-  @Min(1, { message: '페이지 크기는 1 이상이어야 합니다.' })
-  @Max(100, { message: '페이지 크기는 100 이하여야 합니다.' })
-  pageSize?: number;
-}
-
-/**
- * 휴지통 폴더 내용 아이템 DTO
- */
-export interface TrashFolderItem {
-  type: TrashItemType;
-  id: string;
-  name: string;
-  sizeBytes?: number;
-  mimeType?: string;
-  modifiedAt: string;
-}
-
-/**
- * 휴지통 폴더 내용 응답 DTO
- */
-export interface TrashFolderContentsResponse {
-  /** 현재 폴더 정보 */
-  currentFolder: {
-    id: string;
-    name: string;
-  };
-  /** 상위 폴더 정보 (뒤로가기용, 최상위면 null) */
-  parentFolder?: {
-    id: string;
-    name: string;
-  };
-  /** 브레드크럼 경로 (휴지통 루트 → 현재 폴더) */
-  breadcrumb: {
-    id: string;
-    name: string;
-  }[];
-  /** 하위 항목들 */
-  items: TrashFolderItem[];
   totalCount: number;
+  totalSizeBytes: number;
+  
+  // 페이지네이션 정보
+  pagination: {
+    page: number;
+    limit: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
+  
+  // 적용된 필터 요약
+  appliedFilters: {
+    search?: string;
+    mimeType?: string;
+    mimeCategory?: string;
+    deletedBy?: string;
+    dateRange?: { from?: string; to?: string };
+    sizeRange?: { min?: number; max?: number };
+  };
+}
+
+/**
+ * 휴지통 비우기 응답 DTO
+ */
+export interface EmptyTrashResponse {
+  message: string;
+  success: number;
+  failed: number;
 }

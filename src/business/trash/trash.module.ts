@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { RepositoryModule } from '../../infra/database/repository.module';
 import { StorageInfraModule } from '../../infra/storage/storage-infra.module';
+import { QueueInfraModule } from '../../infra/queue/queue-infra.module';
 import { FileDomainModule } from '../../domain/file/file.module';
 import { FolderDomainModule } from '../../domain/folder/folder.module';
 import { TrashDomainModule } from '../../domain/trash/trash.module';
@@ -14,6 +15,7 @@ import { TrashService } from './trash.service';
   imports: [
     RepositoryModule,
     StorageInfraModule,
+    QueueInfraModule,  // JOB_QUEUE_PORT 의존성 제공
     FileDomainModule,
     FolderDomainModule,
     TrashDomainModule,
