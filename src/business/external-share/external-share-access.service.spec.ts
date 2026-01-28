@@ -38,13 +38,17 @@ import {
   SHARE_ACCESS_LOG_REPOSITORY,
   IShareAccessLogRepository,
 } from '../../domain/external-share/repositories/share-access-log.repository.interface';
+import {
+  CONTENT_TOKEN_STORE,
+  IContentTokenStore,
+} from '../../domain/external-share/ports/content-token-store.port';
 import { PublicShare } from '../../domain/external-share/entities/public-share.entity';
 import { ExternalUser } from '../../domain/external-share/entities/external-user.entity';
-import { SharePermission } from '../../domain/share/share-permission.enum';
+import { SharePermission } from '../../domain/external-share/type/public-share.type';
 import { AccessAction } from '../../domain/external-share/entities/share-access-log.entity';
 
-// Redis mock
-const mockRedis = {
+// TokenStore mock
+const mockTokenStore: jest.Mocked<IContentTokenStore> = {
   set: jest.fn(),
   get: jest.fn(),
   del: jest.fn(),
@@ -61,7 +65,7 @@ describe('ExternalShareAccessService', () => {
    * 📍 mockShareRepo: PublicShare 영속성 관리
    * 📍 mockUserRepo: ExternalUser 상태 확인
    * 📍 mockLogRepo: 접근 로그 저장
-   * 📍 mockRedis: 일회성 토큰 관리
+   * 📍 mockTokenStore: 일회성 토큰 관리
    */
   beforeEach(async () => {
     mockShareRepo = {
@@ -91,10 +95,10 @@ describe('ExternalShareAccessService', () => {
       findAll: jest.fn(),
     } as jest.Mocked<IShareAccessLogRepository>;
 
-    // Reset redis mocks
-    mockRedis.set.mockReset();
-    mockRedis.get.mockReset();
-    mockRedis.del.mockReset();
+    // Reset tokenStore mocks
+    mockTokenStore.set.mockReset();
+    mockTokenStore.get.mockReset();
+    mockTokenStore.del.mockReset();
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -112,8 +116,8 @@ describe('ExternalShareAccessService', () => {
           useValue: mockLogRepo,
         },
         {
-          provide: 'REDIS_CLIENT',
-          useValue: mockRedis,
+          provide: CONTENT_TOKEN_STORE,
+          useValue: mockTokenStore,
         },
       ],
     }).compile();
@@ -189,7 +193,7 @@ describe('ExternalShareAccessService', () => {
         isRevoked: false,
       });
       mockShareRepo.findById.mockResolvedValue(share);
-      mockRedis.set.mockResolvedValue('OK');
+      mockTokenStore.set.mockResolvedValue(undefined);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
@@ -201,7 +205,7 @@ describe('ExternalShareAccessService', () => {
       // ═══════════════════════════════════════════════════════
       expect(result.share.id).toBe('share-123');
       expect(result.contentToken).toBeDefined();
-      expect(mockRedis.set).toHaveBeenCalled();
+      expect(mockTokenStore.set).toHaveBeenCalled();
     });
 
     /**
@@ -243,27 +247,27 @@ describe('ExternalShareAccessService', () => {
      * 🎯 검증 목적: 유효한 토큰 검증 및 삭제
      */
     it('should validate and consume token successfully', async () => {
-      mockRedis.get.mockResolvedValue(
+      mockTokenStore.get.mockResolvedValue(
         JSON.stringify({
           shareId: 'share-123',
           permission: 'VIEW',
           used: false,
         }),
       );
-      mockRedis.del.mockResolvedValue(1);
+      mockTokenStore.del.mockResolvedValue(undefined);
 
       const result = await service.validateAndConsumeToken('token-abc');
 
       expect(result.shareId).toBe('share-123');
       expect(result.permission).toBe('VIEW');
-      expect(mockRedis.del).toHaveBeenCalled();
+      expect(mockTokenStore.del).toHaveBeenCalled();
     });
 
     /**
      * 🎯 검증 목적: 존재하지 않는 토큰이면 에러
      */
     it('should throw error when token not found', async () => {
-      mockRedis.get.mockResolvedValue(null);
+      mockTokenStore.get.mockResolvedValue(null);
 
       await expect(service.validateAndConsumeToken('invalid-token')).rejects.toThrow(
         'INVALID_TOKEN',
@@ -274,7 +278,7 @@ describe('ExternalShareAccessService', () => {
      * 🎯 검증 목적: 이미 사용된 토큰이면 에러
      */
     it('should throw error when token already used', async () => {
-      mockRedis.get.mockResolvedValue(
+      mockTokenStore.get.mockResolvedValue(
         JSON.stringify({
           shareId: 'share-123',
           permission: 'VIEW',
@@ -310,14 +314,14 @@ describe('ExternalShareAccessService', () => {
       // 📥 GIVEN (사전 조건 설정)
       // ═══════════════════════════════════════════════════════
       // 1. 토큰 유효
-      mockRedis.get.mockResolvedValue(
+      mockTokenStore.get.mockResolvedValue(
         JSON.stringify({
           shareId: 'share-123',
           permission: 'VIEW',
           used: false,
         }),
       );
-      mockRedis.del.mockResolvedValue(1);
+      mockTokenStore.del.mockResolvedValue(undefined);
 
       // 2. 공유 유효 (차단/취소 아님, 만료 아님, 횟수 미초과)
       const share = new PublicShare({
@@ -363,10 +367,10 @@ describe('ExternalShareAccessService', () => {
      * 🎯 검증 목적: 차단된 공유는 접근 불가
      */
     it('should deny access when share is blocked', async () => {
-      mockRedis.get.mockResolvedValue(
+      mockTokenStore.get.mockResolvedValue(
         JSON.stringify({ shareId: 'share-123', permission: 'VIEW', used: false }),
       );
-      mockRedis.del.mockResolvedValue(1);
+      mockTokenStore.del.mockResolvedValue(undefined);
 
       const share = new PublicShare({
         id: 'share-123',
@@ -388,10 +392,10 @@ describe('ExternalShareAccessService', () => {
      * 🎯 검증 목적: 취소된 공유는 접근 불가
      */
     it('should deny access when share is revoked', async () => {
-      mockRedis.get.mockResolvedValue(
+      mockTokenStore.get.mockResolvedValue(
         JSON.stringify({ shareId: 'share-123', permission: 'VIEW', used: false }),
       );
-      mockRedis.del.mockResolvedValue(1);
+      mockTokenStore.del.mockResolvedValue(undefined);
 
       const share = new PublicShare({
         id: 'share-123',
@@ -413,10 +417,10 @@ describe('ExternalShareAccessService', () => {
      * 🎯 검증 목적: 비활성화된 사용자는 접근 불가
      */
     it('should deny access when user is deactivated', async () => {
-      mockRedis.get.mockResolvedValue(
+      mockTokenStore.get.mockResolvedValue(
         JSON.stringify({ shareId: 'share-123', permission: 'VIEW', used: false }),
       );
-      mockRedis.del.mockResolvedValue(1);
+      mockTokenStore.del.mockResolvedValue(undefined);
 
       const share = new PublicShare({
         id: 'share-123',
@@ -445,10 +449,10 @@ describe('ExternalShareAccessService', () => {
      * 🎯 검증 목적: 만료된 공유는 접근 불가
      */
     it('should deny access when share is expired', async () => {
-      mockRedis.get.mockResolvedValue(
+      mockTokenStore.get.mockResolvedValue(
         JSON.stringify({ shareId: 'share-123', permission: 'VIEW', used: false }),
       );
-      mockRedis.del.mockResolvedValue(1);
+      mockTokenStore.del.mockResolvedValue(undefined);
 
       const share = new PublicShare({
         id: 'share-123',
@@ -478,10 +482,10 @@ describe('ExternalShareAccessService', () => {
      * 🎯 검증 목적: 뷰 횟수 초과 시 접근 불가
      */
     it('should deny access when view limit exceeded', async () => {
-      mockRedis.get.mockResolvedValue(
+      mockTokenStore.get.mockResolvedValue(
         JSON.stringify({ shareId: 'share-123', permission: 'VIEW', used: false }),
       );
-      mockRedis.del.mockResolvedValue(1);
+      mockTokenStore.del.mockResolvedValue(undefined);
 
       const share = new PublicShare({
         id: 'share-123',
@@ -513,10 +517,10 @@ describe('ExternalShareAccessService', () => {
      * 🎯 검증 목적: 권한 없으면 접근 불가
      */
     it('should deny access when permission not granted', async () => {
-      mockRedis.get.mockResolvedValue(
+      mockTokenStore.get.mockResolvedValue(
         JSON.stringify({ shareId: 'share-123', permission: 'DOWNLOAD', used: false }),
       );
-      mockRedis.del.mockResolvedValue(1);
+      mockTokenStore.del.mockResolvedValue(undefined);
 
       const share = new PublicShare({
         id: 'share-123',

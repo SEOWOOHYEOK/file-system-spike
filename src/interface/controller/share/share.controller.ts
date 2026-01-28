@@ -8,7 +8,7 @@ import {
   Query,
   ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import {
   PublicShareManagementService,
   type CreatePublicShareDto,
@@ -16,24 +16,31 @@ import {
 import { ExternalUserManagementService } from '../../../business/external-share/external-user-management.service';
 import { PaginationParams } from '../../../domain/external-share/repositories/external-user.repository.interface';
 import { User } from '../../../common/decorators/user.decorator';
+import {
+  ApiCreatePublicShare,
+  ApiGetMyPublicShares,
+  ApiGetPublicShareById,
+  ApiRevokeShare,
+  ApiGetExternalUsers,
+} from './share.swagger';
 
 /**
- * 공유 컨트롤러 (내부 사용자용)
+ * 파일 공유  
  */
-@ApiTags('PublicShares')
-@Controller('v1/public-shares')
+@ApiTags('600.외부공유')
+@Controller('v1/file-shares')
 @ApiBearerAuth()
 export class PublicShareController {
   constructor(
     private readonly shareService: PublicShareManagementService,
     private readonly userService: ExternalUserManagementService,
-  ) {}
+  ) { }
 
   /**
    * 외부 공유 생성
    */
   @Post()
-  @ApiOperation({ summary: '외부 공유 생성' })
+  @ApiCreatePublicShare()
   async createPublicShare(
     @User() user: { id: string },
     @Body() dto: CreatePublicShareDto,
@@ -45,7 +52,7 @@ export class PublicShareController {
    * 내가 생성한 공유 목록 조회
    */
   @Get()
-  @ApiOperation({ summary: '내가 생성한 공유 목록' })
+  @ApiGetMyPublicShares()
   async getMyPublicShares(
     @User() user: { id: string },
     @Query('page') page: number = 1,
@@ -61,7 +68,7 @@ export class PublicShareController {
    * 공유 상세 조회
    */
   @Get(':id')
-  @ApiOperation({ summary: '공유 상세 조회' })
+  @ApiGetPublicShareById()
   async getPublicShareById(@Param('id', ParseUUIDPipe) id: string) {
     return this.shareService.getPublicShareById(id);
   }
@@ -70,7 +77,7 @@ export class PublicShareController {
    * 공유 취소 (revoke)
    */
   @Delete(':id')
-  @ApiOperation({ summary: '공유 취소' })
+  @ApiRevokeShare()
   async revokeShare(
     @User() user: { id: string },
     @Param('id', ParseUUIDPipe) id: string,
@@ -82,19 +89,19 @@ export class PublicShareController {
 /**
  * 외부 사용자 목록 컨트롤러 (내부 사용자용)
  */
-@ApiTags('external-users')
+@ApiTags('600.외부공유')
 @Controller('v1/external-users')
 @ApiBearerAuth()
 export class ExternalUsersController {
   constructor(
     private readonly userService: ExternalUserManagementService,
-  ) {}
+  ) { }
 
   /**
    * 공유 가능한 외부 사용자 목록
    */
   @Get()
-  @ApiOperation({ summary: '공유 가능한 외부 사용자 목록' })
+  @ApiGetExternalUsers()
   async getExternalUsers(
     @Query('page') page: number = 1,
     @Query('pageSize') pageSize: number = 20,

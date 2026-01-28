@@ -14,13 +14,14 @@ import { User } from '../../../../common/decorators/user.decorator';
 /**
  * 공유 관리 컨트롤러 (관리자용)
  */
-@ApiTags('SharesAdmin')
+@ApiTags('510.관리자-공유')
 @Controller('v1/admin/shares')
 @ApiBearerAuth()
 export class ShareAdminController {
   constructor(
     private readonly shareService: PublicShareManagementService,
   ) {}
+
 
   /**
    * 전체 공유 현황 조회

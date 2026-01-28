@@ -10,7 +10,7 @@ import {
   EXTERNAL_USER_REPOSITORY,
   type IExternalUserRepository,
 } from '../../domain/external-share/repositories/external-user.repository.interface';
-import { ExternalUser } from '../../domain/external-share/entities/external-user.entity';
+
 
 
 /**

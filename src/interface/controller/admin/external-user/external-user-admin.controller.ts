@@ -20,7 +20,7 @@ import { User } from '../../../../common/decorators/user.decorator';
 /**
  * 외부 사용자 관리 컨트롤러 (관리자용)
  */
-@ApiTags('ExternalUsersAdmin')
+@ApiTags('520.관리자-외부사용자')
 @Controller('v1/admin/external-users')
 @ApiBearerAuth()
 export class ExternalUserAdminController {
@@ -40,6 +40,7 @@ export class ExternalUserAdminController {
     return this.userService.createExternalUser(user.id, dto);
   }
 
+  
   /**
    * 외부 사용자 목록 조회
    */

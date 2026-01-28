@@ -42,7 +42,7 @@ import {
  * 파일 컨트롤러
  * 파일 업로드, 다운로드, 조회, 관리 API
  */
-@ApiTags('Files')
+@ApiTags('200.파일')
 @Controller('v1/files')
 export class FileController {
   constructor(

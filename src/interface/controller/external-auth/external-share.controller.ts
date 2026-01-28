@@ -18,7 +18,7 @@ import { ExternalUser } from '../../../common/decorators/external-user.decorator
 /**
  * 외부 사용자 파일 접근 컨트롤러
  */
-@ApiTags('ExternalShares')
+@ApiTags('710.외부접근')
 @Controller('v1/ext/shares')
 @ApiBearerAuth()
 export class ExternalShareController {

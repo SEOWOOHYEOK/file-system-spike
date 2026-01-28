@@ -1,13 +1,25 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+
+// 기본 컨트롤러
 import { FileController } from './controller/file/file.controller';
 import { FolderController } from './controller/folder/folder.controller';
 import { AuthController } from './controller/auth/auth.controller';
-import { TrashController } from './trash/trash.controller';
+import { TrashController } from './controller/trash/trash.controller';
+import { UserController } from './controller/user/user.controller';
+import { PublicShareController } from './controller/share/share.controller';
+import { ExternalUsersController } from './controller/share/share.controller';
+
+// Admin 컨트롤러
 import { AdminController } from './controller/admin/admin.controller';
 import { RoleController } from './controller/admin/role/role.controller';
-import { UserController } from './controller/user/user.controller';
+import { ShareAdminController } from './controller/admin/share/share-admin.controller';
+import { ExternalUserAdminController } from './controller/admin/external-user/external-user-admin.controller';
+
+// 외부 사용자 컨트롤러
+import { ExternalAuthController } from './controller/external-auth/external-auth.controller';
+import { ExternalShareController } from './controller/external-auth/external-share.controller';
 
 import { BusinessModule } from '../business/business.module';
 import { SSOModule } from '../integrations/sso/sso.module';
@@ -37,13 +49,22 @@ import { OrganizationMigrationModule } from '../integrations/migration/migration
     }),
   ],
   controllers: [
+    // 기본 컨트롤러
     FileController,
     FolderController,
     TrashController,
     AuthController,
+    UserController,
+    // Admin 컨트롤러
     AdminController,
     RoleController,
-    UserController,
+    ShareAdminController,
+    ExternalUserAdminController,
+    // 외부 사용자 컨트롤러
+    ExternalAuthController,
+    ExternalShareController,
+    PublicShareController,
+    ExternalUsersController,
   ],
 })
 export class InterfaceModule {}

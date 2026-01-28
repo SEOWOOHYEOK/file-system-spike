@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ExternalShareInfraModule } from '../../infra/database/external-share-infra.module';
 import { RepositoryModule } from '../../infra/database/repository.module';
+import { CacheInfraModule } from '../../infra/cache/cache-infra.module';
 
 // Services
 import { ExternalUserManagementService } from './external-user-management.service';
@@ -18,6 +19,7 @@ import { ExternalShareAccessService } from './external-share-access.service';
   imports: [
     ExternalShareInfraModule,
     RepositoryModule,
+    CacheInfraModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'external-share-secret',
       signOptions: { expiresIn: '8h' },

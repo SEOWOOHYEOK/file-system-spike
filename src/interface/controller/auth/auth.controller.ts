@@ -14,7 +14,7 @@ import { MigrateOrganizationRequestDto, MigrateOrganizationResponseDto } from '.
  *
  * JWT 토큰 생성 및 검증 API를 제공합니다.
  */
-@ApiTags('인증')
+@ApiTags('100.인증')
 @Controller('v1/auth')
 export class AuthController {
     private readonly logger = new Logger(AuthController.name);

@@ -37,7 +37,7 @@ import {
  * 폴더 컨트롤러
  * 폴더 생성, 조회, 관리 API
  */
-@ApiTags('Folders')
+@ApiTags('210.폴더')
 @Controller('v1/folders')
 export class FolderController {
   constructor(

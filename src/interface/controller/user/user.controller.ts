@@ -38,7 +38,7 @@ interface UserWithRoleResponse {
  *
  * User CRUD 및 Role 부여/제거 API 제공
  */
-@ApiTags('Users')
+@ApiTags('300.사용자')
 @Controller('v1/users')
 export class UserController {
   constructor(

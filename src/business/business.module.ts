@@ -6,10 +6,11 @@ import { WorkerModule } from './worker/worker.module';
 import { AdminBusinessModule } from './admin/admin.module';
 import { RoleModule } from './role/role.module';
 import { UserModule } from './user/user.module';
+import { ExternalShareModule } from './external-share/external-share.module';
 
 /**
  * 비즈니스 레이어 통합 모듈
- * 파일, 폴더, 휴지통, Admin, User, Share 비즈니스 모듈을 통합합니다.
+ * 파일, 폴더, 휴지통, Admin, User, Share, ExternalShare 비즈니스 모듈을 통합합니다.
  */
 @Module({
   imports: [
@@ -20,7 +21,7 @@ import { UserModule } from './user/user.module';
     AdminBusinessModule,
     RoleModule,
     UserModule,
-
+    ExternalShareModule,
   ],
   exports: [
     FileBusinessModule,
@@ -30,7 +31,7 @@ import { UserModule } from './user/user.module';
     AdminBusinessModule,
     RoleModule,
     UserModule,
-
+    ExternalShareModule,
   ],
 })
 export class BusinessModule { }

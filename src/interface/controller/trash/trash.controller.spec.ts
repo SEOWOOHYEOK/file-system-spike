@@ -6,7 +6,7 @@ jest.mock('uuid', () => ({
 }));
 
 import { TrashController } from './trash.controller';
-import { TrashService } from '../../business/trash';
+import { TrashService } from '../../../business/trash/trash.service';
 import {
   TrashListQuery,
   RestorePreviewRequest,
@@ -17,7 +17,7 @@ import {
   RestoreStatusResponse,
   EmptyTrashResponse,
   RestorePathStatus,
-} from '../../domain/trash';
+} from '../../../domain/trash';
 
 // Mock Service
 const mockTrashService = {
@@ -101,9 +101,7 @@ describe('TrashController', () => {
 
       service.previewRestore.mockResolvedValue(result);
 
-      // @ts-expect-error - Controller method not implemented yet
       expect(await controller.previewRestore(request)).toBe(result);
-      // @ts-expect-error - Service method not implemented yet
       expect(service.previewRestore).toHaveBeenCalledWith(request);
     });
   });
@@ -122,9 +120,7 @@ describe('TrashController', () => {
 
       service.executeRestore.mockResolvedValue(result);
 
-      // @ts-expect-error - Controller method not implemented yet
       expect(await controller.executeRestore(request)).toBe(result);
-      // @ts-expect-error - Service method not implemented yet
       expect(service.executeRestore).toHaveBeenCalledWith(request, expect.any(String));
     });
   });
@@ -140,9 +136,7 @@ describe('TrashController', () => {
 
       service.getRestoreStatus.mockResolvedValue(result);
 
-      // @ts-expect-error - Controller method not implemented yet
       expect(await controller.getRestoreStatus(syncEventIds)).toBe(result);
-      // @ts-expect-error - Service method not implemented yet
       expect(service.getRestoreStatus).toHaveBeenCalledWith(syncEventIds);
     });
   });

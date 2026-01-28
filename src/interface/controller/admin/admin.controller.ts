@@ -14,7 +14,7 @@ import {
   SyncEventsResponseDto,
 } from './dto';
 
-@ApiTags('Admin')
+@ApiTags('500.관리자')
 @Controller('v1/admin')
 export class AdminController {
   constructor(private readonly adminService: AdminService) {}

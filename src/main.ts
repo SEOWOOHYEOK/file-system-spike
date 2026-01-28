@@ -21,13 +21,15 @@ async function bootstrap() {
     .setTitle('DMS API')
     .setDescription('문서 관리 시스템 API 문서')
     .setVersion('1.0')
-    .addTag('Files', '파일 관리 API')
-    .addTag('Folders', '폴더 관리 API')
-    .addTag('Trash', '휴지통 관리 API')
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api-docs', app, document);
+  SwaggerModule.setup('api-docs', app, document, {
+    swaggerOptions: {
+      tagsSorter: 'alpha', // 태그를 알파벳/숫자 순서로 정렬
+      operationsSorter: 'alpha', // 각 태그 내 API도 정렬
+    },
+  });
 
   await app.listen(process.env.PORT ?? 3000);
   const logger = new Logger('Main');

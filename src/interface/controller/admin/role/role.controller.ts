@@ -12,7 +12,7 @@ import {
   DeleteRoleSwagger,
 } from './role.swagger';
 
-@ApiTags('Role Management')
+@ApiTags('310.역할')
 @Controller('v1/roles')
 @ApiBearerAuth()
 // @UseGuards(PermissionsGuard)

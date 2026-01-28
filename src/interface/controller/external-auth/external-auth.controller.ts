@@ -16,7 +16,8 @@ import { ExternalUser } from '../../../common/decorators/external-user.decorator
 /**
  * 외부 사용자 인증 컨트롤러
  */
-@ApiTags('ExternalAuth')
+
+@ApiTags('700.외부인증')
 @Controller('v1/ext-auth')
 export class ExternalAuthController {
   constructor(

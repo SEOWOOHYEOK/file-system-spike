@@ -10,7 +10,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import { TrashService } from '../../business/trash';
+import { TrashService } from '../../../business/trash/trash.service';
 import {
   TrashListQuery,
   RestorePreviewRequest,
@@ -21,14 +21,14 @@ import {
   RestoreStatusResponse,
   PurgeResponse,
   EmptyTrashResponse,
-} from '../../domain/trash';
+} from '../../../domain/trash';
 
 /**
  * 휴지통 컨트롤러
  * 휴지통 조회, 복원, 영구삭제 API
  * 설계 문서: 060-1.휴지통_처리_FLOW.md
  */
-@ApiTags('Trash')
+@ApiTags('220.휴지통')
 @Controller('v1/trash')
 export class TrashController {
   constructor(private readonly trashService: TrashService) { }

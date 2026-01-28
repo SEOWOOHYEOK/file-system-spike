@@ -19,6 +19,10 @@ import {
   SHARE_ACCESS_LOG_REPOSITORY,
   type IShareAccessLogRepository,
 } from '../../domain/external-share/repositories/share-access-log.repository.interface';
+import {
+  CONTENT_TOKEN_STORE,
+  type IContentTokenStore,
+} from '../../domain/external-share/ports/content-token-store.port';
 import { PublicShare } from '../../domain/external-share/entities/public-share.entity';
 import {
   ShareAccessLog,
@@ -86,12 +90,8 @@ export class ExternalShareAccessService {
     private readonly userRepo: IExternalUserRepository,
     @Inject(SHARE_ACCESS_LOG_REPOSITORY)
     private readonly logRepo: IShareAccessLogRepository,
-    @Inject('REDIS_CLIENT')
-    private readonly redis: {
-      set: (key: string, value: string, mode: string, duration: number) => Promise<string>;
-      get: (key: string) => Promise<string | null>;
-      del: (key: string) => Promise<number>;
-    },
+    @Inject(CONTENT_TOKEN_STORE)
+    private readonly tokenStore: IContentTokenStore,
   ) {}
 
   /**
@@ -129,10 +129,9 @@ export class ExternalShareAccessService {
       used: false,
     };
 
-    await this.redis.set(
+    await this.tokenStore.set(
       `content-token:${tokenId}`,
       JSON.stringify(tokenData),
-      'EX',
       this.TOKEN_TTL_SECONDS,
     );
 
@@ -149,7 +148,7 @@ export class ExternalShareAccessService {
     token: string,
   ): Promise<{ shareId: string; permission: string }> {
     const key = `content-token:${token}`;
-    const data = await this.redis.get(key);
+    const data = await this.tokenStore.get(key);
 
     if (!data) {
       throw new Error('INVALID_TOKEN');
@@ -162,7 +161,7 @@ export class ExternalShareAccessService {
     }
 
     // 토큰 삭제 (일회용)
-    await this.redis.del(key);
+    await this.tokenStore.del(key);
 
     return {
       shareId: tokenData.shareId,
