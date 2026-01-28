@@ -6,97 +6,101 @@ import {
   Param,
   Body,
   Query,
-  UseGuards,
+  ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
-import { ShareManagementService } from '../../../business/share/share-management.service';
-import { ShareAccessService } from '../../../business/share/share-access.service';
-import { CreateShareDto } from '../../../business/share/dto/create-share.dto';
-import { FileShare } from '../../../domain/share/entities/file-share.entity';
-import { SharePermission } from '../../../domain/share/share-permission.enum';
-
-// Placeholder for User decorator - assumes SSO integration provides user info
-const User = () => (target: any, key: string, index: number) => {};
+import {
+  PublicShareManagementService,
+  type CreatePublicShareDto,
+} from '../../../business/external-share/public-share-management.service';
+import { ExternalUserManagementService } from '../../../business/external-share/external-user-management.service';
+import { PaginationParams } from '../../../domain/external-share/repositories/external-user.repository.interface';
+import { User } from '../../../common/decorators/user.decorator';
 
 /**
- * Share Controller
- *
- * 파일 공유 REST API 엔드포인트
+ * 공유 컨트롤러 (내부 사용자용)
  */
-@ApiTags('shares')
-@Controller('v1/shares')
-export class ShareController {
+@ApiTags('PublicShares')
+@Controller('v1/public-shares')
+@ApiBearerAuth()
+export class PublicShareController {
   constructor(
-    private readonly managementService: ShareManagementService,
-    private readonly accessService: ShareAccessService,
+    private readonly shareService: PublicShareManagementService,
+    private readonly userService: ExternalUserManagementService,
   ) {}
 
   /**
-   * 공유 생성
-   * POST /shares
+   * 외부 공유 생성
    */
   @Post()
-  @ApiOperation({ summary: '파일 공유 생성' })
-  @ApiBearerAuth()
-  async createShare(
+  @ApiOperation({ summary: '외부 공유 생성' })
+  async createPublicShare(
     @User() user: { id: string },
-    @Body() dto: CreateShareDto,
-  ): Promise<FileShare> {
-    return this.managementService.createShare(user.id, dto);
+    @Body() dto: CreatePublicShareDto,
+  ) {
+    return this.shareService.createPublicShare(user.id, dto);
   }
 
   /**
-   * 내가 공유한 파일 목록 조회
-   * GET /shares/sent
+   * 내가 생성한 공유 목록 조회
    */
-  @Get('sent')
-  @ApiOperation({ summary: '내가 공유한 파일 목록 조회' })
-  @ApiBearerAuth()
-  async getMySharedFiles(@User() user: { id: string }): Promise<FileShare[]> {
-    return this.managementService.getMySharedFiles(user.id);
+  @Get()
+  @ApiOperation({ summary: '내가 생성한 공유 목록' })
+  async getMyPublicShares(
+    @User() user: { id: string },
+    @Query('page') page: number = 1,
+    @Query('pageSize') pageSize: number = 20,
+    @Query('sortBy') sortBy?: string,
+    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
+  ) {
+    const pagination: PaginationParams = { page, pageSize, sortBy, sortOrder };
+    return this.shareService.getMyPublicShares(user.id, pagination);
   }
 
   /**
-   * 나에게 공유된 파일 목록 조회
-   * GET /shares/received
+   * 공유 상세 조회
    */
-  @Get('received')
-  @ApiOperation({ summary: '나에게 공유된 파일 목록 조회' })
-  @ApiBearerAuth()
-  async getSharedWithMe(@User() user: { id: string }): Promise<FileShare[]> {
-    return this.accessService.getMyShares(user.id);
+  @Get(':id')
+  @ApiOperation({ summary: '공유 상세 조회' })
+  async getPublicShareById(@Param('id', ParseUUIDPipe) id: string) {
+    return this.shareService.getPublicShareById(id);
   }
 
   /**
-   * 공유 취소
-   * DELETE /shares/:shareId
+   * 공유 취소 (revoke)
    */
-  @Delete(':shareId')
+  @Delete(':id')
   @ApiOperation({ summary: '공유 취소' })
-  @ApiBearerAuth()
   async revokeShare(
     @User() user: { id: string },
-    @Param('shareId') shareId: string,
-  ): Promise<void> {
-    return this.managementService.revokeShare(user.id, shareId);
+    @Param('id', ParseUUIDPipe) id: string,
+  ) {
+    return this.shareService.revokeShare(user.id, id);
   }
+}
+
+/**
+ * 외부 사용자 목록 컨트롤러 (내부 사용자용)
+ */
+@ApiTags('external-users')
+@Controller('v1/external-users')
+@ApiBearerAuth()
+export class ExternalUsersController {
+  constructor(
+    private readonly userService: ExternalUserManagementService,
+  ) {}
 
   /**
-   * 공유 접근 (VIEW/DOWNLOAD 검증)
-   * GET /shares/:shareId/access?permission=VIEW|DOWNLOAD
+   * 공유 가능한 외부 사용자 목록
    */
-  @Get(':shareId/access')
-  @ApiOperation({ summary: '공유 접근 (권한 검증)' })
-  @ApiBearerAuth()
-  async accessShare(
-    @User() user: { id: string },
-    @Param('shareId') shareId: string,
-    @Query('permission') permission: SharePermission,
-  ): Promise<FileShare> {
-    return this.accessService.validateAndTrackAccess(
-      shareId,
-      user.id,
-      permission,
-    );
+  @Get()
+  @ApiOperation({ summary: '공유 가능한 외부 사용자 목록' })
+  async getExternalUsers(
+    @Query('page') page: number = 1,
+    @Query('pageSize') pageSize: number = 20,
+  ) {
+    const pagination: PaginationParams = { page, pageSize };
+    // 활성 사용자만 반환
+    return this.userService.getExternalUsers(pagination);
   }
 }

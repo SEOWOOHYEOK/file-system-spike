@@ -9,12 +9,12 @@ import {
 import { SharePermission } from '../../../domain/external-share/type/public-share.type';
 
 /**
- * FileShare ORM 엔티티
+ * PublicShare ORM 엔티티
  *
- * file_shares 테이블과 매핑
+ * public_shares 테이블과 매핑
  */
-@Entity('file_shares')
-export class FileShareOrmEntity {
+@Entity('public_shares')
+export class PublicShareOrmEntity {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
@@ -26,12 +26,18 @@ export class FileShareOrmEntity {
   @Index()
   ownerId: string;
 
-  @Column({ name: 'recipient_id', type: 'uuid' })
+  @Column({ name: 'external_user_id', type: 'uuid' })
   @Index()
-  recipientId: string;
+  externalUserId: string;
 
   @Column('simple-array')
   permissions: SharePermission[];
+
+  @Column({ name: 'max_view_count', type: 'int', nullable: true })
+  maxViewCount: number | null;
+
+  @Column({ name: 'current_view_count', type: 'int', default: 0 })
+  currentViewCount: number;
 
   @Column({ name: 'max_download_count', type: 'int', nullable: true })
   maxDownloadCount: number | null;
@@ -41,6 +47,20 @@ export class FileShareOrmEntity {
 
   @Column({ name: 'expires_at', type: 'timestamp', nullable: true })
   expiresAt: Date | null;
+
+  @Column({ name: 'is_blocked', type: 'boolean', default: false })
+  @Index()
+  isBlocked: boolean;
+
+  @Column({ name: 'blocked_at', type: 'timestamp', nullable: true })
+  blockedAt: Date | null;
+
+  @Column({ name: 'blocked_by', type: 'uuid', nullable: true })
+  blockedBy: string | null;
+
+  @Column({ name: 'is_revoked', type: 'boolean', default: false })
+  @Index()
+  isRevoked: boolean;
 
   @CreateDateColumn({ name: 'created_at' })
   createdAt: Date;
