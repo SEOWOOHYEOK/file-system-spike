@@ -14,21 +14,26 @@
  * ⚠️ 중요 고려사항:
  *   - 권한 검사는 Guard에서 수행
  *   - 응답 형식 일관성 유지
+ *   - Employee 조회는 UserQueryService 사용 (DDD 준수)
  * ============================================================
  */
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException } from '@nestjs/common';
 import { UserController } from './user.controller';
 import { UserService } from '../../../business/user/user.service';
 import { UserSyncService, SyncResult } from '../../../business/user/user-sync.service';
+import { UserQueryService } from '../../../business/user/user-query.service';
 import { User } from '../../../domain/user/entities/user.entity';
 import { Role } from '../../../domain/role/entities/role.entity';
 import { Permission } from '../../../domain/role/entities/permission.entity';
+import { EmployeeStatus } from '../../../integrations/migration/organization/entities/employee.entity';
+import type { UserWithEmployeeResponseDto } from './dto/user-with-employee-response.dto';
+import type { UserFilterQueryDto } from './dto/user-filter-query.dto';
 
 describe('UserController', () => {
   let controller: UserController;
   let mockUserService: jest.Mocked<UserService>;
   let mockUserSyncService: jest.Mocked<UserSyncService>;
+  let mockUserQueryService: jest.Mocked<UserQueryService>;
 
   /**
    * 🎭 Mock 설정
@@ -38,6 +43,9 @@ describe('UserController', () => {
    * 📍 mockUserSyncService:
    *   - 실제 동작: Employee→User 동기화
    *   - Mock 이유: 동기화 API 테스트
+   * 📍 mockUserQueryService:
+   *   - 실제 동작: User+Employee 크로스 도메인 조회
+   *   - Mock 이유: DDD 준수 (Query Service 분리)
    */
   beforeEach(async () => {
     mockUserService = {
@@ -52,6 +60,10 @@ describe('UserController', () => {
       syncEmployeesToUsers: jest.fn(),
     } as unknown as jest.Mocked<UserSyncService>;
 
+    mockUserQueryService = {
+      findAllWithEmployee: jest.fn(),
+    } as unknown as jest.Mocked<UserQueryService>;
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [UserController],
       providers: [
@@ -63,6 +75,10 @@ describe('UserController', () => {
           provide: UserSyncService,
           useValue: mockUserSyncService,
         },
+        {
+          provide: UserQueryService,
+          useValue: mockUserQueryService,
+        },
       ],
     }).compile();
 
@@ -70,47 +86,142 @@ describe('UserController', () => {
   });
 
   /**
-   * 📌 테스트 시나리오: 전체 User 목록 조회
+   * 📌 테스트 시나리오: 전체 User 목록 조회 (Employee 정보 포함 + 필터링)
    *
    * 🎯 검증 목적:
-   *   GET /users API 동작 검증
+   *   GET /users API 동작 검증 (Employee 정보 포함, 필터링 가능)
    *
    * ✅ 기대 결과:
-   *   User 목록 반환
+   *   User + Employee 목록 반환, 필터 적용
    */
   describe('findAll', () => {
-    it('should return all users', async () => {
+    it('should return all users with employee information', async () => {
       // ═══════════════════════════════════════════════════════
       // 📥 GIVEN (사전 조건 설정)
       // ═══════════════════════════════════════════════════════
-      const users = [
-        new User({
+      const usersWithEmployee: UserWithEmployeeResponseDto[] = [
+        {
           id: 'user-1',
           roleId: 'role-1',
           isActive: true,
           createdAt: new Date(),
           updatedAt: new Date(),
-        }),
-        new User({
+          employee: {
+            employeeNumber: 'EMP001',
+            name: '홍길동',
+            email: 'hong@test.com',
+            phoneNumber: '010-1234-5678',
+            hireDate: new Date('2020-01-01'),
+            status: EmployeeStatus.Active,
+            departmentPositions: [
+              {
+                departmentId: 'dept-1',
+                departmentName: '개발팀',
+                positionId: 'pos-1',
+                positionTitle: '팀장',
+                isManager: true,
+              },
+            ],
+          },
+        },
+        {
           id: 'user-2',
           roleId: null,
           isActive: false,
           createdAt: new Date(),
           updatedAt: new Date(),
-        }),
+          employee: null,
+        },
       ];
-      mockUserService.findAll.mockResolvedValue(users);
+      mockUserQueryService.findAllWithEmployee.mockResolvedValue(usersWithEmployee);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
       // ═══════════════════════════════════════════════════════
-      const result = await controller.findAll();
+      const result = await controller.findAll({});
 
       // ═══════════════════════════════════════════════════════
       // ✅ THEN (결과 검증)
       // ═══════════════════════════════════════════════════════
-      expect(mockUserService.findAll).toHaveBeenCalled();
+      expect(mockUserQueryService.findAllWithEmployee).toHaveBeenCalledWith({});
       expect(result).toHaveLength(2);
+      expect(result[0].employee?.name).toBe('홍길동');
+    });
+
+    it('should filter by name', async () => {
+      // ═══════════════════════════════════════════════════════
+      // 📥 GIVEN (사전 조건 설정)
+      // ═══════════════════════════════════════════════════════
+      const filter = { name: '홍길동' };
+      mockUserQueryService.findAllWithEmployee.mockResolvedValue([]);
+
+      // ═══════════════════════════════════════════════════════
+      // 🎬 WHEN (테스트 실행)
+      // ═══════════════════════════════════════════════════════
+      await controller.findAll(filter);
+
+      // ═══════════════════════════════════════════════════════
+      // ✅ THEN (결과 검증)
+      // ═══════════════════════════════════════════════════════
+      expect(mockUserQueryService.findAllWithEmployee).toHaveBeenCalledWith(filter);
+    });
+
+    it('should filter by employeeNumber', async () => {
+      // ═══════════════════════════════════════════════════════
+      // 📥 GIVEN (사전 조건 설정)
+      // ═══════════════════════════════════════════════════════
+      const filter = { employeeNumber: 'EMP001' };
+      mockUserQueryService.findAllWithEmployee.mockResolvedValue([]);
+
+      // ═══════════════════════════════════════════════════════
+      // 🎬 WHEN (테스트 실행)
+      // ═══════════════════════════════════════════════════════
+      await controller.findAll(filter);
+
+      // ═══════════════════════════════════════════════════════
+      // ✅ THEN (결과 검증)
+      // ═══════════════════════════════════════════════════════
+      expect(mockUserQueryService.findAllWithEmployee).toHaveBeenCalledWith(filter);
+    });
+
+    it('should filter by status', async () => {
+      // ═══════════════════════════════════════════════════════
+      // 📥 GIVEN (사전 조건 설정)
+      // ═══════════════════════════════════════════════════════
+      const filter = { status: EmployeeStatus.Active };
+      mockUserQueryService.findAllWithEmployee.mockResolvedValue([]);
+
+      // ═══════════════════════════════════════════════════════
+      // 🎬 WHEN (테스트 실행)
+      // ═══════════════════════════════════════════════════════
+      await controller.findAll(filter);
+
+      // ═══════════════════════════════════════════════════════
+      // ✅ THEN (결과 검증)
+      // ═══════════════════════════════════════════════════════
+      expect(mockUserQueryService.findAllWithEmployee).toHaveBeenCalledWith(filter);
+    });
+
+    it('should apply multiple filters', async () => {
+      // ═══════════════════════════════════════════════════════
+      // 📥 GIVEN (사전 조건 설정)
+      // ═══════════════════════════════════════════════════════
+      const filter = {
+        name: '홍',
+        employeeNumber: 'EMP',
+        status: EmployeeStatus.Active,
+      };
+      mockUserQueryService.findAllWithEmployee.mockResolvedValue([]);
+
+      // ═══════════════════════════════════════════════════════
+      // 🎬 WHEN (테스트 실행)
+      // ═══════════════════════════════════════════════════════
+      await controller.findAll(filter);
+
+      // ═══════════════════════════════════════════════════════
+      // ✅ THEN (결과 검증)
+      // ═══════════════════════════════════════════════════════
+      expect(mockUserQueryService.findAllWithEmployee).toHaveBeenCalledWith(filter);
     });
   });
 

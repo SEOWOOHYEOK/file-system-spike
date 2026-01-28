@@ -24,7 +24,7 @@ const User = () => (target: any, key: string, index: number) => {};
  * 파일 공유 REST API 엔드포인트
  */
 @ApiTags('shares')
-@Controller('shares')
+@Controller('v1/shares')
 export class ShareController {
   constructor(
     private readonly managementService: ShareManagementService,

@@ -12,7 +12,7 @@ export enum PermissionEnum {
   FILE_WRITE = 'FILE_WRITE',
   FILE_DELETE = 'FILE_DELETE',
 
-  // File Share Management (for upcoming file share system)
+  // File Share Management
   FILE_SHARE_CREATE = 'FILE_SHARE_CREATE',
   FILE_SHARE_READ = 'FILE_SHARE_READ',
   FILE_SHARE_DELETE = 'FILE_SHARE_DELETE',
@@ -25,3 +25,24 @@ export enum PermissionEnum {
   // Admin Operations
   ADMIN = 'ADMIN',
 }
+
+
+/**
+ * 권한별 한글 설명
+ */
+export const PermissionDescriptions: Record<PermissionEnum, string> = {
+  [PermissionEnum.USER_READ]: '사용자 조회',
+  [PermissionEnum.USER_WRITE]: '사용자 생성/수정',
+  [PermissionEnum.ROLE_READ]: '역할 조회',
+  [PermissionEnum.ROLE_WRITE]: '역할 생성/수정',
+  [PermissionEnum.FILE_READ]: '파일 조회',
+  [PermissionEnum.FILE_WRITE]: '파일 생성/수정',
+  [PermissionEnum.FILE_DELETE]: '파일 삭제',
+  [PermissionEnum.FILE_SHARE_CREATE]: '파일 공유 생성',
+  [PermissionEnum.FILE_SHARE_READ]: '파일 공유 조회',
+  [PermissionEnum.FILE_SHARE_DELETE]: '파일 공유 삭제',
+  [PermissionEnum.FOLDER_READ]: '폴더 조회',
+  [PermissionEnum.FOLDER_WRITE]: '폴더 생성/수정',
+  [PermissionEnum.FOLDER_DELETE]: '폴더 삭제',
+  [PermissionEnum.ADMIN]: '관리자',
+};

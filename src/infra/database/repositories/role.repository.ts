@@ -1,10 +1,12 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, In } from 'typeorm';
 import { RoleOrmEntity } from '../entities/role.orm-entity';
 import { UserOrmEntity } from '../entities/user.orm-entity';
+import { PermissionOrmEntity } from '../entities/permission.orm-entity';
 import { IRoleRepository } from '../../../domain/role/repositories/role.repository.interface';
 import { Role } from '../../../domain/role/entities/role.entity';
+import { RoleNameEnum } from '../../../domain/role/role-name.enum';
 import { RoleMapper } from '../mapper/role.mapper';
 
 @Injectable()
@@ -14,10 +16,22 @@ export class RoleRepository implements IRoleRepository {
     private readonly repo: Repository<RoleOrmEntity>,
     @InjectRepository(UserOrmEntity)
     private readonly userRepo: Repository<UserOrmEntity>,
+    @InjectRepository(PermissionOrmEntity)
+    private readonly permissionRepo: Repository<PermissionOrmEntity>,
   ) {}
 
   async save(role: Role): Promise<Role> {
     const ormEntity = RoleMapper.toOrm(role);
+
+    // ManyToMany 관계를 위해 Permission을 DB에서 직접 로드
+    // (TypeORM Entity Manager가 추적하는 인스턴스 필요)
+    if (role.permissions && role.permissions.length > 0) {
+      const permissionIds = role.permissions.map((p) => p.id);
+      ormEntity.permissions = await this.permissionRepo.findBy({
+        id: In(permissionIds),
+      });
+    }
+
     const saved = await this.repo.save(ormEntity);
     return RoleMapper.toDomain(saved);
   }
@@ -30,7 +44,7 @@ export class RoleRepository implements IRoleRepository {
     return found ? RoleMapper.toDomain(found) : null;
   }
 
-  async findByName(name: string): Promise<Role | null> {
+  async findByName(name: RoleNameEnum | string): Promise<Role | null> {
     const found = await this.repo.findOne({ 
       where: { name },
       relations: ['permissions']

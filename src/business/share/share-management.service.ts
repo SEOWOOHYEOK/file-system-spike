@@ -8,7 +8,6 @@ import {
 import { v4 as uuidv4 } from 'uuid';
 import {
   FILE_SHARE_REPOSITORY,
-
 } from '../../domain/share/repositories/file-share.repository.interface';
 import {
   FILE_REPOSITORY,
@@ -17,7 +16,6 @@ import { FileShare } from '../../domain/share/entities/file-share.entity';
 import { CreateShareDto } from './dto/create-share.dto';
 import type { IFileShareRepository } from '../../domain/share/repositories/file-share.repository.interface';
 import type { IFileRepository } from '../../domain/file/repositories/file.repository.interface';
-
 
 /**
  * Share Management 서비스
@@ -31,7 +29,7 @@ export class ShareManagementService {
     private readonly shareRepo: IFileShareRepository,
     @Inject(FILE_REPOSITORY)
     private readonly fileRepo: IFileRepository,
-  ) { }
+  ) {}
 
   /**
    * 공유 생성
@@ -39,22 +37,21 @@ export class ShareManagementService {
    * @param ownerId 파일 소유자 ID (요청자)
    * @param dto 공유 생성 정보
    * @throws NotFoundException 파일이 존재하지 않는 경우
-   * @throws ForbiddenException 파일 소유자가 아닌 경우
    * @throws ConflictException 이미 같은 수신자에게 공유된 경우
    */
   async createShare(ownerId: string, dto: CreateShareDto): Promise<FileShare> {
-    // 1. 파일 존재 및 소유권 검증
+    // 1. 파일 존재 검증
     const file = await this.fileRepo.findById(dto.fileId);
     if (!file) {
       throw new NotFoundException(`File with ID ${dto.fileId} not found`);
     }
-
 
     // 2. 중복 공유 확인
     const existingShare = await this.shareRepo.findByFileAndRecipient(
       dto.fileId,
       dto.recipientId,
     );
+
     if (existingShare) {
       throw new ConflictException(
         'File is already shared with this recipient',

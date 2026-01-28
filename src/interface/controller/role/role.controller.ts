@@ -1,41 +1,47 @@
 import { Controller, Post, Body, Get, UseGuards, Param, Delete } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { RoleService } from '../../../business/role/role.service';
 import { CreateRoleDto } from '../../../domain/role/dto/create-role.dto';
 import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
 import { PermissionEnum } from '../../../domain/role/permission.enum';
 import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
+import {
+  CreateRoleSwagger,
+  FindAllRolesSwagger,
+  FindRoleByIdSwagger,
+  DeleteRoleSwagger,
+} from './role.swagger';
 
 @ApiTags('Role Management')
-@Controller('roles')
+@Controller('v1/roles')
 @ApiBearerAuth()
-@UseGuards(PermissionsGuard)
+// @UseGuards(PermissionsGuard)
 export class RoleController {
   constructor(private readonly roleService: RoleService) {}
 
   @Post()
-  @ApiOperation({ summary: 'Create a new role' })
+  @CreateRoleSwagger()
   @RequirePermissions(PermissionEnum.ROLE_WRITE)
   create(@Body() dto: CreateRoleDto) {
     return this.roleService.createRole(dto);
   }
 
   @Get()
-  @ApiOperation({ summary: 'List all roles' })
+  @FindAllRolesSwagger()
   @RequirePermissions(PermissionEnum.ROLE_READ)
   findAll() {
     return this.roleService.findAll();
   }
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get role by ID' })
+  @FindRoleByIdSwagger()
   @RequirePermissions(PermissionEnum.ROLE_READ)
   findOne(@Param('id') id: string) {
     return this.roleService.findById(id);
   }
 
   @Delete(':id')
-  @ApiOperation({ summary: 'Delete a role' })
+  @DeleteRoleSwagger()
   @RequirePermissions(PermissionEnum.ROLE_WRITE)
   remove(@Param('id') id: string) {
     return this.roleService.delete(id);

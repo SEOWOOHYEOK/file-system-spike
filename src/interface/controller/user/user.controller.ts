@@ -6,13 +6,17 @@ import {
   Post,
   Param,
   Body,
-  UseGuards,
+  Query,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { UserService } from '../../../business/user/user.service';
 import { UserSyncService, SyncResult } from '../../../business/user/user-sync.service';
+import { UserQueryService } from '../../../business/user/user-query.service';
 import { User } from '../../../domain/user/entities/user.entity';
 import { AssignRoleDto } from '../../../domain/user/dto/assign-role.dto';
+import type { UserFilterQueryDto } from './dto/user-filter-query.dto';
+import type { UserWithEmployeeResponseDto } from './dto/user-with-employee-response.dto';
+import { EmployeeStatus } from '../../../integrations/migration/organization/entities/employee.entity';
 
 /**
  * User 응답 타입
@@ -35,22 +39,33 @@ interface UserWithRoleResponse {
  * User CRUD 및 Role 부여/제거 API 제공
  */
 @ApiTags('Users')
-@Controller('users')
+@Controller('v1/users')
 export class UserController {
   constructor(
     private readonly userService: UserService,
     private readonly userSyncService: UserSyncService,
+    private readonly userQueryService: UserQueryService,
   ) {}
 
   /**
-   * 전체 User 목록 조회
-   * GET /users
+   * 전체 User 목록 조회 (Employee 정보 포함 + 필터링)
+   * GET /users?name=홍길동&employeeNumber=EMP001&status=재직중
    */
   @Get()
-  @ApiOperation({ summary: '전체 User 목록 조회' })
-  @ApiResponse({ status: 200, description: 'User 목록 반환' })
-  async findAll(): Promise<User[]> {
-    return this.userService.findAll();
+  @ApiOperation({ summary: '전체 User 목록 조회 (Employee 정보 포함)' })
+  @ApiQuery({ name: 'employeeName', required: false, description: '이름 (부분 일치)' })
+  @ApiQuery({ name: 'employeeNumber', required: false, description: '사번 (부분 일치)' })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: EmployeeStatus,
+    description: '재직 상태',
+  })
+  @ApiResponse({ status: 200, description: 'User + Employee 목록 반환' })
+  async findAll(
+    @Query() filter: UserFilterQueryDto,
+  ): Promise<UserWithEmployeeResponseDto[]> {
+    return this.userQueryService.findAllWithEmployee(filter);
   }
 
   /**

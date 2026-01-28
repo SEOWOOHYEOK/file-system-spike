@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { UserService } from './user.service';
 import { UserSyncService } from './user-sync.service';
+import { UserQueryService } from './user-query.service';
 import { UserInfraModule } from '../../infra/database/user-infra.module';
 import { RoleInfraModule } from '../../infra/database/role-infra.module';
 import { OrganizationModule } from '../../integrations/migration/organization/organization.module';
@@ -12,7 +13,7 @@ import { OrganizationModule } from '../../integrations/migration/organization/or
  */
 @Module({
   imports: [UserInfraModule, RoleInfraModule, OrganizationModule],
-  providers: [UserService, UserSyncService],
-  exports: [UserService, UserSyncService],
+  providers: [UserService, UserSyncService, UserQueryService],
+  exports: [UserService, UserSyncService, UserQueryService],
 })
 export class UserModule {}

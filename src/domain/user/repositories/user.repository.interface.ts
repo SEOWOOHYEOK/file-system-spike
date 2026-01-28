@@ -4,6 +4,8 @@ import { User } from '../entities/user.entity';
  * User Repository 인터페이스
  *
  * User 도메인 엔티티의 영속성 관리를 위한 추상화
+ * - 단일 Aggregate(User)만 담당 (DDD 원칙)
+ * - 크로스 도메인 조회는 Business Layer의 Query Service에서 처리
  */
 export interface IUserRepository {
   /**

@@ -10,6 +10,8 @@ import { UserMapper } from '../mapper/user.mapper';
  * User Repository 구현체
  *
  * TypeORM을 사용한 User 영속성 관리
+ * - 단일 Aggregate(User)만 담당 (DDD 원칙)
+ * - 크로스 도메인 조회는 Business Layer의 UserQueryService에서 처리
  */
 @Injectable()
 export class UserRepository implements IUserRepository {
