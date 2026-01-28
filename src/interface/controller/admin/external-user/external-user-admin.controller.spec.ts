@@ -16,9 +16,12 @@ jest.mock('uuid', () => ({
 }));
 
 import { Test, TestingModule } from '@nestjs/testing';
+import { JwtService } from '@nestjs/jwt';
+import { ConfigService } from '@nestjs/config';
 import { ExternalUserAdminController } from './external-user-admin.controller';
 import { ExternalUserManagementService } from '../../../../business/external-share/external-user-management.service';
 import { ExternalUser } from '../../../../domain/external-share/entities/external-user.entity';
+import { JwtAuthGuard } from '../../../../common/guards';
 
 describe('ExternalUserAdminController', () => {
   let controller: ExternalUserAdminController;
@@ -42,14 +45,26 @@ describe('ExternalUserAdminController', () => {
           provide: ExternalUserManagementService,
           useValue: mockUserService,
         },
+        {
+          provide: JwtService,
+          useValue: { verifyAsync: jest.fn() },
+        },
+        {
+          provide: ConfigService,
+          useValue: { get: jest.fn().mockReturnValue('test-secret') },
+        },
       ],
-    }).compile();
+    })
+      .overrideGuard(JwtAuthGuard)
+      .useValue({ canActivate: () => true })
+      .compile();
 
     controller = module.get<ExternalUserAdminController>(
       ExternalUserAdminController,
     );
   });
 
+  
   describe('POST /v1/admin/external-users', () => {
     it('should create an external user', async () => {
       const dto = {

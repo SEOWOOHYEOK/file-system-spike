@@ -21,6 +21,14 @@ async function bootstrap() {
     .setTitle('DMS API')
     .setDescription('문서 관리 시스템 API 문서')
     .setVersion('1.0')
+    .addBearerAuth(
+      {
+        type: 'http',
+        scheme: 'bearer',
+        bearerFormat: 'JWT',
+        description: 'JWT 토큰을 입력하세요',
+      },
+    )
     .build();
 
   const document = SwaggerModule.createDocument(app, config);
@@ -28,6 +36,7 @@ async function bootstrap() {
     swaggerOptions: {
       tagsSorter: 'alpha', // 태그를 알파벳/숫자 순서로 정렬
       operationsSorter: 'alpha', // 각 태그 내 API도 정렬
+      persistAuthorization: true, // 새로고침 후에도 토큰 유지
     },
   });
 

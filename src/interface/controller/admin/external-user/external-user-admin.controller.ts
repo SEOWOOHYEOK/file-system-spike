@@ -7,8 +7,10 @@ import {
   Body,
   Query,
   ParseUUIDPipe,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../../../common/guards';
 import {
   ExternalUserManagementService,
   type CreateExternalUserDto,
@@ -16,6 +18,15 @@ import {
 } from '../../../../business/external-share/external-user-management.service';
 import { PaginationParams } from '../../../../domain/external-share/repositories/external-user.repository.interface';
 import { User } from '../../../../common/decorators/user.decorator';
+import {
+  ApiCreateExternalUser,
+  ApiGetExternalUsers,
+  ApiGetExternalUserById,
+  ApiUpdateExternalUser,
+  ApiDeactivateUser,
+  ApiActivateUser,
+  ApiResetPassword,
+} from './external-user-admin.swagger';
 
 /**
  * 외부 사용자 관리 컨트롤러 (관리자용)
@@ -23,6 +34,7 @@ import { User } from '../../../../common/decorators/user.decorator';
 @ApiTags('520.관리자-외부사용자')
 @Controller('v1/admin/external-users')
 @ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 export class ExternalUserAdminController {
   constructor(
     private readonly userService: ExternalUserManagementService,
@@ -32,7 +44,7 @@ export class ExternalUserAdminController {
    * 외부 사용자 생성
    */
   @Post()
-  @ApiOperation({ summary: '외부 사용자 생성' })
+  @ApiCreateExternalUser()
   async createExternalUser(
     @User() user: { id: string },
     @Body() dto: CreateExternalUserDto,
@@ -45,7 +57,7 @@ export class ExternalUserAdminController {
    * 외부 사용자 목록 조회
    */
   @Get()
-  @ApiOperation({ summary: '외부 사용자 목록 조회' })
+  @ApiGetExternalUsers()
   async getExternalUsers(
     @Query('page') page: number = 1,
     @Query('pageSize') pageSize: number = 20,
@@ -60,7 +72,7 @@ export class ExternalUserAdminController {
    * 외부 사용자 상세 조회
    */
   @Get(':id')
-  @ApiOperation({ summary: '외부 사용자 상세 조회' })
+  @ApiGetExternalUserById()
   async getExternalUserById(@Param('id', ParseUUIDPipe) id: string) {
     return this.userService.getExternalUserById(id);
   }
@@ -69,7 +81,7 @@ export class ExternalUserAdminController {
    * 외부 사용자 정보 수정
    */
   @Patch(':id')
-  @ApiOperation({ summary: '외부 사용자 정보 수정' })
+  @ApiUpdateExternalUser()
   async updateExternalUser(
     @Param('id', ParseUUIDPipe) id: string,
     @Body() dto: UpdateExternalUserDto,
@@ -81,7 +93,7 @@ export class ExternalUserAdminController {
    * 계정 비활성화
    */
   @Patch(':id/deactivate')
-  @ApiOperation({ summary: '외부 사용자 계정 비활성화' })
+  @ApiDeactivateUser()
   async deactivateUser(@Param('id', ParseUUIDPipe) id: string) {
     return this.userService.deactivateUser(id);
   }
@@ -90,7 +102,7 @@ export class ExternalUserAdminController {
    * 계정 활성화
    */
   @Patch(':id/activate')
-  @ApiOperation({ summary: '외부 사용자 계정 활성화' })
+  @ApiActivateUser()
   async activateUser(@Param('id', ParseUUIDPipe) id: string) {
     return this.userService.activateUser(id);
   }
@@ -99,7 +111,7 @@ export class ExternalUserAdminController {
    * 비밀번호 초기화
    */
   @Post(':id/reset-password')
-  @ApiOperation({ summary: '비밀번호 초기화' })
+  @ApiResetPassword()
   async resetPassword(@Param('id', ParseUUIDPipe) id: string) {
     return this.userService.resetPassword(id);
   }

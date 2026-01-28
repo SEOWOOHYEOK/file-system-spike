@@ -7,13 +7,21 @@ import {
   ParseUUIDPipe,
   Headers,
   Ip,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { ExternalJwtAuthGuard } from '../../../common/guards';
 import type { Response } from 'express';
 import { ExternalShareAccessService } from '../../../business/external-share/external-share-access.service';
 import { PaginationParams } from '../../../domain/external-share/repositories/external-user.repository.interface';
 import { AccessAction } from '../../../domain/external-share/entities/share-access-log.entity';
 import { ExternalUser } from '../../../common/decorators/external-user.decorator';
+import {
+  ApiGetMyShares,
+  ApiGetShareDetail,
+  ApiGetContent,
+  ApiDownloadFile,
+} from './external-share.swagger';
 
 /**
  * 외부 사용자 파일 접근 컨트롤러
@@ -21,6 +29,7 @@ import { ExternalUser } from '../../../common/decorators/external-user.decorator
 @ApiTags('710.외부접근')
 @Controller('v1/ext/shares')
 @ApiBearerAuth()
+@UseGuards(ExternalJwtAuthGuard)
 export class ExternalShareController {
   constructor(
     private readonly accessService: ExternalShareAccessService,
@@ -30,7 +39,7 @@ export class ExternalShareController {
    * 나에게 공유된 파일 목록
    */
   @Get()
-  @ApiOperation({ summary: '나에게 공유된 파일 목록' })
+  @ApiGetMyShares()
   async getMyShares(
     @ExternalUser() user: { id: string },
     @Query('page') page: number = 1,
@@ -46,7 +55,7 @@ export class ExternalShareController {
    * 공유 상세 조회 + 콘텐츠 토큰 발급
    */
   @Get(':shareId')
-  @ApiOperation({ summary: '공유 상세 조회 및 콘텐츠 토큰 발급' })
+  @ApiGetShareDetail()
   async getShareDetail(
     @ExternalUser() user: { id: string },
     @Param('shareId', ParseUUIDPipe) shareId: string,
@@ -58,7 +67,7 @@ export class ExternalShareController {
    * 파일 콘텐츠 (뷰어용)
    */
   @Get(':shareId/content')
-  @ApiOperation({ summary: '파일 콘텐츠 (뷰어용)' })
+  @ApiGetContent()
   async getContent(
     @ExternalUser() user: { id: string },
     @Param('shareId', ParseUUIDPipe) shareId: string,
@@ -94,7 +103,7 @@ export class ExternalShareController {
    * 파일 다운로드
    */
   @Get(':shareId/download')
-  @ApiOperation({ summary: '파일 다운로드' })
+  @ApiDownloadFile()
   async downloadFile(
     @ExternalUser() user: { id: string },
     @Param('shareId', ParseUUIDPipe) shareId: string,

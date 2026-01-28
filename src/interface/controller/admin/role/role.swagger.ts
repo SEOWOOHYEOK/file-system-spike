@@ -8,6 +8,7 @@ import { ApiOperation, ApiResponse, ApiParam, ApiBody } from '@nestjs/swagger';
 export const CreateRoleSwagger = () =>
   applyDecorators(
     ApiOperation({
+      deprecated: true,
       summary: '새로운 Role 생성',
       description: `
 Role을 생성합니다.

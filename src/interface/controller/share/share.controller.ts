@@ -7,8 +7,10 @@ import {
   Body,
   Query,
   ParseUUIDPipe,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../../common/guards';
 import {
   PublicShareManagementService,
   type CreatePublicShareDto,
@@ -30,6 +32,7 @@ import {
 @ApiTags('600.외부공유')
 @Controller('v1/file-shares')
 @ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 export class PublicShareController {
   constructor(
     private readonly shareService: PublicShareManagementService,
@@ -92,6 +95,7 @@ export class PublicShareController {
 @ApiTags('600.외부공유')
 @Controller('v1/external-users')
 @ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 export class ExternalUsersController {
   constructor(
     private readonly userService: ExternalUserManagementService,
