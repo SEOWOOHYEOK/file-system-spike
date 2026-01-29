@@ -181,6 +181,7 @@ export class AuthController {
     }
 
     /**
+     * 
      * JWT 토큰 검증
      *
      * JWT 토큰의 유효성을 검증하고 payload를 반환합니다.
@@ -193,7 +194,7 @@ export class AuthController {
     async verifyToken(@Body() dto: VerifyTokenRequestDto): Promise<VerifyTokenResponseDto> {
         try {
             const secret =
-                this.configService.get<string>('JWT_SECRET') || this.configService.get<string>('GLOBAL_SECRET');
+                this.configService.get<string>('INNER_SECRET');
 
             if (!secret) {
                 throw new BadRequestException('JWT 시크릿이 설정되지 않았습니다.');

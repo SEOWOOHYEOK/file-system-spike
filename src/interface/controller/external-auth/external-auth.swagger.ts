@@ -8,6 +8,19 @@ import {
   ApiBody,
   ApiResponse,
 } from '@nestjs/swagger';
+import {
+  ExternalLoginRequestDto,
+  ExternalLoginResponseDto,
+} from './dto/external-login.dto';
+import {
+  ChangePasswordRequestDto,
+  ChangePasswordResponseDto,
+} from './dto/change-password.dto';
+import {
+  ExternalRefreshTokenRequestDto,
+  ExternalRefreshTokenResponseDto,
+  ExternalLogoutResponseDto,
+} from './dto/refresh-token.dto';
 
 /**
  * 외부 사용자 로그인 API 문서
@@ -24,8 +37,8 @@ export const ApiExternalLogin = () =>
 - **이중 토큰 발급**: Access Token (15분) + Refresh Token (7일)
 
 ### 요청
-- \`username\`: 외부 사용자 아이디
-- \`password\`: 비밀번호
+- \`username\`: 외부 사용자 아이디 (3-50자)
+- \`password\`: 비밀번호 (6자 이상)
 
 ### 응답
 - \`accessToken\`: Access Token (15분 유효, API 호출용)
@@ -40,57 +53,14 @@ export const ApiExternalLogin = () =>
     }),
     ApiBody({
       description: '로그인 정보',
-      schema: {
-        type: 'object',
-        required: ['username', 'password'],
-        properties: {
-          username: {
-            type: 'string',
-            description: '외부 사용자 아이디',
-            example: 'partner_user01',
-          },
-          password: {
-            type: 'string',
-            description: '비밀번호',
-            example: 'SecurePass123!',
-          },
-        },
-      },
+      type: ExternalLoginRequestDto,
     }),
     ApiResponse({
       status: 200,
       description: '로그인 성공',
-      schema: {
-        type: 'object',
-        properties: {
-          accessToken: {
-            type: 'string',
-            description: 'Access Token (15분 유효)',
-            example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-          },
-          refreshToken: {
-            type: 'string',
-            description: 'Refresh Token (7일 유효)',
-            example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-          },
-          expiresIn: {
-            type: 'integer',
-            description: 'Access Token 만료 시간 (초)',
-            example: 900,
-          },
-          user: {
-            type: 'object',
-            properties: {
-              id: { type: 'string', format: 'uuid' },
-              username: { type: 'string', example: 'partner_user01' },
-              name: { type: 'string', example: '홍길동' },
-              email: { type: 'string', example: 'hong@partner.com' },
-              company: { type: 'string', example: '협력사A' },
-            },
-          },
-        },
-      },
+      type: ExternalLoginResponseDto,
     }),
+    ApiResponse({ status: 400, description: '잘못된 요청 (유효성 검증 실패)' }),
     ApiResponse({ status: 401, description: '인증 실패 (잘못된 아이디 또는 비밀번호)' }),
     ApiResponse({ status: 403, description: '계정이 비활성화됨 또는 잠금됨 (5회 실패)' }),
   );
@@ -117,37 +87,14 @@ Refresh Token을 사용하여 새로운 Access Token을 발급받습니다.
     }),
     ApiBody({
       description: 'Refresh Token',
-      schema: {
-        type: 'object',
-        required: ['refreshToken'],
-        properties: {
-          refreshToken: {
-            type: 'string',
-            description: '로그인 시 발급받은 Refresh Token',
-            example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-          },
-        },
-      },
+      type: ExternalRefreshTokenRequestDto,
     }),
     ApiResponse({
       status: 200,
       description: '토큰 갱신 성공',
-      schema: {
-        type: 'object',
-        properties: {
-          accessToken: {
-            type: 'string',
-            description: '새 Access Token',
-            example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
-          },
-          expiresIn: {
-            type: 'integer',
-            description: 'Access Token 만료 시간 (초)',
-            example: 900,
-          },
-        },
-      },
+      type: ExternalRefreshTokenResponseDto,
     }),
+    ApiResponse({ status: 400, description: '잘못된 요청 (유효성 검증 실패)' }),
     ApiResponse({ status: 401, description: '유효하지 않거나 만료된 Refresh Token' }),
     ApiResponse({ status: 403, description: '계정이 비활성화됨' }),
   );
@@ -175,12 +122,7 @@ export const ApiExternalLogout = () =>
     ApiResponse({
       status: 200,
       description: '로그아웃 성공',
-      schema: {
-        type: 'object',
-        properties: {
-          message: { type: 'string', example: 'Logged out successfully' },
-        },
-      },
+      type: ExternalLogoutResponseDto,
     }),
     ApiResponse({ status: 401, description: '인증 필요' }),
   );
@@ -197,7 +139,7 @@ export const ApiChangePassword = () =>
 
 ### 요청
 - \`currentPassword\`: 현재 사용 중인 비밀번호
-- \`newPassword\`: 변경할 새 비밀번호
+- \`newPassword\`: 변경할 새 비밀번호 (최소 8자, 대소문자 및 숫자 포함)
 
 ### 보안 동작
 - 비밀번호 변경 후 현재 Access Token이 블랙리스트에 추가됩니다.
@@ -210,32 +152,13 @@ export const ApiChangePassword = () =>
     }),
     ApiBody({
       description: '비밀번호 변경 정보',
-      schema: {
-        type: 'object',
-        required: ['currentPassword', 'newPassword'],
-        properties: {
-          currentPassword: {
-            type: 'string',
-            description: '현재 비밀번호',
-            example: 'OldPass123!',
-          },
-          newPassword: {
-            type: 'string',
-            description: '새 비밀번호',
-            example: 'NewSecurePass456!',
-          },
-        },
-      },
+      type: ChangePasswordRequestDto,
     }),
     ApiResponse({
       status: 200,
       description: '비밀번호 변경 성공',
-      schema: {
-        type: 'object',
-        properties: {
-          message: { type: 'string', example: 'Password changed successfully. Please login again.' },
-        },
-      },
+      type: ChangePasswordResponseDto,
     }),
+    ApiResponse({ status: 400, description: '잘못된 요청 (유효성 검증 실패)' }),
     ApiResponse({ status: 401, description: '현재 비밀번호가 일치하지 않음' }),
   );

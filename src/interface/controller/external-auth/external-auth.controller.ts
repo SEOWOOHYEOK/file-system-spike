@@ -8,12 +8,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import Request from 'express';
-import {
-  ExternalAuthService,
-  type LoginDto,
-  type ChangePasswordDto,
-  type RefreshTokenDto,
-} from '../../../business/external-share/external-auth.service';
+import { ExternalAuthService } from '../../../business/external-share/external-auth.service';
 import { ExternalUser } from '../../../common/decorators/external-user.decorator';
 import { ExternalJwtAuthGuard } from '../../../common/guards';
 import {
@@ -22,6 +17,13 @@ import {
   ApiChangePassword,
   ApiRefreshToken,
 } from './external-auth.swagger';
+import { ExternalLoginRequestDto, ExternalLoginResponseDto } from './dto/external-login.dto';
+import { ChangePasswordRequestDto, ChangePasswordResponseDto } from './dto/change-password.dto';
+import {
+  ExternalRefreshTokenRequestDto,
+  ExternalRefreshTokenResponseDto,
+  ExternalLogoutResponseDto,
+} from './dto/refresh-token.dto';
 
 /**
  * 외부 사용자 인증 컨트롤러
@@ -43,8 +45,15 @@ export class ExternalAuthController {
    */
   @Post('login')
   @ApiExternalLogin()
-  async login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(
+    @Body() dto: ExternalLoginRequestDto,
+  ): Promise<ExternalLoginResponseDto> {
+    const result = await this.authService.login(dto);
+    return {
+      accessToken: result.accessToken,
+      refreshToken: result.refreshToken,
+      user: result.user,
+    };
   }
 
   /**
@@ -52,7 +61,9 @@ export class ExternalAuthController {
    */
   @Post('refresh-token')
   @ApiRefreshToken()
-  async refreshToken(@Body() dto: RefreshTokenDto) {
+  async refreshToken(
+    @Body() dto: ExternalRefreshTokenRequestDto,
+  ): Promise<ExternalRefreshTokenResponseDto> {
     return this.authService.refreshToken(dto);
   }
 
@@ -66,7 +77,7 @@ export class ExternalAuthController {
   async logout(
     @ExternalUser() user: { id: string },
     @Req() req: Request,
-  ) {
+  ): Promise<ExternalLogoutResponseDto> {
     const accessToken = req['accessToken'] as string;
     await this.authService.logout(accessToken, user.id);
     return { message: 'Logged out successfully' };
@@ -81,9 +92,9 @@ export class ExternalAuthController {
   @UseGuards(ExternalJwtAuthGuard)
   async changePassword(
     @ExternalUser() user: { id: string },
-    @Body() dto: ChangePasswordDto,
+    @Body() dto: ChangePasswordRequestDto,
     @Req() req: Request,
-  ) {
+  ): Promise<ChangePasswordResponseDto> {
     const accessToken = req['accessToken'] as string;
     await this.authService.changePassword(user.id, dto, accessToken);
     return { message: 'Password changed successfully. Please login again.' };

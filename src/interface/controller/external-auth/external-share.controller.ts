@@ -22,6 +22,12 @@ import {
   ApiGetContent,
   ApiDownloadFile,
 } from './external-share.swagger';
+import {
+  ContentTokenQueryDto,
+  MyShareListItemDto,
+  ShareDetailResponseDto,
+} from './dto/external-share-access.dto';
+import { PaginationQueryDto, PaginatedResponseDto } from '../../common/dto';
 
 /**
  * 외부 사용자 파일 접근 컨트롤러
@@ -46,13 +52,16 @@ export class ExternalShareController {
   @ApiGetMyShares()
   async getMyShares(
     @ExternalUser() user: { id: string },
-    @Query('page') page: number = 1,
-    @Query('pageSize') pageSize: number = 20,
-    @Query('sortBy') sortBy?: string,
-    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
-  ) {
-    const pagination: PaginationParams = { page, pageSize, sortBy, sortOrder };
-    return this.accessService.getMyShares(user.id, pagination);
+    @Query() query: PaginationQueryDto,
+  ): Promise<PaginatedResponseDto<MyShareListItemDto>> {
+    const pagination: PaginationParams = {
+      page: query.page,
+      pageSize: query.pageSize,
+      sortBy: query.sortBy,
+      sortOrder: query.sortOrder,
+    };
+    const result = await this.accessService.getMyShares(user.id, pagination);
+    return result;
   }
 
   /**
@@ -63,8 +72,9 @@ export class ExternalShareController {
   async getShareDetail(
     @ExternalUser() user: { id: string },
     @Param('shareId', ParseUUIDPipe) shareId: string,
-  ) {
-    return this.accessService.getShareDetail(user.id, shareId);
+  ): Promise<ShareDetailResponseDto> {
+    const result = await this.accessService.getShareDetail(user.id, shareId);
+    return ShareDetailResponseDto.fromResult(result);
   }
 
   /**
@@ -77,7 +87,7 @@ export class ExternalShareController {
   async getContent(
     @ExternalUser() user: { id: string },
     @Param('shareId', ParseUUIDPipe) shareId: string,
-    @Query('token') token: string,
+    @Query() tokenQuery: ContentTokenQueryDto,
     @Headers('user-agent') userAgent: string,
     @Ip() ipAddress: string,
     @Res() res: Response,
@@ -88,7 +98,7 @@ export class ExternalShareController {
     const result = await this.accessService.accessContent({
       externalUserId: user.id,
       shareId,
-      token,
+      token: tokenQuery.token,
       action: AccessAction.VIEW,
       ipAddress,
       userAgent,
@@ -133,7 +143,7 @@ export class ExternalShareController {
   async downloadFile(
     @ExternalUser() user: { id: string },
     @Param('shareId', ParseUUIDPipe) shareId: string,
-    @Query('token') token: string,
+    @Query() tokenQuery: ContentTokenQueryDto,
     @Headers('user-agent') userAgent: string,
     @Ip() ipAddress: string,
     @Res() res: Response,
@@ -144,7 +154,7 @@ export class ExternalShareController {
     const result = await this.accessService.accessContent({
       externalUserId: user.id,
       shareId,
-      token,
+      token: tokenQuery.token,
       action: AccessAction.DOWNLOAD,
       ipAddress,
       userAgent,

@@ -283,7 +283,7 @@ export class ExternalAuthService {
    * 외부 사용자 전용 JWT 시크릿 조회
    *
    * 보안 주의:
-   * - 내부 사용자(JWT_SECRET/GLOBAL_SECRET)와 완전히 분리된 시크릿 사용
+   * - 내부 사용자(INNER_SECRET/INNER_SECRET)와 완전히 분리된 시크릿 사용
    * - 외부 사용자 토큰으로 내부 API 접근 불가
    * - 시크릿 노출 시 외부 시스템만 영향 (내부 시스템 보호)
    */

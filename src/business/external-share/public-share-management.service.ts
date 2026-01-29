@@ -23,6 +23,8 @@ import {
 } from '../../domain/file/repositories/file.repository.interface';
 import { PublicShare } from '../../domain/external-share/entities/public-share.entity';
 import { SharePermission } from '../../domain/external-share/type/public-share.type';
+import { PublicShareDomainService } from '../../domain/external-share/service/public-share-domain.service';
+import { FileState } from '../../domain/file/type/file.type';
 
 /**
  * 외부 공유 생성 DTO 
@@ -30,7 +32,7 @@ import { SharePermission } from '../../domain/external-share/type/public-share.t
 export interface CreatePublicShareDto {
   fileId: string;
   externalUserId: string;
-  permissions: typeof SharePermission[];
+  permissions: SharePermission[];
   maxViewCount?: number;
   maxDownloadCount?: number;
   expiresAt?: Date;
@@ -52,7 +54,8 @@ export class PublicShareManagementService {
     private readonly userRepo: IExternalUserRepository,
     @Inject(FILE_REPOSITORY)
     private readonly fileRepo: IFileRepository,
-  ) {}
+    private readonly shareDomainService: PublicShareDomainService,
+  ) { }
 
   /**
    * 외부 공유 생성 (내부 사용자용)
@@ -64,13 +67,17 @@ export class PublicShareManagementService {
     // 파일 존재 확인
     const file = await this.fileRepo.findById(dto.fileId);
     if (!file) {
-      throw new NotFoundException('File not found');
+      throw new NotFoundException('파일을 찾을 수 없습니다.');
+    }
+
+    if (file.state !== FileState.ACTIVE) {
+      throw new ForbiddenException('파일이 활성 상태가 아닙니다.');
     }
 
     // 외부 사용자 존재 확인
     const externalUser = await this.userRepo.findById(dto.externalUserId);
     if (!externalUser) {
-      throw new NotFoundException('External user not found');
+      throw new NotFoundException('공유 대상 사용자를 찾을 수 없습니다.');
     }
 
     // 중복 공유 확인
@@ -78,8 +85,11 @@ export class PublicShareManagementService {
       dto.fileId,
       dto.externalUserId,
     );
+
+
+
     if (existing) {
-      throw new ConflictException('Share already exists for this file and user');
+      throw new ConflictException('이미 해당 사용자에게 파일이 공유가 되어 있습니다.');
     }
 
     const share = new PublicShare({
@@ -125,11 +135,11 @@ export class PublicShareManagementService {
     ownerId: string,
     pagination: PaginationParams,
   ): Promise<PaginatedResult<PublicShare>> {
-    return this.shareRepo.findByOwner(ownerId, pagination);
+    return this.shareDomainService.findByOwnerWithFiles(ownerId, pagination);
   }
 
   /**
-   * 공유 차단 (관리자용)
+   * 공유 차단 
    */
   async blockShare(adminId: string, shareId: string): Promise<PublicShare> {
     const share = await this.shareRepo.findById(shareId);
@@ -142,7 +152,7 @@ export class PublicShareManagementService {
   }
 
   /**
-   * 차단 해제 (관리자용)
+   * 차단 해제 
    */
   async unblockShare(shareId: string): Promise<PublicShare> {
     const share = await this.shareRepo.findById(shareId);
@@ -155,7 +165,7 @@ export class PublicShareManagementService {
   }
 
   /**
-   * 특정 파일의 모든 공유 일괄 차단 (관리자용)
+   * 특정 파일의 모든 공유 일괄 차단 
    */
   async blockAllSharesByFile(
     adminId: string,
@@ -188,23 +198,13 @@ export class PublicShareManagementService {
     );
     return { blockedCount };
   }
-
   /**
-   * 공유된 파일 통계 조회 (관리자용)
-   */
-  async getSharedFiles(
-    pagination: PaginationParams,
-  ): Promise<PaginatedResult<SharedFileStats>> {
-    return this.shareRepo.getSharedFilesStats(pagination);
-  }
-
-  /**
-   * 전체 공유 현황 (관리자용)
-   */
+ * 전체 공유 현황 (관리자용)
+ */
   async getAllPublicShares(
     pagination: PaginationParams,
   ): Promise<PaginatedResult<PublicShare>> {
-    return this.shareRepo.findAll(pagination);
+    return this.shareDomainService.findALLWithFile(pagination);
   }
 
   /**

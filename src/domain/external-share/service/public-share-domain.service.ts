@@ -47,6 +47,18 @@ export class PublicShareDomainService {
   // 조회 메서드 (Query Methods)
   // ============================================
 
+
+  /**
+   * ID로 공유 조회 + 파일 메타데이터 채움
+   */
+  async findALLWithFile(pagination: PaginationParams): Promise<PaginatedResult<PublicShare>> {
+    const result = await this.shareRepo.findAll(pagination);
+ 
+
+    await this.enrichSharesWithFileMetadata(result.items);
+    return result;
+  }
+
   /**
    * ID로 공유 조회 + 파일 메타데이터 채움
    */

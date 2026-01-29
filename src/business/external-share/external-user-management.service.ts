@@ -50,7 +50,7 @@ export class ExternalUserManagementService {
 
   constructor(
     @Inject(EXTERNAL_USER_REPOSITORY)
-    private readonly userRepo: IExternalUserRepository,
+    private readonly externalUserRepo: IExternalUserRepository,
   ) {}
 
   /**
@@ -61,7 +61,7 @@ export class ExternalUserManagementService {
     dto: CreateExternalUserDto,
   ): Promise<ExternalUser> {
     // username 중복 확인
-    const existing = await this.userRepo.findByUsername(dto.username);
+    const existing = await this.externalUserRepo.findByUsername(dto.username);
     if (existing) {
       throw new ConflictException('Username already exists');
     }
@@ -82,7 +82,7 @@ export class ExternalUserManagementService {
       createdAt: new Date(),
     });
 
-    return this.userRepo.save(user);
+    return this.externalUserRepo.save(user);
   }
 
   /**
@@ -92,7 +92,7 @@ export class ExternalUserManagementService {
     userId: string,
     dto: UpdateExternalUserDto,
   ): Promise<ExternalUser> {
-    const user = await this.userRepo.findById(userId);
+    const user = await this.externalUserRepo.findById(userId);
     if (!user) {
       throw new NotFoundException('External user not found');
     }
@@ -102,33 +102,33 @@ export class ExternalUserManagementService {
     if (dto.company !== undefined) user.company = dto.company;
     if (dto.phone !== undefined) user.phone = dto.phone;
 
-    return this.userRepo.save(user);
+    return this.externalUserRepo.save(user);
   }
 
   /**
    * 계정 비활성화
    */
   async deactivateUser(userId: string): Promise<ExternalUser> {
-    const user = await this.userRepo.findById(userId);
+    const user = await this.externalUserRepo.findById(userId);
     if (!user) {
       throw new NotFoundException('External user not found');
     }
 
     user.deactivate();
-    return this.userRepo.save(user);
+    return this.externalUserRepo.save(user);
   }
 
   /**
    * 계정 활성화
    */
   async activateUser(userId: string): Promise<ExternalUser> {
-    const user = await this.userRepo.findById(userId);
+    const user = await this.externalUserRepo.findById(userId);
     if (!user) {
       throw new NotFoundException('External user not found');
     }
 
     user.activate();
-    return this.userRepo.save(user);
+    return this.externalUserRepo.save(user);
   }
 
   /**
@@ -138,7 +138,7 @@ export class ExternalUserManagementService {
   async resetPassword(
     userId: string,
   ): Promise<{ temporaryPassword: string }> {
-    const user = await this.userRepo.findById(userId);
+    const user = await this.externalUserRepo.findById(userId);
     if (!user) {
       throw new NotFoundException('External user not found');
     }
@@ -148,7 +148,7 @@ export class ExternalUserManagementService {
     const passwordHash = await bcrypt.hash(temporaryPassword, this.SALT_ROUNDS);
 
     user.updatePassword(passwordHash);
-    await this.userRepo.save(user);
+    await this.externalUserRepo.save(user);
 
     return { temporaryPassword };
   }
@@ -159,14 +159,14 @@ export class ExternalUserManagementService {
   async getExternalUsers(
     pagination: PaginationParams,
   ): Promise<PaginatedResult<ExternalUser>> {
-    return this.userRepo.findAll(pagination);
+    return this.externalUserRepo.findAll(pagination);
   }
 
   /**
    * 외부 사용자 상세 조회
    */
   async getExternalUserById(userId: string): Promise<ExternalUser> {
-    const user = await this.userRepo.findById(userId);
+    const user = await this.externalUserRepo.findById(userId);
     if (!user) {
       throw new NotFoundException('External user not found');
     }

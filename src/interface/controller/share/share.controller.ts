@@ -11,10 +11,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../common/guards';
-import {
-  PublicShareManagementService,
-  type CreatePublicShareDto,
-} from '../../../business/external-share/public-share-management.service';
+import { PublicShareManagementService } from '../../../business/external-share/public-share-management.service';
 import { ExternalUserManagementService } from '../../../business/external-share/external-user-management.service';
 import { PaginationParams } from '../../../domain/external-share/repositories/external-user.repository.interface';
 import { User } from '../../../common/decorators/user.decorator';
@@ -25,6 +22,14 @@ import {
   ApiRevokeShare,
   ApiGetExternalUsers,
 } from './share.swagger';
+import { CreatePublicShareRequestDto } from './dto/create-public-share.dto';
+import {
+  PublicShareResponseDto,
+  PublicShareListItemDto,
+  RevokeShareResponseDto,
+} from './dto/public-share-response.dto';
+import { ExternalUserListItemDto } from '../admin/external-user/dto/external-user-response.dto';
+import { PaginationQueryDto, PaginatedResponseDto } from '../../common/dto';
 
 /**
  * 파일 공유  
@@ -46,9 +51,10 @@ export class PublicShareController {
   @ApiCreatePublicShare()
   async createPublicShare(
     @User() user: { id: string },
-    @Body() dto: CreatePublicShareDto,
-  ) {
-    return this.shareService.createPublicShare(user.id, dto);
+    @Body() dto: CreatePublicShareRequestDto,
+  ): Promise<PublicShareResponseDto> {
+    const share = await this.shareService.createPublicShare(user.id, dto.toServiceDto());
+    return PublicShareResponseDto.fromEntity(share);
   }
 
   /**
@@ -58,13 +64,16 @@ export class PublicShareController {
   @ApiGetMyPublicShares()
   async getMyPublicShares(
     @User() user: { id: string },
-    @Query('page') page: number = 1,
-    @Query('pageSize') pageSize: number = 20,
-    @Query('sortBy') sortBy?: string,
-    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
-  ) {
-    const pagination: PaginationParams = { page, pageSize, sortBy, sortOrder };
-    return this.shareService.getMyPublicShares(user.id, pagination);
+    @Query() query: PaginationQueryDto,
+  ): Promise<PaginatedResponseDto<PublicShareListItemDto>> {
+    const pagination: PaginationParams = {
+      page: query.page,
+      pageSize: query.pageSize,
+      sortBy: query.sortBy,
+      sortOrder: query.sortOrder,
+    };
+    const result = await this.shareService.getMyPublicShares(user.id, pagination);
+    return result;
   }
 
   /**
@@ -72,8 +81,11 @@ export class PublicShareController {
    */
   @Get(':id')
   @ApiGetPublicShareById()
-  async getPublicShareById(@Param('id', ParseUUIDPipe) id: string) {
-    return this.shareService.getPublicShareById(id);
+  async getPublicShareById(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<PublicShareResponseDto> {
+    const share = await this.shareService.getPublicShareById(id);
+    return PublicShareResponseDto.fromEntity(share);
   }
 
   /**
@@ -84,8 +96,9 @@ export class PublicShareController {
   async revokeShare(
     @User() user: { id: string },
     @Param('id', ParseUUIDPipe) id: string,
-  ) {
-    return this.shareService.revokeShare(user.id, id);
+  ): Promise<RevokeShareResponseDto> {
+    const share = await this.shareService.revokeShare(user.id, id);
+    return RevokeShareResponseDto.fromEntity(share);
   }
 }
 
@@ -107,11 +120,14 @@ export class ExternalUsersController {
   @Get()
   @ApiGetExternalUsers()
   async getExternalUsers(
-    @Query('page') page: number = 1,
-    @Query('pageSize') pageSize: number = 20,
-  ) {
-    const pagination: PaginationParams = { page, pageSize };
+    @Query() query: PaginationQueryDto,
+  ): Promise<PaginatedResponseDto<ExternalUserListItemDto>> {
+    const pagination: PaginationParams = {
+      page: query.page,
+      pageSize: query.pageSize,
+    };
     // 활성 사용자만 반환
-    return this.userService.getExternalUsers(pagination);
+    const result = await this.userService.getExternalUsers(pagination);
+    return result;
   }
 }

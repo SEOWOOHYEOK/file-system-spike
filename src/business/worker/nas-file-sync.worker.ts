@@ -27,6 +27,8 @@ import type { IFileRepository, IFileStorageObjectRepository } from '../../domain
 import type { IFolderRepository } from '../../domain/folder';
 import type { ISyncEventRepository } from '../../domain/sync-event/repositories/sync-event.repository.interface';
 
+
+
 /**
  * NAS 동기화 Job 데이터 타입들
  * syncEventId: SyncEvent 상태 추적용 (선택적, 하위 호환성)
@@ -146,6 +148,9 @@ export class NasSyncWorker implements OnModuleInit {
     // SyncEvent 조회 (선택적)
     const syncEvent = await this.getSyncEvent(syncEventId);
 
+    this.logger.debug(`SyncEvent: ${syncEvent}`);
+    this.logger.debug(`SyncEventId: ${syncEventId}`);
+
     try {
       // SyncEvent 처리 시작
       await this.markSyncEventProcessing(syncEvent);
@@ -182,7 +187,8 @@ export class NasSyncWorker implements OnModuleInit {
       // 4. NAS에 파일 쓰기 (스트림)
       // objectKey는 fileId + 확장자 형태로 생성 (파일명에서 확장자 추출)
       const extension = path.extname(file.name); // 예: ".txt", ".pdf"
-      const objectKey = extension ? `${file.createdAt.getTime()}_${file.name}` : fileId;
+      // const objectKey = extension ? `${file.createdAt.getTime()}_${file.name}` : fileId;
+      const objectKey = syncEvent?.targetPath || fileId;
       await this.nasStorage.파일스트림쓰기(objectKey, readStream);
 
       // 5. 상태 업데이트

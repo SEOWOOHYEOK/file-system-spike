@@ -31,8 +31,7 @@ export class JwtAuthGuard implements CanActivate {
 
     try {
       const secret =
-        this.configService.get<string>('JWT_SECRET') ||
-        this.configService.get<string>('GLOBAL_SECRET');
+        this.configService.get<string>('INNER_SECRET') 
 
       if (!secret) {
         throw new UnauthorizedException('JWT 시크릿이 설정되지 않았습니다.');

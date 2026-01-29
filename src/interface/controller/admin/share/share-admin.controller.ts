@@ -5,11 +5,33 @@ import {
   Param,
   Query,
   ParseUUIDPipe,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../../../common/guards';
 import { PublicShareManagementService } from '../../../../business/external-share/public-share-management.service';
 import { PaginationParams } from '../../../../domain/external-share/repositories/external-user.repository.interface';
 import { User } from '../../../../common/decorators/user.decorator';
+import {
+  ApiGetAllPublicShares,
+  ApiGetPublicShareByIdAdmin,
+  ApiBlockShare,
+  ApiUnblockShare,
+  ApiGetSharedFiles,
+  ApiGetSharesByFile,
+  ApiBlockAllSharesByFile,
+  ApiUnblockAllSharesByFile,
+  ApiBlockAllSharesByExternalUser,
+} from './share-admin.swagger';
+import {
+  AdminShareDetailResponseDto,
+  ShareBlockResponseDto,
+  BulkBlockResponseDto,
+  BulkUnblockResponseDto,
+  SharedFileStatsDto,
+} from './dto/share-admin-response.dto';
+import { PublicShareListItemDto } from '../../share/dto/public-share-response.dto';
+import { PaginationQueryDto, PaginatedResponseDto} from '../../../common/dto';
 
 /**
  * 공유 관리 컨트롤러 (관리자용)
@@ -17,6 +39,7 @@ import { User } from '../../../../common/decorators/user.decorator';
 @ApiTags('510.관리자-공유')
 @Controller('v1/admin/shares')
 @ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 export class ShareAdminController {
   constructor(
     private readonly shareService: PublicShareManagementService,
@@ -27,101 +50,100 @@ export class ShareAdminController {
    * 전체 공유 현황 조회
    */
   @Get()
-  @ApiOperation({ summary: '전체 공유 현황 조회' })
+  @ApiGetAllPublicShares()
   async getAllPublicShares(
-    @Query('page') page: number = 1,
-    @Query('pageSize') pageSize: number = 20,
-    @Query('sortBy') sortBy?: string,
-    @Query('sortOrder') sortOrder?: 'asc' | 'desc',
-  ) {
-    const pagination: PaginationParams = { page, pageSize, sortBy, sortOrder };
-    return this.shareService.getAllPublicShares(pagination);
+    @Query() query: PaginationQueryDto,
+  ): Promise<PaginatedResponseDto<PublicShareListItemDto>> {
+    const pagination: PaginationParams = {
+      page: query.page,
+      pageSize: query.pageSize,
+      sortOrder: query.sortOrder,
+    };
+    const result = await this.shareService.getAllPublicShares(pagination);
+    return result;
   }
 
   /**
    * 공유 상세 조회
    */
   @Get(':id')
-  @ApiOperation({ summary: '공유 상세 조회' })
-  async getPublicShareById(@Param('id', ParseUUIDPipe) id: string) {
-    return this.shareService.getPublicShareById(id);
+  @ApiGetPublicShareByIdAdmin()
+  async getPublicShareById(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<AdminShareDetailResponseDto> {
+    const share = await this.shareService.getPublicShareById(id);
+    return AdminShareDetailResponseDto.fromEntity(share);
   }
 
   /**
    * 공유 차단
    */
   @Patch(':id/block')
-  @ApiOperation({ summary: '공유 차단' })
+  @ApiBlockShare()
   async blockShare(
     @User() user: { id: string },
     @Param('id', ParseUUIDPipe) id: string,
-  ) {
-    return this.shareService.blockShare(user.id, id);
+  ): Promise<ShareBlockResponseDto> {
+    const share = await this.shareService.blockShare(user.id, id);
+    return ShareBlockResponseDto.fromEntity(share);
   }
 
   /**
    * 차단 해제
    */
   @Patch(':id/unblock')
-  @ApiOperation({ summary: '차단 해제' })
-  async unblockShare(@Param('id', ParseUUIDPipe) id: string) {
-    return this.shareService.unblockShare(id);
-  }
-
-  /**
-   * 공유된 파일 목록 조회
-   */
-  @Get('shared-files')
-  @ApiOperation({ summary: '공유된 파일 목록 조회' })
-  async getSharedFiles(
-    @Query('page') page: number = 1,
-    @Query('pageSize') pageSize: number = 20,
-  ) {
-    const pagination: PaginationParams = { page, pageSize };
-    return this.shareService.getSharedFiles(pagination);
+  @ApiUnblockShare()
+  async unblockShare(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<ShareBlockResponseDto> {
+    const share = await this.shareService.unblockShare(id);
+    return ShareBlockResponseDto.fromEntity(share);
   }
 
   /**
    * 특정 파일의 공유 목록 조회
    */
-  @Get('files/:shares')
-  @ApiOperation({ summary: '특정 파일의 공유 목록' })
-  async getSharesByFile(@Param('fileId', ParseUUIDPipe) fileId: string) {
-    return this.shareService.getSharesByFileId(fileId);
+  @Get('files/:fileId')
+  @ApiGetSharesByFile()
+  async getSharesByFile(
+    @Param('fileId', ParseUUIDPipe) fileId: string,
+  ): Promise<AdminShareDetailResponseDto[]> {
+    const shares = await this.shareService.getSharesByFileId(fileId);
+    return shares.map(share => AdminShareDetailResponseDto.fromEntity(share));
   }
 
   /**
    * 특정 파일의 모든 공유 일괄 차단
    */
-  @Patch('files/:shares/block-all')
-  @ApiOperation({ summary: '특정 파일의 모든 공유 일괄 차단' })
+  @Patch('files/:fileId/block-all')
+  @ApiBlockAllSharesByFile()
   async blockAllSharesByFile(
     @User() user: { id: string },
     @Param('fileId', ParseUUIDPipe) fileId: string,
-  ) {
+  ): Promise<BulkBlockResponseDto> {
     return this.shareService.blockAllSharesByFile(user.id, fileId);
   }
 
   /**
    * 특정 파일의 모든 공유 일괄 차단 해제
    */
-  @Patch('files/:shares/unblock-all')
-  @ApiOperation({ summary: '특정 파일의 모든 공유 일괄 차단 해제' })
+  @Patch('files/:fileId/unblock-all')
+  @ApiUnblockAllSharesByFile()
   async unblockAllSharesByFile(
     @Param('fileId', ParseUUIDPipe) fileId: string,
-  ) {
+  ): Promise<BulkUnblockResponseDto> {
     return this.shareService.unblockAllSharesByFile(fileId);
   }
 
   /**
    * 특정 외부 사용자의 모든 공유 일괄 차단
    */
-  @Patch('external-users/:shares/block-all')
-  @ApiOperation({ summary: '특정 외부 사용자의 모든 공유 일괄 차단' })
+  @Patch('external-users/:userId/block-all')
+  @ApiBlockAllSharesByExternalUser()
   async blockAllSharesByExternalUser(
     @User() user: { id: string },
     @Param('userId', ParseUUIDPipe) userId: string,
-  ) {
+  ): Promise<BulkBlockResponseDto> {
     return this.shareService.blockAllSharesByExternalUser(user.id, userId);
   }
 }

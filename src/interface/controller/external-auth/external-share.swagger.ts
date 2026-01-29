@@ -9,6 +9,10 @@ import {
   ApiParam,
   ApiQuery,
 } from '@nestjs/swagger';
+import {
+  MyShareListItemDto,
+  ShareDetailResponseDto,
+} from './dto/external-share-access.dto';
 
 /**
  * 나에게 공유된 파일 목록 API 문서
@@ -41,17 +45,7 @@ export const ApiGetMyShares = () =>
         properties: {
           items: {
             type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                id: { type: 'string', format: 'uuid', description: '공유 ID' },
-                fileId: { type: 'string', format: 'uuid', description: '파일 ID' },
-                fileName: { type: 'string', description: '파일명', example: '설계문서.pdf' },
-                permissions: { type: 'array', items: { type: 'string' }, example: ['VIEW', 'DOWNLOAD'] },
-                expiresAt: { type: 'string', format: 'date-time', nullable: true },
-                createdAt: { type: 'string', format: 'date-time' },
-              },
-            },
+            items: { $ref: '#/components/schemas/MyShareListItemDto' },
           },
           page: { type: 'integer', example: 1 },
           pageSize: { type: 'integer', example: 20 },
@@ -94,38 +88,9 @@ export const ApiGetShareDetail = () =>
     ApiResponse({
       status: 200,
       description: '공유 상세 조회 성공',
-      schema: {
-        type: 'object',
-        properties: {
-          share: {
-            type: 'object',
-            properties: {
-              id: { type: 'string', format: 'uuid' },
-              fileId: { type: 'string', format: 'uuid' },
-              fileName: { type: 'string', example: '설계문서.pdf' },
-              fileSize: { type: 'integer', example: 1024000 },
-              mimeType: { type: 'string', example: 'application/pdf' },
-              permissions: { type: 'array', items: { type: 'string' }, example: ['VIEW', 'DOWNLOAD'] },
-              maxViewCount: { type: 'integer', nullable: true },
-              currentViewCount: { type: 'integer', example: 3 },
-              maxDownloadCount: { type: 'integer', nullable: true },
-              currentDownloadCount: { type: 'integer', example: 1 },
-              expiresAt: { type: 'string', format: 'date-time', nullable: true },
-            },
-          },
-          contentToken: {
-            type: 'string',
-            description: '파일 접근용 일회성 토큰',
-            example: 'ct_abc123def456...',
-          },
-          tokenExpiresAt: {
-            type: 'string',
-            format: 'date-time',
-            description: '콘텐츠 토큰 만료 시간',
-          },
-        },
-      },
+      type: ShareDetailResponseDto,
     }),
+    ApiResponse({ status: 401, description: '인증 필요' }),
     ApiResponse({ status: 403, description: '접근 권한 없음 (본인에게 공유되지 않음)' }),
     ApiResponse({ status: 404, description: '공유를 찾을 수 없음' }),
     ApiResponse({ status: 410, description: '공유가 만료되었거나 취소됨' }),

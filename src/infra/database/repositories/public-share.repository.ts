@@ -108,13 +108,13 @@ export class PublicShareRepository implements IPublicShareRepository {
   async findAll(
     pagination: PaginationParams,
   ): Promise<PaginatedResult<PublicShare>> {
-    const { page, pageSize, sortBy = 'createdAt', sortOrder = 'desc' } = pagination;
+    const { page, pageSize, sortOrder = 'desc' } = pagination;
     const skip = (page - 1) * pageSize;
 
     const [entities, totalItems] = await this.repo.findAndCount({
       skip,
       take: pageSize,
-      order: { [sortBy]: sortOrder.toUpperCase() as 'ASC' | 'DESC' },
+      order: { createdAt: sortOrder.toUpperCase() as 'ASC' | 'DESC' },
     });
 
     const totalPages = Math.ceil(totalItems / pageSize);

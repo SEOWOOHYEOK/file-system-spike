@@ -39,7 +39,7 @@ import { OrganizationMigrationModule } from '../integrations/migration/migration
     JwtModule.registerAsync({
       imports: [ConfigModule],
       useFactory: async (configService: ConfigService) => ({
-        secret: configService.get<string>('JWT_SECRET') || configService.get<string>('GLOBAL_SECRET'),
+        secret: configService.get<string>('INNER_SECRET'),
         signOptions: {
           // 기본 만료시간 없음 (필요시 개별 설정)
           expiresIn: parseInt(configService.get<string>('JWT_EXPIRES_IN') || '0'),

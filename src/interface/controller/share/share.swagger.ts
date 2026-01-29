@@ -10,6 +10,13 @@ import {
   ApiParam,
   ApiQuery,
 } from '@nestjs/swagger';
+import {
+  CreatePublicShareRequestDto,
+} from './dto/create-public-share.dto';
+import {
+  PublicShareResponseDto,
+  RevokeShareResponseDto,
+} from './dto/public-share-response.dto';
 
 /**
  * 외부 공유 생성 API 문서
@@ -37,70 +44,15 @@ export const ApiCreatePublicShare = () =>
     }),
     ApiBody({
       description: '외부 공유 생성 정보',
-      schema: {
-        type: 'object',
-        required: ['fileId', 'externalUserId', 'permissions'],
-        properties: {
-          fileId: {
-            type: 'string',
-            format: 'uuid',
-            description: '공유할 파일 ID',
-            example: '550e8400-e29b-41d4-a716-446655440001',
-          },
-          externalUserId: {
-            type: 'string',
-            format: 'uuid',
-            description: '공유 대상 외부 사용자 ID',
-            example: '550e8400-e29b-41d4-a716-446655440002',
-          },
-          permissions: {
-            type: 'array',
-            items: { type: 'string', enum: ['VIEW', 'DOWNLOAD'] },
-            description: '부여할 권한 목록',
-            example: ['VIEW', 'DOWNLOAD'],
-          },
-          maxViewCount: {
-            type: 'integer',
-            description: '최대 뷰 횟수 (미설정 시 무제한)',
-            example: 10,
-          },
-          maxDownloadCount: {
-            type: 'integer',
-            description: '최대 다운로드 횟수 (미설정 시 무제한)',
-            example: 5,
-          },
-          expiresAt: {
-            type: 'string',
-            format: 'date-time',
-            description: '만료일시 (미설정 시 무기한)',
-            example: '2026-02-28T23:59:59.000Z',
-          },
-        },
-      },
+      type: CreatePublicShareRequestDto,
     }),
     ApiResponse({
       status: 201,
       description: '공유 생성 성공',
-      schema: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', format: 'uuid', example: '550e8400-e29b-41d4-a716-446655440003' },
-          fileId: { type: 'string', format: 'uuid' },
-          ownerId: { type: 'string', format: 'uuid' },
-          externalUserId: { type: 'string', format: 'uuid' },
-          permissions: { type: 'array', items: { type: 'string' }, example: ['VIEW', 'DOWNLOAD'] },
-          maxViewCount: { type: 'integer', example: 10 },
-          currentViewCount: { type: 'integer', example: 0 },
-          maxDownloadCount: { type: 'integer', example: 5 },
-          currentDownloadCount: { type: 'integer', example: 0 },
-          expiresAt: { type: 'string', format: 'date-time' },
-          isBlocked: { type: 'boolean', example: false },
-          isRevoked: { type: 'boolean', example: false },
-          createdAt: { type: 'string', format: 'date-time' },
-        },
-      },
+      type: PublicShareResponseDto,
     }),
-    ApiResponse({ status: 400, description: '잘못된 요청 (필수 필드 누락)' }),
+    ApiResponse({ status: 400, description: '잘못된 요청 (필수 필드 누락 또는 유효성 검증 실패)' }),
+    ApiResponse({ status: 401, description: '인증 필요' }),
     ApiResponse({ status: 404, description: '파일 또는 외부 사용자를 찾을 수 없음' }),
     ApiResponse({ status: 409, description: '이미 해당 파일이 해당 사용자에게 공유됨' }),
   );
@@ -132,20 +84,7 @@ export const ApiGetMyPublicShares = () =>
         properties: {
           items: {
             type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                id: { type: 'string', format: 'uuid' },
-                fileId: { type: 'string', format: 'uuid' },
-                externalUserId: { type: 'string', format: 'uuid' },
-                permissions: { type: 'array', items: { type: 'string' } },
-                currentViewCount: { type: 'integer' },
-                currentDownloadCount: { type: 'integer' },
-                isBlocked: { type: 'boolean' },
-                isRevoked: { type: 'boolean' },
-                createdAt: { type: 'string', format: 'date-time' },
-              },
-            },
+            items: { $ref: '#/components/schemas/PublicShareListItemDto' },
           },
           page: { type: 'integer', example: 1 },
           pageSize: { type: 'integer', example: 20 },
@@ -156,6 +95,7 @@ export const ApiGetMyPublicShares = () =>
         },
       },
     }),
+    ApiResponse({ status: 401, description: '인증 필요' }),
   );
 
 /**
@@ -176,28 +116,9 @@ export const ApiGetPublicShareById = () =>
     ApiResponse({
       status: 200,
       description: '공유 상세 조회 성공',
-      schema: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', format: 'uuid' },
-          fileId: { type: 'string', format: 'uuid' },
-          ownerId: { type: 'string', format: 'uuid' },
-          externalUserId: { type: 'string', format: 'uuid' },
-          permissions: { type: 'array', items: { type: 'string' } },
-          maxViewCount: { type: 'integer', nullable: true },
-          currentViewCount: { type: 'integer' },
-          maxDownloadCount: { type: 'integer', nullable: true },
-          currentDownloadCount: { type: 'integer' },
-          expiresAt: { type: 'string', format: 'date-time', nullable: true },
-          isBlocked: { type: 'boolean' },
-          blockedAt: { type: 'string', format: 'date-time', nullable: true },
-          blockedBy: { type: 'string', format: 'uuid', nullable: true },
-          isRevoked: { type: 'boolean' },
-          createdAt: { type: 'string', format: 'date-time' },
-          updatedAt: { type: 'string', format: 'date-time', nullable: true },
-        },
-      },
+      type: PublicShareResponseDto,
     }),
+    ApiResponse({ status: 401, description: '인증 필요' }),
     ApiResponse({ status: 404, description: '공유를 찾을 수 없음' }),
   );
 
@@ -225,14 +146,9 @@ export const ApiRevokeShare = () =>
     ApiResponse({
       status: 200,
       description: '공유 취소 성공',
-      schema: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', format: 'uuid' },
-          isRevoked: { type: 'boolean', example: true },
-        },
-      },
+      type: RevokeShareResponseDto,
     }),
+    ApiResponse({ status: 401, description: '인증 필요' }),
     ApiResponse({ status: 403, description: '소유자만 공유를 취소할 수 있음' }),
     ApiResponse({ status: 404, description: '공유를 찾을 수 없음' }),
   );
@@ -256,17 +172,7 @@ export const ApiGetExternalUsers = () =>
         properties: {
           items: {
             type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                id: { type: 'string', format: 'uuid' },
-                username: { type: 'string', example: 'partner_user' },
-                name: { type: 'string', example: '홍길동' },
-                email: { type: 'string', example: 'hong@partner.com' },
-                company: { type: 'string', example: '협력사A' },
-                isActive: { type: 'boolean', example: true },
-              },
-            },
+            items: { $ref: '#/components/schemas/ExternalUserListItemDto' },
           },
           page: { type: 'integer' },
           pageSize: { type: 'integer' },
@@ -277,4 +183,5 @@ export const ApiGetExternalUsers = () =>
         },
       },
     }),
+    ApiResponse({ status: 401, description: '인증 필요' }),
   );

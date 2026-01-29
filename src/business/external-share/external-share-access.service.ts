@@ -220,6 +220,15 @@ export class ExternalShareAccessService {
     let failReason: string | null = null;
 
     try {
+      // 관라지에 의해 차단된 것인지 먼저 검증
+      const blockedByAdmin = await this.shareDomainService.findByIdWithFile(shareId);
+      
+      if (blockedByAdmin?.isBlocked) {
+        failReason = 'SHARE_BLOCKED_BY_ADMIN';
+        throw new ForbiddenException('관리자에 의해 차단된 공유입니다.');
+      }
+
+
       // 1. 토큰 유효성 검증
       const tokenData = await this.validateAndConsumeToken(token);
       if (tokenData.shareId !== shareId) {

@@ -10,6 +10,13 @@ import {
   ApiParam,
   ApiQuery,
 } from '@nestjs/swagger';
+import {
+  ExternalUserResponseDto,
+  ExternalUserStatusResponseDto,
+  ResetPasswordResponseDto,
+} from './dto/external-user-response.dto';
+import { CreateExternalUserRequestDto } from './dto/create-external-user.dto';
+import { UpdateExternalUserRequestDto } from './dto/update-external-user.dto';
 
 /**
  * 외부 사용자 생성 API 문서
@@ -22,8 +29,8 @@ export const ApiCreateExternalUser = () =>
 새로운 외부 사용자 계정을 생성합니다.
 
 ### 필수 필드
-- \`username\`: 로그인용 사용자명 (고유)
-- \`password\`: 비밀번호
+- \`username\`: 로그인용 사용자명 (고유, 영문자/숫자/언더스코어만 허용)
+- \`password\`: 비밀번호 (최소 8자, 대소문자 및 숫자 포함)
 - \`name\`: 실명
 - \`email\`: 이메일 주소
 
@@ -38,63 +45,15 @@ export const ApiCreateExternalUser = () =>
     }),
     ApiBody({
       description: '외부 사용자 생성 정보',
-      schema: {
-        type: 'object',
-        required: ['username', 'password', 'name', 'email'],
-        properties: {
-          username: {
-            type: 'string',
-            description: '로그인용 사용자명 (고유)',
-            example: 'partner_user01',
-          },
-          password: {
-            type: 'string',
-            description: '비밀번호',
-            example: 'SecurePass123!',
-          },
-          name: {
-            type: 'string',
-            description: '실명',
-            example: '홍길동',
-          },
-          email: {
-            type: 'string',
-            format: 'email',
-            description: '이메일 주소',
-            example: 'hong@partner.com',
-          },
-          company: {
-            type: 'string',
-            description: '소속 회사명 (선택)',
-            example: '협력사A',
-          },
-          phone: {
-            type: 'string',
-            description: '연락처 (선택)',
-            example: '010-1234-5678',
-          },
-        },
-      },
+      type: CreateExternalUserRequestDto,
     }),
     ApiResponse({
       status: 201,
       description: '외부 사용자 생성 성공',
-      schema: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', format: 'uuid', example: '550e8400-e29b-41d4-a716-446655440001' },
-          username: { type: 'string', example: 'partner_user01' },
-          name: { type: 'string', example: '홍길동' },
-          email: { type: 'string', example: 'hong@partner.com' },
-          company: { type: 'string', example: '협력사A' },
-          phone: { type: 'string', example: '010-1234-5678' },
-          isActive: { type: 'boolean', example: true },
-          createdBy: { type: 'string', format: 'uuid' },
-          createdAt: { type: 'string', format: 'date-time' },
-        },
-      },
+      type: ExternalUserResponseDto,
     }),
-    ApiResponse({ status: 400, description: '잘못된 요청 (필수 필드 누락)' }),
+    ApiResponse({ status: 400, description: '잘못된 요청 (필수 필드 누락 또는 유효성 검증 실패)' }),
+    ApiResponse({ status: 401, description: '인증 필요' }),
     ApiResponse({ status: 409, description: 'username이 이미 존재함' }),
   );
 
@@ -125,19 +84,7 @@ export const ApiGetExternalUsers = () =>
         properties: {
           items: {
             type: 'array',
-            items: {
-              type: 'object',
-              properties: {
-                id: { type: 'string', format: 'uuid' },
-                username: { type: 'string', example: 'partner_user01' },
-                name: { type: 'string', example: '홍길동' },
-                email: { type: 'string', example: 'hong@partner.com' },
-                company: { type: 'string', example: '협력사A' },
-                phone: { type: 'string', example: '010-1234-5678' },
-                isActive: { type: 'boolean', example: true },
-                createdAt: { type: 'string', format: 'date-time' },
-              },
-            },
+            items: { $ref: '#/components/schemas/ExternalUserListItemDto' },
           },
           page: { type: 'integer', example: 1 },
           pageSize: { type: 'integer', example: 20 },
@@ -148,6 +95,7 @@ export const ApiGetExternalUsers = () =>
         },
       },
     }),
+    ApiResponse({ status: 401, description: '인증 필요' }),
   );
 
 /**
@@ -168,23 +116,9 @@ export const ApiGetExternalUserById = () =>
     ApiResponse({
       status: 200,
       description: '외부 사용자 상세 조회 성공',
-      schema: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', format: 'uuid' },
-          username: { type: 'string', example: 'partner_user01' },
-          name: { type: 'string', example: '홍길동' },
-          email: { type: 'string', example: 'hong@partner.com' },
-          company: { type: 'string', example: '협력사A' },
-          phone: { type: 'string', example: '010-1234-5678' },
-          isActive: { type: 'boolean', example: true },
-          createdBy: { type: 'string', format: 'uuid' },
-          createdAt: { type: 'string', format: 'date-time' },
-          updatedAt: { type: 'string', format: 'date-time', nullable: true },
-          deactivatedAt: { type: 'string', format: 'date-time', nullable: true },
-        },
-      },
+      type: ExternalUserResponseDto,
     }),
+    ApiResponse({ status: 401, description: '인증 필요' }),
     ApiResponse({ status: 404, description: '외부 사용자를 찾을 수 없음' }),
   );
 
@@ -217,50 +151,15 @@ export const ApiUpdateExternalUser = () =>
     }),
     ApiBody({
       description: '수정할 정보',
-      schema: {
-        type: 'object',
-        properties: {
-          name: {
-            type: 'string',
-            description: '실명',
-            example: '김철수',
-          },
-          email: {
-            type: 'string',
-            format: 'email',
-            description: '이메일 주소',
-            example: 'kim@partner.com',
-          },
-          company: {
-            type: 'string',
-            description: '소속 회사명',
-            example: '협력사B',
-          },
-          phone: {
-            type: 'string',
-            description: '연락처',
-            example: '010-9876-5432',
-          },
-        },
-      },
+      type: UpdateExternalUserRequestDto,
     }),
     ApiResponse({
       status: 200,
       description: '외부 사용자 정보 수정 성공',
-      schema: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', format: 'uuid' },
-          username: { type: 'string' },
-          name: { type: 'string' },
-          email: { type: 'string' },
-          company: { type: 'string' },
-          phone: { type: 'string' },
-          isActive: { type: 'boolean' },
-          updatedAt: { type: 'string', format: 'date-time' },
-        },
-      },
+      type: ExternalUserResponseDto,
     }),
+    ApiResponse({ status: 400, description: '잘못된 요청 (유효성 검증 실패)' }),
+    ApiResponse({ status: 401, description: '인증 필요' }),
     ApiResponse({ status: 404, description: '외부 사용자를 찾을 수 없음' }),
   );
 
@@ -292,16 +191,9 @@ export const ApiDeactivateUser = () =>
     ApiResponse({
       status: 200,
       description: '계정 비활성화 성공',
-      schema: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', format: 'uuid' },
-          username: { type: 'string' },
-          isActive: { type: 'boolean', example: false },
-          deactivatedAt: { type: 'string', format: 'date-time' },
-        },
-      },
+      type: ExternalUserStatusResponseDto,
     }),
+    ApiResponse({ status: 401, description: '인증 필요' }),
     ApiResponse({ status: 404, description: '외부 사용자를 찾을 수 없음' }),
   );
 
@@ -330,15 +222,9 @@ export const ApiActivateUser = () =>
     ApiResponse({
       status: 200,
       description: '계정 활성화 성공',
-      schema: {
-        type: 'object',
-        properties: {
-          id: { type: 'string', format: 'uuid' },
-          username: { type: 'string' },
-          isActive: { type: 'boolean', example: true },
-        },
-      },
+      type: ExternalUserStatusResponseDto,
     }),
+    ApiResponse({ status: 401, description: '인증 필요' }),
     ApiResponse({ status: 404, description: '외부 사용자를 찾을 수 없음' }),
   );
 
@@ -371,16 +257,8 @@ export const ApiResetPassword = () =>
     ApiResponse({
       status: 200,
       description: '비밀번호 초기화 성공',
-      schema: {
-        type: 'object',
-        properties: {
-          temporaryPassword: {
-            type: 'string',
-            description: '임시 비밀번호 (12자리)',
-            example: 'Ab3!xY9@kL2m',
-          },
-        },
-      },
+      type: ResetPasswordResponseDto,
     }),
+    ApiResponse({ status: 401, description: '인증 필요' }),
     ApiResponse({ status: 404, description: '외부 사용자를 찾을 수 없음' }),
   );
