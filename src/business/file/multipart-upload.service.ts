@@ -12,26 +12,26 @@ import {
 } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { createHash } from 'crypto';
-import { Readable } from 'stream';
 
 import {
   UploadSessionEntity,
   UploadPartEntity,
-  UploadSessionStatus,
-  UploadPartStatus,
   DEFAULT_PART_SIZE,
   MULTIPART_MIN_FILE_SIZE,
   UPLOAD_SESSION_REPOSITORY,
   UPLOAD_PART_REPOSITORY,
-  InitiateMultipartRequest,
-  InitiateMultipartResponse,
-  UploadPartRequest,
-  UploadPartResponse,
-  CompleteMultipartRequest,
-  CompleteMultipartResponse,
-  SessionStatusResponse,
-  AbortSessionResponse,
+
 } from '../../domain/upload-session';
+
+import { InitiateMultipartRequest } from '../../domain/upload-session/dto/initiate-multipart.dto';
+import { InitiateMultipartResponse } from '../../domain/upload-session/dto/initiate-multipart.dto';
+import { UploadPartRequest } from '../../domain/upload-session/dto/upload-part.dto';
+import { UploadPartResponse } from '../../domain/upload-session/dto/upload-part.dto';
+import { CompleteMultipartRequest } from '../../domain/upload-session/dto/complete-multipart.dto';
+import { CompleteMultipartResponse } from '../../domain/upload-session/dto/complete-multipart.dto';
+import { SessionStatusResponse } from '../../domain/upload-session/dto/session-status.dto';
+import { AbortSessionResponse } from '../../domain/upload-session/dto/session-status.dto';
+
 
 import {
   FileEntity,
@@ -76,7 +76,7 @@ export class MultipartUploadService {
     private readonly cacheStorage: ICacheStoragePort,
     @Inject(JOB_QUEUE_PORT)
     private readonly jobQueue: IJobQueuePort,
-  ) {}
+  ) { }
 
   /**
    * 멀티파트 업로드 초기화
