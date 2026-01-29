@@ -1,0 +1,145 @@
+/**
+ * 멀티파트 업로드 컨트롤러
+ * 대용량 파일 (100MB 이상) 업로드 API
+ */
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Delete,
+  Param,
+  Body,
+  HttpCode,
+  HttpStatus,
+  Req,
+} from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
+import type { Request } from 'express';
+import { MultipartUploadService } from '../../../business/file';
+import {
+  InitiateMultipartResponse,
+  UploadPartResponse,
+  CompleteMultipartResponse,
+  SessionStatusResponse,
+  AbortSessionResponse,
+  PartInfo,
+} from '../../../domain/upload-session';
+import {
+  ApiMultipartInitiate,
+  ApiMultipartUploadPart,
+  ApiMultipartComplete,
+  ApiMultipartStatus,
+  ApiMultipartAbort,
+} from './multipart.swagger';
+
+/**
+ * 초기화 요청 DTO
+ */
+interface InitiateRequestBody {
+  fileName: string;
+  folderId: string;
+  totalSize: number;
+  mimeType: string;
+  conflictStrategy?: string;
+}
+
+/**
+ * 완료 요청 DTO
+ */
+interface CompleteRequestBody {
+  parts?: PartInfo[];
+}
+
+/**
+ * 멀티파트 업로드 컨트롤러
+ */
+@ApiTags('201.파일-멀티파트')
+@Controller('v1/files/multipart')
+export class MultipartController {
+  constructor(
+    private readonly multipartUploadService: MultipartUploadService,
+  ) {}
+
+  /**
+   * POST /files/multipart/initiate - 멀티파트 업로드 초기화
+   */
+  @Post('initiate')
+  @ApiMultipartInitiate()
+  @HttpCode(HttpStatus.CREATED)
+  async initiate(
+    @Body() body: InitiateRequestBody,
+  ): Promise<InitiateMultipartResponse> {
+    return this.multipartUploadService.initiate({
+      fileName: body.fileName,
+      folderId: body.folderId,
+      totalSize: body.totalSize,
+      mimeType: body.mimeType,
+      conflictStrategy: body.conflictStrategy,
+    });
+  }
+
+  /**
+   * PUT /files/multipart/:sessionId/parts/:partNumber - 파트 업로드
+   */
+  @Put(':sessionId/parts/:partNumber')
+  @ApiMultipartUploadPart()
+  @HttpCode(HttpStatus.OK)
+  async uploadPart(
+    @Param('sessionId') sessionId: string,
+    @Param('partNumber') partNumber: string,
+    @Req() req: Request,
+  ): Promise<UploadPartResponse> {
+    // Raw body 수집 (application/octet-stream)
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) {
+      chunks.push(chunk as Buffer);
+    }
+    const data = Buffer.concat(chunks);
+
+    return this.multipartUploadService.uploadPart({
+      sessionId,
+      partNumber: parseInt(partNumber, 10),
+      data,
+    });
+  }
+
+  /**
+   * POST /files/multipart/:sessionId/complete - 멀티파트 업로드 완료
+   */
+  @Post(':sessionId/complete')
+  @ApiMultipartComplete()
+  @HttpCode(HttpStatus.OK)
+  async complete(
+    @Param('sessionId') sessionId: string,
+    @Body() body?: CompleteRequestBody,
+  ): Promise<CompleteMultipartResponse> {
+    return this.multipartUploadService.complete({
+      sessionId,
+      parts: body?.parts,
+    });
+  }
+
+  /**
+   * GET /files/multipart/:sessionId/status - 세션 상태 조회
+   */
+  @Get(':sessionId/status')
+  @ApiMultipartStatus()
+  async getStatus(
+    @Param('sessionId') sessionId: string,
+  ): Promise<SessionStatusResponse> {
+    return this.multipartUploadService.getStatus(sessionId);
+  }
+
+  /**
+   * DELETE /files/multipart/:sessionId - 업로드 취소
+   */
+  @Delete(':sessionId')
+  @ApiMultipartAbort()
+  @HttpCode(HttpStatus.OK)
+  async abort(
+    @Param('sessionId') sessionId: string,
+  ): Promise<AbortSessionResponse> {
+    return this.multipartUploadService.abort(sessionId);
+  }
+}

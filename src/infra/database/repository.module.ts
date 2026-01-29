@@ -15,6 +15,8 @@ import {
   FileStorageObjectOrmEntity,
   FolderStorageObjectOrmEntity,
   SyncEventOrmEntity,
+  UploadSessionOrmEntity,
+  UploadPartOrmEntity,
 } from './entities';
 
 // Repository Implementations
@@ -25,6 +27,8 @@ import {
   FolderStorageObjectRepository,
   TrashRepository,
   TrashQueryRepository,
+  UploadSessionRepository,
+  UploadPartRepository,
 } from './repositories';
 import { SyncEventRepository } from './repositories/sync-event.repository';
 
@@ -39,6 +43,10 @@ import {
 } from '../../domain/folder/repositories/folder.repository.interface';
 import { TRASH_REPOSITORY, TRASH_QUERY_SERVICE } from '../../domain/trash/repositories/trash.repository.interface';
 import { SYNC_EVENT_REPOSITORY } from '../../domain/sync-event';
+import {
+  UPLOAD_SESSION_REPOSITORY,
+  UPLOAD_PART_REPOSITORY,
+} from '../../domain/upload-session/repositories/upload-session.repository.interface';
 
 /**
  * TypeORM forFeature에 등록할 엔티티 목록
@@ -51,6 +59,8 @@ const entities = [
   FileStorageObjectOrmEntity,
   FolderStorageObjectOrmEntity,
   SyncEventOrmEntity,
+  UploadSessionOrmEntity,
+  UploadPartOrmEntity,
 ];
 
 @Module({
@@ -94,6 +104,16 @@ const entities = [
       provide: SYNC_EVENT_REPOSITORY,
       useClass: SyncEventRepository,
     },
+    // Upload Session Repository
+    {
+      provide: UPLOAD_SESSION_REPOSITORY,
+      useClass: UploadSessionRepository,
+    },
+    // Upload Part Repository
+    {
+      provide: UPLOAD_PART_REPOSITORY,
+      useClass: UploadPartRepository,
+    },
   ],
   exports: [
     FILE_REPOSITORY,
@@ -103,6 +123,8 @@ const entities = [
     TRASH_REPOSITORY,
     TRASH_QUERY_SERVICE,
     SYNC_EVENT_REPOSITORY,
+    UPLOAD_SESSION_REPOSITORY,
+    UPLOAD_PART_REPOSITORY,
   ],
 })
 export class RepositoryModule {}

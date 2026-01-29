@@ -8,6 +8,7 @@ import { TrashDomainModule } from '../../domain/trash/trash.module';
 import { FileUploadService } from './file-upload.service';
 import { FileDownloadService } from './file-download.service';
 import { FileManageService } from './file-manage.service';
+import { MultipartUploadService } from './multipart-upload.service';
 
 /**
  * 파일 비즈니스 모듈
@@ -22,7 +23,7 @@ import { FileManageService } from './file-manage.service';
     FolderDomainModule,
     TrashDomainModule,
   ],
-  providers: [FileUploadService, FileDownloadService, FileManageService],
-  exports: [FileUploadService, FileDownloadService, FileManageService],
+  providers: [FileUploadService, FileDownloadService, FileManageService, MultipartUploadService],
+  exports: [FileUploadService, FileDownloadService, FileManageService, MultipartUploadService],
 })
 export class FileBusinessModule {}

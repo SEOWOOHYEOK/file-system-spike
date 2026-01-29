@@ -4,6 +4,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 
 // 기본 컨트롤러
 import { FileController } from './controller/file/file.controller';
+import { MultipartController } from './controller/file/multipart.controller';
 import { FolderController } from './controller/folder/folder.controller';
 import { AuthController } from './controller/auth/auth.controller';
 import { TrashController } from './controller/trash/trash.controller';
@@ -21,9 +22,13 @@ import { ExternalUserAdminController } from './controller/admin/external-user/ex
 import { ExternalAuthController } from './controller/external-auth/external-auth.controller';
 import { ExternalShareController } from './controller/external-auth/external-share.controller';
 
+// 동기화 컨트롤러
+import { SyncEventController } from './controller/sync-event/sync-event.controller';
+
 import { BusinessModule } from '../business/business.module';
 import { SSOModule } from '../integrations/sso/sso.module';
 import { OrganizationMigrationModule } from '../integrations/migration/migration.module';
+import { RepositoryModule } from '../infra/database/repository.module';
 
 
 /**
@@ -33,6 +38,7 @@ import { OrganizationMigrationModule } from '../integrations/migration/migration
 @Module({
   imports: [
     BusinessModule,
+    RepositoryModule,
     SSOModule,
     OrganizationMigrationModule,
     ConfigModule,
@@ -51,6 +57,7 @@ import { OrganizationMigrationModule } from '../integrations/migration/migration
   controllers: [
     // 기본 컨트롤러
     FileController,
+    MultipartController,
     FolderController,
     TrashController,
     AuthController,
@@ -65,6 +72,8 @@ import { OrganizationMigrationModule } from '../integrations/migration/migration
     ExternalShareController,
     PublicShareController,
     ExternalUsersController,
+    // 동기화 컨트롤러
+    SyncEventController,
   ],
 })
 export class InterfaceModule {}

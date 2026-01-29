@@ -7,3 +7,5 @@ export * from './folder.repository';
 export * from './folder-storage-object.repository';
 export * from './trash.repository';
 export * from './trash-query.repository';
+export * from './upload-session.repository';
+export * from './upload-part.repository';

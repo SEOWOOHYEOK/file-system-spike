@@ -22,6 +22,8 @@ import { FolderOrmEntity } from './entities/folder.orm-entity';
 import { TrashMetadataOrmEntity } from './entities/trash-metadata.orm-entity';
 import { FileStorageObjectOrmEntity } from './entities/file-storage-object.orm-entity';
 import { FolderStorageObjectOrmEntity } from './entities/folder-storage-object.orm-entity';
+import { UploadSessionOrmEntity } from './entities/upload-session.orm-entity';
+import { UploadPartOrmEntity } from './entities/upload-part.orm-entity';
 
 // Organization Entities (조직 관련 엔티티)
 import {
@@ -44,6 +46,9 @@ const entities = [
   TrashMetadataOrmEntity,
   FileStorageObjectOrmEntity,
   FolderStorageObjectOrmEntity,
+  // Upload Session 관련 엔티티
+  UploadSessionOrmEntity,
+  UploadPartOrmEntity,
   // Organization 관련 엔티티
   Rank,
   Position,
