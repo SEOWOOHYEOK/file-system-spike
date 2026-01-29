@@ -17,14 +17,17 @@ import {
 import { ApiTags } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { MultipartUploadService } from '../../../business/file';
+
+
+import { InitiateMultipartResponse } from '../../../domain/upload-session/dto/initiate-multipart.dto';
+import { UploadPartResponse } from '../../../domain/upload-session/dto/upload-part.dto';
+import { SessionStatusResponse } from '../../../domain/upload-session/dto/session-status.dto';
+import { AbortSessionResponse } from '../../../domain/upload-session/dto/session-status.dto';
+
 import {
-  InitiateMultipartResponse,
-  UploadPartResponse,
   CompleteMultipartResponse,
-  SessionStatusResponse,
-  AbortSessionResponse,
   PartInfo,
-} from '../../../domain/upload-session';
+} from '../../../domain/upload-session/dto/complete-multipart.dto';
 import {
   ApiMultipartInitiate,
   ApiMultipartUploadPart,
@@ -59,7 +62,7 @@ interface CompleteRequestBody {
 export class MultipartController {
   constructor(
     private readonly multipartUploadService: MultipartUploadService,
-  ) {}
+  ) { }
 
   /**
    * POST /files/multipart/initiate - 멀티파트 업로드 초기화
