@@ -2,8 +2,6 @@ import { Injectable, Inject, NotFoundException, ConflictException, BadRequestExc
 import { DataSource, QueryRunner } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import {
-  FileEntity,
-  FileState,
   StorageType,
   AvailabilityStatus,
   RenameFileRequest,

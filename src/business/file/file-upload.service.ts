@@ -3,7 +3,6 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   FileEntity,
   FileStorageObjectEntity,
-  FileState,
   StorageType,
   AvailabilityStatus,
   UploadFileRequest,
@@ -13,6 +12,7 @@ import {
   FILE_REPOSITORY,
   FILE_STORAGE_OBJECT_REPOSITORY,
 } from '../../domain/file';
+import { FileState } from '../../domain/file/type/file.type';
 import {
   FOLDER_REPOSITORY,
   FOLDER_STORAGE_OBJECT_REPOSITORY,

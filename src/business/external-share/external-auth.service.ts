@@ -43,7 +43,7 @@ export interface RefreshTokenDto {
 export interface LoginResult {
   accessToken: string;
   refreshToken: string;
-  expiresIn: number; // Access Token 만료 시간 (초)
+
   user: {
     id: string;
     username: string;
@@ -161,9 +161,7 @@ export class ExternalAuthService {
    */
   async refreshToken(dto: RefreshTokenDto): Promise<RefreshResult> {
     try {
-      const secret =
-        this.configService.get<string>('JWT_SECRET') ||
-        this.configService.get<string>('GLOBAL_SECRET');
+      const secret = this.getJwtSecret();
 
       // Refresh Token 검증
       const payload = this.jwtService.verify(dto.refreshToken, { secret });
@@ -192,7 +190,7 @@ export class ExternalAuthService {
           type: 'external',
           tokenType: 'access',
         },
-        { expiresIn: this.ACCESS_TOKEN_EXPIRES_IN },
+        { secret, expiresIn: this.ACCESS_TOKEN_EXPIRES_IN },
       );
 
       return {
@@ -212,10 +210,7 @@ export class ExternalAuthService {
    */
   async logout(accessToken: string, userId: string): Promise<void> {
     try {
-      const secret =
-        this.configService.get<string>('JWT_SECRET') ||
-        this.configService.get<string>('GLOBAL_SECRET');
-
+      const secret = this.getJwtSecret();
       const payload = this.jwtService.verify(accessToken, { secret });
       const expiresAt = new Date(payload.exp * 1000);
 
@@ -261,9 +256,7 @@ export class ExternalAuthService {
     // 기존 토큰 무효화
     if (currentAccessToken) {
       try {
-        const secret =
-          this.configService.get<string>('JWT_SECRET') ||
-          this.configService.get<string>('GLOBAL_SECRET');
+        const secret = this.getJwtSecret();
         const payload = this.jwtService.verify(currentAccessToken, { secret });
         const expiresAt = new Date(payload.exp * 1000);
 
@@ -287,12 +280,33 @@ export class ExternalAuthService {
   }
 
   /**
+   * 외부 사용자 전용 JWT 시크릿 조회
+   *
+   * 보안 주의:
+   * - 내부 사용자(JWT_SECRET/GLOBAL_SECRET)와 완전히 분리된 시크릿 사용
+   * - 외부 사용자 토큰으로 내부 API 접근 불가
+   * - 시크릿 노출 시 외부 시스템만 영향 (내부 시스템 보호)
+   */
+  private getJwtSecret(): string {
+    const secret = this.configService.get<string>('EXTERNAL_JWT_SECRET');
+    if (!secret) {
+      throw new Error(
+        'EXTERNAL_JWT_SECRET 환경변수가 설정되지 않았습니다. ' +
+          '외부 사용자 인증을 위해 반드시 설정해야 합니다.',
+      );
+    }
+    return secret;
+  }
+
+  /**
    * Access Token + Refresh Token 생성
    */
   private generateTokens(
     userId: string,
     username: string,
   ): { accessToken: string; refreshToken: string; expiresIn: number } {
+    const secret = this.getJwtSecret();
+
     const accessToken = this.jwtService.sign(
       {
         sub: userId,
@@ -300,7 +314,7 @@ export class ExternalAuthService {
         type: 'external',
         tokenType: 'access',
       },
-      { expiresIn: this.ACCESS_TOKEN_EXPIRES_IN },
+      { secret, expiresIn: this.ACCESS_TOKEN_EXPIRES_IN },
     );
 
     const refreshToken = this.jwtService.sign(
@@ -310,7 +324,7 @@ export class ExternalAuthService {
         type: 'external',
         tokenType: 'refresh',
       },
-      { expiresIn: this.REFRESH_TOKEN_EXPIRES_IN },
+      { secret, expiresIn: this.REFRESH_TOKEN_EXPIRES_IN },
     );
 
     return {

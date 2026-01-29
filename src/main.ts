@@ -7,6 +7,12 @@ import { Logger } from '@nestjs/common';
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
+  // CORS 설정 (Frontend 개발 서버 허용)
+  app.enableCors({
+    origin: ['http://localhost:5173', 'http://localhost:3000'],
+    credentials: true,
+  });
+
   // 전역 유효성 검증 파이프 설정
   app.useGlobalPipes(
     new ValidationPipe({

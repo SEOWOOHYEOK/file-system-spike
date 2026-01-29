@@ -175,7 +175,7 @@ export class PublicShareRepository implements IPublicShareRepository {
     const { page, pageSize } = pagination;
     const skip = (page - 1) * pageSize;
 
-    // 공유된 파일 통계 쿼리
+    // 공유된 파일 통계 쿼리 (파일 정보는 비즈니스 레이어에서 채움)
     const query = this.repo
       .createQueryBuilder('share')
       .select('share.file_id', 'fileId')
@@ -202,11 +202,11 @@ export class PublicShareRepository implements IPublicShareRepository {
     const totalItems = parseInt(countResult?.count || '0', 10);
     const totalPages = Math.ceil(totalItems / pageSize);
 
-    // TODO: 파일 정보(fileName, mimeType)는 File 테이블 조인 필요
+    // fileName, mimeType은 빈 문자열로 반환 (비즈니스 레이어에서 채움)
     const items: SharedFileStats[] = statsRaw.map((row) => ({
       fileId: row.fileId,
-      fileName: '', // File 테이블 조인 필요
-      mimeType: '', // File 테이블 조인 필요
+      fileName: '',
+      mimeType: '',
       shareCount: parseInt(row.shareCount, 10),
       activeShareCount: parseInt(row.activeShareCount || '0', 10),
       totalViewCount: parseInt(row.totalViewCount || '0', 10),

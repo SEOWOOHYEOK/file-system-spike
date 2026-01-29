@@ -17,18 +17,13 @@ import {
 } from '../../domain/trash';
 import type { ITrashRepository, ITrashQueryService } from '../../domain/trash';
 import {
-  FileEntity,
-  FileState,
-  StorageType,
-  AvailabilityStatus,
   FILE_REPOSITORY,
   FILE_STORAGE_OBJECT_REPOSITORY,
 } from '../../domain/file';
+import { FileState } from '../../domain/file/type/file.type';
 import type { IFileRepository, IFileStorageObjectRepository } from '../../domain/file';
 import {
-  FolderEntity,
   FolderState,
-  FolderAvailabilityStatus,
   FOLDER_REPOSITORY,
   FOLDER_STORAGE_OBJECT_REPOSITORY,
 } from '../../domain/folder';

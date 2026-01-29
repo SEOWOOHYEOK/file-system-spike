@@ -16,12 +16,12 @@ import {
 } from '../../domain/folder';
 import type { IFolderRepository, IFolderStorageObjectRepository } from '../../domain/folder';
 import {
-  FileState,
   StorageType,
   FILE_REPOSITORY,
   FILE_STORAGE_OBJECT_REPOSITORY
 } from '../../domain/file';
 import type { IFileRepository, IFileStorageObjectRepository } from '../../domain/file';
+import { FileState } from '../../domain/file/type/file.type';
 
 /**
  * 폴더 조회 비즈니스 서비스

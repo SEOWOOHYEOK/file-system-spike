@@ -23,6 +23,10 @@ import { TokenBlacklistService } from '../../business/external-share/security/to
  * 2. 토큰 블랙리스트 확인 (로그아웃/비밀번호 변경된 토큰 차단)
  * 3. 토큰 타입 검증 (type: 'external')
  * 4. 계정 활성 상태 실시간 검증
+ *
+ * 보안 주의:
+ * - 내부 사용자(JWT_SECRET)와 분리된 EXTERNAL_JWT_SECRET 사용
+ * - 내부 토큰으로 외부 API 접근 불가, 외부 토큰으로 내부 API 접근 불가
  */
 @Injectable()
 export class ExternalJwtAuthGuard implements CanActivate {
@@ -48,12 +52,13 @@ export class ExternalJwtAuthGuard implements CanActivate {
     }
 
     try {
-      const secret =
-        this.configService.get<string>('JWT_SECRET') ||
-        this.configService.get<string>('GLOBAL_SECRET');
+      // 외부 사용자 전용 시크릿 (내부 사용자와 분리)
+      const secret = this.configService.get<string>('EXTERNAL_JWT_SECRET');
 
       if (!secret) {
-        throw new UnauthorizedException('JWT 시크릿이 설정되지 않았습니다.');
+        throw new UnauthorizedException(
+          'EXTERNAL_JWT_SECRET이 설정되지 않았습니다.',
+        );
       }
 
       // 토큰 검증

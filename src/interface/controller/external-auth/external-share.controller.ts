@@ -25,15 +25,19 @@ import {
 
 /**
  * 외부 사용자 파일 접근 컨트롤러
+ *
+ * 외부 사용자가 공유받은 파일에 접근하기 위한 API
+ * - VIEW: 뷰어에서 파일 콘텐츠 표시 (inline)
+ * - DOWNLOAD: 파일 다운로드 (attachment)
+ *
+ * 비즈니스 로직 (접근 검증 + 파일 다운로드)은 ExternalShareAccessService에서 처리
  */
 @ApiTags('710.외부접근')
 @Controller('v1/ext/shares')
 @ApiBearerAuth()
 @UseGuards(ExternalJwtAuthGuard)
 export class ExternalShareController {
-  constructor(
-    private readonly accessService: ExternalShareAccessService,
-  ) {}
+  constructor(private readonly accessService: ExternalShareAccessService) {}
 
   /**
    * 나에게 공유된 파일 목록
@@ -65,6 +69,8 @@ export class ExternalShareController {
 
   /**
    * 파일 콘텐츠 (뷰어용)
+   *
+   * inline Content-Disposition으로 브라우저 뷰어에서 파일 표시
    */
   @Get(':shareId/content')
   @ApiGetContent()
@@ -75,9 +81,10 @@ export class ExternalShareController {
     @Headers('user-agent') userAgent: string,
     @Ip() ipAddress: string,
     @Res() res: Response,
-  ) {
+  ): Promise<void> {
     const deviceType = this.detectDeviceType(userAgent);
 
+    // 접근 검증 + 파일 다운로드 (서비스에서 통합 처리)
     const result = await this.accessService.accessContent({
       externalUserId: user.id,
       shareId,
@@ -88,19 +95,38 @@ export class ExternalShareController {
       deviceType,
     });
 
-    // TODO: 실제 파일 스트리밍 구현 필요
-    // FileDownloadService와 연동하여 파일 반환
+    const { file, stream } = result;
+
+    // 응답 헤더 설정 (inline - 뷰어 표시용)
     res.set({
-      'Content-Type': 'application/octet-stream',
-      'Content-Disposition': 'inline',
+      'Content-Type': file.mimeType,
+      'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+      'Content-Length': file.sizeBytes,
       'Cache-Control': 'no-store, no-cache, must-revalidate',
     });
 
-    return res.send({ success: result.success, fileId: result.share.fileId });
+    // 스트림 파이프
+    if (stream) {
+      stream.pipe(res);
+
+      // 스트림 종료 시 lease 해제
+      const releaseLease = async () => {
+        await this.accessService.releaseLease(file.id);
+      };
+
+      stream.on('end', releaseLease);
+      stream.on('error', releaseLease);
+      stream.on('close', releaseLease);
+    } else {
+      // 스트림이 없는 경우 빈 응답
+      res.end();
+    }
   }
 
   /**
    * 파일 다운로드
+   *
+   * attachment Content-Disposition으로 파일 다운로드
    */
   @Get(':shareId/download')
   @ApiDownloadFile()
@@ -111,9 +137,10 @@ export class ExternalShareController {
     @Headers('user-agent') userAgent: string,
     @Ip() ipAddress: string,
     @Res() res: Response,
-  ) {
+  ): Promise<void> {
     const deviceType = this.detectDeviceType(userAgent);
 
+    // 접근 검증 + 파일 다운로드 (서비스에서 통합 처리)
     const result = await this.accessService.accessContent({
       externalUserId: user.id,
       shareId,
@@ -124,15 +151,32 @@ export class ExternalShareController {
       deviceType,
     });
 
-    // TODO: 실제 파일 스트리밍 구현 필요
-    // FileDownloadService와 연동하여 파일 반환
+    const { file, stream } = result;
+
+    // 응답 헤더 설정 (attachment - 다운로드용)
     res.set({
-      'Content-Type': 'application/octet-stream',
-      'Content-Disposition': 'attachment',
+      'Content-Type': file.mimeType,
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+      'Content-Length': file.sizeBytes,
       'Cache-Control': 'no-store, no-cache, must-revalidate',
     });
 
-    return res.send({ success: result.success, fileId: result.share.fileId });
+    // 스트림 파이프
+    if (stream) {
+      stream.pipe(res);
+
+      // 스트림 종료 시 lease 해제
+      const releaseLease = async () => {
+        await this.accessService.releaseLease(file.id);
+      };
+
+      stream.on('end', releaseLease);
+      stream.on('error', releaseLease);
+      stream.on('close', releaseLease);
+    } else {
+      // 스트림이 없는 경우 빈 응답
+      res.end();
+    }
   }
 
   /**

@@ -6,7 +6,8 @@
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { FileEntity, FileState } from '../entities/file.entity';
+import { FileEntity } from '../entities/file.entity';
+import { FileState } from '../type/file.type';
 import {
     FILE_REPOSITORY,
 } from '../repositories/file.repository.interface';

@@ -1,11 +1,11 @@
 import { Injectable, Inject, NotFoundException, BadRequestException, Logger, InternalServerErrorException } from '@nestjs/common';
 import {
-  FileState,
   StorageType,
   AvailabilityStatus,
   FILE_REPOSITORY,
   FILE_STORAGE_OBJECT_REPOSITORY,
 } from '../../domain/file';
+
 import type {
   FileEntity,
   FileStorageObjectEntity,

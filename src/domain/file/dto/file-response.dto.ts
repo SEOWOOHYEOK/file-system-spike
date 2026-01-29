@@ -2,7 +2,7 @@
  * 파일 응답 관련 DTO
  */
 
-import { FileState } from '../entities/file.entity';
+import { FileState } from '../type/file.type';
 import { AvailabilityStatus } from '../../storage/file/file-storage-object.entity';
 
 /**

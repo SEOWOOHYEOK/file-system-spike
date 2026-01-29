@@ -11,6 +11,7 @@ export class InMemoryTokenStore implements IContentTokenStore {
   private store = new Map<string, { value: string; expiresAt: number }>();
 
   async set(key: string, value: string, ttlSeconds: number): Promise<void> {
+    // 몇 초 동안(=ttlSeconds) 유지할지 계산해서 만료 시각을 정함
     const expiresAt = Date.now() + ttlSeconds * 1000;
     this.store.set(key, { value, expiresAt });
 

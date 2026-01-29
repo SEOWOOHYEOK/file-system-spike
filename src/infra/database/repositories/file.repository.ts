@@ -4,14 +4,15 @@
  */
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { FileOrmEntity } from '../entities/file.orm-entity';
 import {
   IFileRepository,
   FindFileOptions,
   TransactionOptions,
 } from '../../../domain/file/repositories/file.repository.interface';
-import { FileEntity, FileState } from '../../../domain/file/entities/file.entity';
+import { FileEntity } from '../../../domain/file/entities/file.entity';
+import { FileState } from '../../../domain/file/type/file.type';
 
 @Injectable()
 export class FileRepository implements IFileRepository {
@@ -65,6 +66,13 @@ export class FileRepository implements IFileRepository {
     const repo = this.getRepository(options);
     const orm = await repo.findOne({ where: { id } });
     return orm ? this.toDomain(orm) : null;
+  }
+
+  async findByIds(ids: string[], options?: TransactionOptions): Promise<FileEntity[]> {
+    if (ids.length === 0) return [];
+    const repo = this.getRepository(options);
+    const orms = await repo.find({ where: { id: In(ids) } });
+    return orms.map((orm) => this.toDomain(orm));
   }
 
   async findByIdForUpdate(id: string, options?: TransactionOptions): Promise<FileEntity | null> {

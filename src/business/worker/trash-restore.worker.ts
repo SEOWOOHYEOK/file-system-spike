@@ -13,8 +13,7 @@ import {
   FILE_REPOSITORY,
   FILE_STORAGE_OBJECT_REPOSITORY,
   StorageType,
-  AvailabilityStatus,
-  FileState,
+  AvailabilityStatus
 } from '../../domain/file';
 import {
   FOLDER_REPOSITORY,

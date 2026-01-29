@@ -15,6 +15,11 @@ export class PublicShare {
 
   permissions: SharePermission[];
 
+  // 파일 메타데이터 (조회 시점에 채워짐)
+  fileName: string;
+  mimeType: string;
+  fileSize: number;
+
   // 뷰 제한
   maxViewCount?: number;
   currentViewCount: number;

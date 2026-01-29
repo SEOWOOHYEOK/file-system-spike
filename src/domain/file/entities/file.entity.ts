@@ -6,14 +6,8 @@
  * 스토리지 관련 로직은 FileStorageObjectEntity에서 별도로 관리합니다.
  */
 
-/**
- * 파일 상태
- */
-export enum FileState {
-  ACTIVE = 'ACTIVE',//활성
-  TRASHED = 'TRASHED',//휴지통
-  DELETED = 'DELETED',//삭제
-}
+import { FileState } from '../type/file.type';
+
 
 /**
  * 파일 엔티티

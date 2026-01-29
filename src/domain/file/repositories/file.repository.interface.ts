@@ -4,7 +4,8 @@
  */
 
 import type { QueryRunner } from 'typeorm';
-import { FileEntity, FileState } from '../entities/file.entity';
+import { FileEntity } from '../entities/file.entity';
+import { FileState } from '../type/file.type';
 import { FileStorageObjectEntity, StorageType } from '../../storage/file/file-storage-object.entity';
 
 /**
@@ -32,6 +33,11 @@ export interface IFileRepository {
    * ID로 파일 조회
    */
   findById(id: string, options?: TransactionOptions): Promise<FileEntity | null>;
+
+  /**
+   * 여러 ID로 파일 일괄 조회
+   */
+  findByIds(ids: string[], options?: TransactionOptions): Promise<FileEntity[]>;
 
   /**
    * ID로 파일 조회 (락 획득) - 트랜잭션 필수
