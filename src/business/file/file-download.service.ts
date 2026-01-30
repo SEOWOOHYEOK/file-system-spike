@@ -43,7 +43,7 @@ export class FileDownloadService {
     private readonly nasStorage: INasStoragePort,
     @Inject(JOB_QUEUE_PORT)
     private readonly jobQueue: IJobQueuePort,
-  ) {}
+  ) { }
 
   /**
    * 파일 정보 조회
@@ -62,10 +62,10 @@ export class FileDownloadService {
     const nasStatus = storageObjects.find(s => s.storageType === StorageType.NAS);
 
     const folder = await this.folderRepository.findById(file.folderId);
-    
+
     // folder.path /  인경우는 제외 루트여서 제외
     const filePath = folder && folder.path !== '/' ? `${folder.path}/${file.name}` : `/${file.name}`;
-    
+
     return {
       id: file.id,
       name: file.name,
@@ -122,17 +122,6 @@ export class FileDownloadService {
       });
     }
 
-    // 2. 캐시 상태 확인
-    const cacheObject = await this.fileStorageObjectRepository.findByFileIdAndType(
-      fileId,
-      StorageType.CACHE,
-    );
-
-    // 3-A. 캐시 히트
-    if (cacheObject && cacheObject.isAvailable()) {
-      return this.downloadFromCache(file, cacheObject);
-    }
-
     // 3-B. 캐시 미스 - NAS에서 조회
     const nasObject = await this.fileStorageObjectRepository.findByFileIdAndType(
       fileId,
@@ -147,6 +136,20 @@ export class FileDownloadService {
         message: '파일이 NAS에 동기화 중입니다. 잠시 후 다시 시도해주세요.',
       });
     }
+
+
+    // 2. 캐시 상태 확인
+    const cacheObject = await this.fileStorageObjectRepository.findByFileIdAndType(
+      fileId,
+      StorageType.CACHE,
+    );
+
+    // 3-A. 캐시 히트
+    if (cacheObject && cacheObject.isAvailable()) {
+      return this.downloadFromCache(file, cacheObject);
+    }
+
+
 
     // 3-B-2. NAS 사용 가능 - 다운로드 진행
     if (nasObject && nasObject.isAvailable()) {
@@ -209,7 +212,7 @@ export class FileDownloadService {
       // 스트림 획득 실패 시 lease 해제
       cacheObject.releaseLease();
       await this.fileStorageObjectRepository.save(cacheObject);
-      
+
       this.logger.error(`Failed to read from cache: ${file.id}`, error);
       throw new InternalServerErrorException({
         code: 'CACHE_READ_FAILED',
@@ -251,7 +254,7 @@ export class FileDownloadService {
         file.id,
         StorageType.CACHE,
       );
-      
+
       if (!cacheObject || cacheObject.availabilityStatus === AvailabilityStatus.MISSING) {
         await this.jobQueue.addJob('CACHE_RESTORE', {
           fileId: file.id,
@@ -269,7 +272,7 @@ export class FileDownloadService {
       // 스트림 획득 실패 시 lease 해제
       nasObject.releaseLease();
       await this.fileStorageObjectRepository.save(nasObject);
-      
+
       this.logger.error(`Failed to read from NAS: ${file.id}`, error);
       throw new InternalServerErrorException({
         code: 'NAS_READ_FAILED',
