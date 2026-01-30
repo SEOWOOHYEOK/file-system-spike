@@ -49,14 +49,14 @@ export class FileDomainService {
     /**
      * ID로 파일 조회 (락 획득)
      */
-    async 조회ForUpdate(fileId: string): Promise<FileEntity | null> {
+    async 잠금조회(fileId: string): Promise<FileEntity | null> {
         return this.fileRepository.findByIdForUpdate(fileId);
     }
 
     /**
      * 조건으로 파일 조회
      */
-    async 조회ByOptions(options: FindFileOptions): Promise<FileEntity | null> {
+    async 조건조회(options: FindFileOptions): Promise<FileEntity | null> {
         return this.fileRepository.findOne(options);
     }
 
@@ -119,7 +119,7 @@ export class FileDomainService {
             throw new Error(`파일을 찾을 수 없습니다: ${fileId}`);
         }
 
-        return this.삭제WithEntity(file);
+        return this.엔티티삭제(file);
     }
 
     /**
@@ -129,7 +129,7 @@ export class FileDomainService {
      * @param file - 삭제할 파일 엔티티
      * @returns 업데이트된 파일 엔티티
      */
-    async 삭제WithEntity(file: FileEntity): Promise<FileEntity> {
+    async 엔티티삭제(file: FileEntity): Promise<FileEntity> {
         // 엔티티 행위 실행
         file.delete();
 
@@ -152,7 +152,7 @@ export class FileDomainService {
             throw new Error(`파일을 찾을 수 없습니다: ${fileId}`);
         }
 
-        return this.이름변경WithEntity(file, newName);
+        return this.엔티티이름변경(file, newName);
     }
 
     /**
@@ -163,7 +163,7 @@ export class FileDomainService {
      * @param newName - 새 파일명
      * @returns 업데이트된 파일 엔티티
      */
-    async 이름변경WithEntity(file: FileEntity, newName: string): Promise<FileEntity> {
+    async 엔티티이름변경(file: FileEntity, newName: string): Promise<FileEntity> {
         // 엔티티 행위 실행
         file.rename(newName);
 
@@ -186,7 +186,7 @@ export class FileDomainService {
             throw new Error(`파일을 찾을 수 없습니다: ${fileId}`);
         }
 
-        return this.이동WithEntity(file, targetFolderId);
+        return this.엔티티이동(file, targetFolderId);
     }
 
     /**
@@ -197,7 +197,7 @@ export class FileDomainService {
      * @param targetFolderId - 이동할 대상 폴더 ID
      * @returns 업데이트된 파일 엔티티
      */
-    async 이동WithEntity(file: FileEntity, targetFolderId: string): Promise<FileEntity> {
+    async 엔티티이동(file: FileEntity, targetFolderId: string): Promise<FileEntity> {
         // 동일 폴더로의 이동 방지
         if (file.folderId === targetFolderId) {
             throw new Error('파일이 이미 해당 폴더에 있습니다.');
@@ -224,7 +224,7 @@ export class FileDomainService {
             throw new Error(`파일을 찾을 수 없습니다: ${fileId}`);
         }
 
-        return this.영구삭제WithEntity(file);
+        return this.엔티티영구삭제(file);
     }
 
     /**
@@ -234,7 +234,7 @@ export class FileDomainService {
      * @param file - 영구 삭제할 파일 엔티티
      * @returns 업데이트된 파일 엔티티
      */
-    async 영구삭제WithEntity(file: FileEntity): Promise<FileEntity> {
+    async 엔티티영구삭제(file: FileEntity): Promise<FileEntity> {
         // 엔티티 행위 실행
         file.permanentDelete();
 
@@ -254,7 +254,7 @@ export class FileDomainService {
      * @param state - 변경할 상태
      * @returns 영향받은 파일 수
      */
-    async 상태일괄변경ByFolderIds(folderIds: string[], state: FileState): Promise<number> {
+    async 폴더별상태일괄변경(folderIds: string[], state: FileState): Promise<number> {
         if (folderIds.length === 0) {
             return 0;
         }

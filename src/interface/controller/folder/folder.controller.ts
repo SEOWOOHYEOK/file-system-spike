@@ -32,6 +32,9 @@ import {
   ApiFolderMove,
   ApiFolderDelete,
 } from './folder.swagger';
+import { AuditAction } from '../../../common/decorators';
+import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
+import { TargetType } from '../../../domain/audit/enums/common.enum';
 
 /**
  * 폴더 컨트롤러
@@ -51,6 +54,12 @@ export class FolderController {
   @Post()
   @ApiFolderCreate()
   @HttpCode(HttpStatus.CREATED)
+  @AuditAction({
+    action: AuditActionEnum.FOLDER_CREATE,
+    targetType: TargetType.FOLDER,
+    targetIdParam: 'id',
+    targetNameParam: 'name',
+  })
   async create(@Body() request: CreateFolderRequest): Promise<CreateFolderResponse> {
     // TODO: 실제 구현 시 인증된 사용자 ID 사용
     const userId = 'system';
@@ -62,6 +71,11 @@ export class FolderController {
    */
   @Get('root')
   @ApiFolderInfo()
+  @AuditAction({
+    action: AuditActionEnum.FOLDER_VIEW,
+    targetType: TargetType.FOLDER,
+    targetIdParam: 'id',
+  })
   async getRootFolderInfo(): Promise<FolderInfoResponse> {
     return this.folderQueryService.getRootFolderInfo();
   }
@@ -71,6 +85,11 @@ export class FolderController {
    */
   @Get(':folderId')
   @ApiFolderInfo()
+  @AuditAction({
+    action: AuditActionEnum.FOLDER_VIEW,
+    targetType: TargetType.FOLDER,
+    targetIdParam: 'folderId',
+  })
   async getFolderInfo(@Param('folderId') folderId: string): Promise<FolderInfoResponse> {
     return this.folderQueryService.getFolderInfo(folderId);
   }
@@ -80,6 +99,11 @@ export class FolderController {
    */
   @Get(':folderId/contents')
   @ApiFolderContents()
+  @AuditAction({
+    action: AuditActionEnum.FOLDER_VIEW,
+    targetType: TargetType.FOLDER,
+    targetIdParam: 'folderId',
+  })
   async getFolderContents(
     @Param('folderId') folderId: string,
     @Query() query: GetFolderContentsQuery,
@@ -92,6 +116,12 @@ export class FolderController {
    */
   @Put(':folderId/rename')
   @ApiFolderRename()
+  @AuditAction({
+    action: AuditActionEnum.FOLDER_RENAME,
+    targetType: TargetType.FOLDER,
+    targetIdParam: 'folderId',
+    targetNameParam: 'newName',
+  })
   async rename(
     @Param('folderId') folderId: string,
     @Body() request: RenameFolderRequest,
@@ -106,6 +136,11 @@ export class FolderController {
    */
   @Post(':folderId/move')
   @ApiFolderMove()
+  @AuditAction({
+    action: AuditActionEnum.FOLDER_MOVE,
+    targetType: TargetType.FOLDER,
+    targetIdParam: 'folderId',
+  })
   async move(
     @Param('folderId') folderId: string,
     @Body() request: MoveFolderRequest,

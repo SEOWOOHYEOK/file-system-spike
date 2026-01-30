@@ -30,6 +30,9 @@ import {
 } from './dto/public-share-response.dto';
 import { ExternalUserListItemDto } from '../admin/external-user/dto/external-user-response.dto';
 import { PaginationQueryDto, PaginatedResponseDto } from '../../common/dto';
+import { AuditAction } from '../../../common/decorators';
+import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
+import { TargetType } from '../../../domain/audit/enums/common.enum';
 
 /**
  * 파일 공유  
@@ -49,6 +52,11 @@ export class PublicShareController {
    */
   @Post()
   @ApiCreatePublicShare()
+  @AuditAction({
+    action: AuditActionEnum.SHARE_CREATE,
+    targetType: TargetType.SHARE,
+    targetIdParam: 'id',
+  })
   async createPublicShare(
     @User() user: { id: string },
     @Body() dto: CreatePublicShareRequestDto,
@@ -93,6 +101,11 @@ export class PublicShareController {
    */
   @Delete(':id')
   @ApiRevokeShare()
+  @AuditAction({
+    action: AuditActionEnum.SHARE_REVOKE,
+    targetType: TargetType.SHARE,
+    targetIdParam: 'id',
+  })
   async revokeShare(
     @User() user: { id: string },
     @Param('id', ParseUUIDPipe) id: string,

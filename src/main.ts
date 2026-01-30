@@ -8,8 +8,13 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // CORS 설정 (Frontend 개발 서버 허용)
+  // .env 파일에서 CORS 허용 origin 읽어오도록 NV 처리
+  const allowedOrigins = process.env.CORS_ORIGIN
+    ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
+    : [];
+
   app.enableCors({
-    origin: ['http://localhost:5173', 'http://localhost:3000'],
+    origin: allowedOrigins,
     credentials: true,
   });
 
@@ -34,6 +39,7 @@ async function bootstrap() {
         bearerFormat: 'JWT',
         description: 'JWT 토큰을 입력하세요',
       },
+      'bearer', // Security scheme name - @ApiBearerAuth()와 매칭
     )
     .build();
 

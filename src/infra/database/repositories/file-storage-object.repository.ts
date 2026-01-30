@@ -6,13 +6,13 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { FileStorageObjectOrmEntity } from '../entities/file-storage-object.orm-entity';
-import { TransactionOptions } from '../../../domain/file/repositories/file.repository.interface';
+import { TransactionOptions } from '../../../domain/storage/file/repositories/file-storage-object.repository.interface';
 import {
   FileStorageObjectEntity,
   StorageType,
   AvailabilityStatus,
 } from '../../../domain/storage/file/file-storage-object.entity';
-import type { IFileStorageObjectRepository } from '../../../domain/file/repositories/file.repository.interface';
+import type { IFileStorageObjectRepository } from '../../../domain/storage/file/repositories/file-storage-object.repository.interface';
 
 @Injectable()
 export class FileStorageObjectRepository implements IFileStorageObjectRepository {

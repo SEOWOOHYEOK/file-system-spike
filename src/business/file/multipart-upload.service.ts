@@ -40,20 +40,33 @@ import {
   AvailabilityStatus,
   ConflictStrategy,
   FILE_REPOSITORY,
-  FILE_STORAGE_OBJECT_REPOSITORY,
 } from '../../domain/file';
 import { FileState } from '../../domain/file/type/file.type';
-import { FOLDER_REPOSITORY, FOLDER_STORAGE_OBJECT_REPOSITORY, FolderAvailabilityStatus } from '../../domain/folder';
+import { FOLDER_REPOSITORY, FolderAvailabilityStatus } from '../../domain/folder';
 import { SyncEventFactory, SYNC_EVENT_REPOSITORY } from '../../domain/sync-event';
 import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';
+import {
+  FILE_STORAGE_OBJECT_REPOSITORY,
+
+} from '../../domain/storage';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 
 import type { IUploadSessionRepository, IUploadPartRepository } from '../../domain/upload-session';
-import type { IFileRepository, IFileStorageObjectRepository } from '../../domain/file';
-import type { IFolderRepository, IFolderStorageObjectRepository } from '../../domain/folder';
+import type { IFileRepository } from '../../domain/file';
+import type { IFolderRepository } from '../../domain/folder';
+import type { IFileStorageObjectRepository } from '../../domain/storage';
 import type { ISyncEventRepository } from '../../domain/sync-event';
 import type { ICacheStoragePort } from '../../domain/storage/ports/cache-storage.port';
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
+import {
+  type IFolderStorageObjectRepository,
+} from '../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
+
+
+import {
+  FOLDER_STORAGE_OBJECT_REPOSITORY,
+} from '../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
+
 
 @Injectable()
 export class MultipartUploadService {

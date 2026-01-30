@@ -10,12 +10,10 @@ import {
   UploadFileResponse,
   ConflictStrategy,
   FILE_REPOSITORY,
-  FILE_STORAGE_OBJECT_REPOSITORY,
 } from '../../domain/file';
 import { FileState } from '../../domain/file/type/file.type';
 import {
   FOLDER_REPOSITORY,
-  FOLDER_STORAGE_OBJECT_REPOSITORY,
   FolderAvailabilityStatus,
 } from '../../domain/folder';
 import {
@@ -23,10 +21,26 @@ import {
   SYNC_EVENT_REPOSITORY,
 } from '../../domain/sync-event';
 import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';
-import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
+import {
+  FILE_STORAGE_OBJECT_REPOSITORY,
 
-import type { IFileRepository, IFileStorageObjectRepository } from '../../domain/file';
-import type { IFolderRepository, IFolderStorageObjectRepository } from '../../domain/folder';
+} from '../../domain/storage';
+import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
+import { AuditLogHelper } from '../audit/audit-log-helper.service';
+import { UserType } from '../../domain/audit/enums/common.enum';
+import { RequestContext } from '../../common/context/request-context';
+
+import {
+  FOLDER_STORAGE_OBJECT_REPOSITORY,
+} from '../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
+
+import {
+  type IFolderStorageObjectRepository,
+} from '../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
+
+import type { IFileRepository } from '../../domain/file';
+import type { IFolderRepository } from '../../domain/folder';
+import type { IFileStorageObjectRepository, } from '../../domain/storage';
 import type { ISyncEventRepository } from '../../domain/sync-event';
 import type { ICacheStoragePort } from '../../domain/storage/ports/cache-storage.port';
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
@@ -52,6 +66,7 @@ export class FileUploadService {
     private readonly cacheStorage: ICacheStoragePort,
     @Inject(JOB_QUEUE_PORT)
     private readonly jobQueue: IJobQueuePort,
+    private readonly auditLogHelper: AuditLogHelper,
   ) { }
 
   /**
@@ -128,6 +143,22 @@ export class FileUploadService {
 
     // 9. Bull 큐 등록 (NAS 동기화)
     await this.jobQueue.addJob('NAS_SYNC_UPLOAD', { fileId, syncEventId });
+
+    // 10. 감사 로그 및 파일 이력 기록
+    const ctx = RequestContext.get();
+    if (ctx?.userId) {
+      await this.auditLogHelper.logFileUpload({
+        userId: ctx.userId,
+        userType: (ctx.userType as UserType) || UserType.INTERNAL,
+        userName: ctx.userName,
+        userEmail: ctx.userEmail,
+        fileId,
+        fileName: finalFileName,
+        filePath,
+        fileSize: file.size,
+        mimeType: file.mimetype,
+      });
+    }
 
     return {
       id: fileEntity.id,

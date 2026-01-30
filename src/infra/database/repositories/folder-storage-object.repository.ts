@@ -9,7 +9,7 @@ import { FolderStorageObjectOrmEntity } from '../entities/folder-storage-object.
 import {
   IFolderStorageObjectRepository,
   TransactionOptions,
-} from '../../../domain/folder/repositories/folder.repository.interface';
+} from '../../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
 import {
   FolderStorageObjectEntity,
   FolderAvailabilityStatus,

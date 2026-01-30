@@ -5,13 +5,14 @@ import { ExternalShareInfraModule } from '../../infra/database/external-share-in
 import { RepositoryModule } from '../../infra/database/repository.module';
 import { CacheInfraModule } from '../../infra/cache/cache-infra.module';
 import { FileBusinessModule } from '../file/file.module';
-import { ExternalShareDomainModule } from '../../domain/external-share/external-share.module';
+import { AuditModule } from '../audit/audit.module';
 
 // Services
 import { ExternalUserManagementService } from './external-user-management.service';
 import { PublicShareManagementService } from './public-share-management.service';
 import { ExternalAuthService } from './external-auth.service';
 import { ExternalShareAccessService } from './external-share-access.service';
+import { PublicShareDomainService } from './public-share-domain.service';
 
 // Security Services
 import { LoginAttemptService } from './security/login-attempt.service';
@@ -38,8 +39,8 @@ import { TokenBlacklistService } from './security/token-blacklist.service';
     ConfigModule,
     // 파일 다운로드를 위한 FileBusinessModule
     FileBusinessModule,
-    // 도메인 서비스 (PublicShare + File 조합)
-    ExternalShareDomainModule,
+    // 감사 로그 모듈
+    AuditModule,
     // 외부 사용자 전용 JWT 설정 (내부 사용자와 분리된 시크릿)
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -65,6 +66,7 @@ import { TokenBlacklistService } from './security/token-blacklist.service';
     PublicShareManagementService,
     ExternalAuthService,
     ExternalShareAccessService,
+    PublicShareDomainService,
     // Security Services
     LoginAttemptService,
     TokenBlacklistService,
@@ -77,6 +79,7 @@ import { TokenBlacklistService } from './security/token-blacklist.service';
     PublicShareManagementService,
     ExternalAuthService,
     ExternalShareAccessService,
+    PublicShareDomainService,
     // Security Services (가드에서 사용)
     LoginAttemptService,
     TokenBlacklistService,

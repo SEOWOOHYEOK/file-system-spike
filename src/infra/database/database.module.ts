@@ -25,6 +25,11 @@ import { FolderStorageObjectOrmEntity } from './entities/folder-storage-object.o
 import { UploadSessionOrmEntity } from './entities/upload-session.orm-entity';
 import { UploadPartOrmEntity } from './entities/upload-part.orm-entity';
 
+// Audit Log Entities
+import { AuditLogOrmEntity } from './entities/audit-log.orm-entity';
+import { SecurityLogOrmEntity } from './entities/security-log.orm-entity';
+import { FileHistoryOrmEntity } from './entities/file-history.orm-entity';
+
 // Organization Entities (조직 관련 엔티티)
 import {
   Rank,
@@ -49,6 +54,10 @@ const entities = [
   // Upload Session 관련 엔티티
   UploadSessionOrmEntity,
   UploadPartOrmEntity,
+  // Audit Log 엔티티
+  AuditLogOrmEntity,
+  SecurityLogOrmEntity,
+  FileHistoryOrmEntity,
   // Organization 관련 엔티티
   Rank,
   Position,

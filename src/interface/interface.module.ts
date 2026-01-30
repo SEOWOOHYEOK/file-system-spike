@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 
@@ -12,12 +13,6 @@ import { UserController } from './controller/user/user.controller';
 import { PublicShareController } from './controller/share/share.controller';
 import { ExternalUsersController } from './controller/share/share.controller';
 
-// Admin 컨트롤러
-import { AdminController } from './controller/admin/admin.controller';
-import { RoleController } from './controller/admin/role/role.controller';
-import { ShareAdminController } from './controller/admin/share/share-admin.controller';
-import { ExternalUserAdminController } from './controller/admin/external-user/external-user-admin.controller';
-
 // 외부 사용자 컨트롤러
 import { ExternalAuthController } from './controller/external-auth/external-auth.controller';
 import { ExternalShareController } from './controller/external-auth/external-share.controller';
@@ -25,11 +20,15 @@ import { ExternalShareController } from './controller/external-auth/external-sha
 // 동기화 컨트롤러
 import { SyncEventController } from './controller/sync-event/sync-event.controller';
 
+// 모듈
+import { AdminModule } from './controller/admin/admin.module';
 import { BusinessModule } from '../business/business.module';
 import { SSOModule } from '../integrations/sso/sso.module';
 import { OrganizationMigrationModule } from '../integrations/migration/migration.module';
 import { RepositoryModule } from '../infra/database/repository.module';
 
+// 인터셉터
+import { AuditLogInterceptor } from '../common/interceptors';
 
 /**
  * 인터페이스 레이어 통합 모듈
@@ -37,6 +36,8 @@ import { RepositoryModule } from '../infra/database/repository.module';
  */
 @Module({
   imports: [
+    // 기능 모듈
+    AdminModule,
     BusinessModule,
     RepositoryModule,
     SSOModule,
@@ -62,11 +63,6 @@ import { RepositoryModule } from '../infra/database/repository.module';
     TrashController,
     AuthController,
     UserController,
-    // Admin 컨트롤러
-    AdminController,
-    RoleController,
-    ShareAdminController,
-    ExternalUserAdminController,
     // 외부 사용자 컨트롤러
     ExternalAuthController,
     ExternalShareController,
@@ -74,6 +70,13 @@ import { RepositoryModule } from '../infra/database/repository.module';
     ExternalUsersController,
     // 동기화 컨트롤러
     SyncEventController,
+  ],
+  providers: [
+    // 글로벌 인터셉터: 감사 로그 자동 기록
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditLogInterceptor,
+    },
   ],
 })
 export class InterfaceModule {}

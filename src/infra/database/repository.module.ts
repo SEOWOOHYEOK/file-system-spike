@@ -35,12 +35,16 @@ import { SyncEventRepository } from './repositories/sync-event.repository';
 // Repository Tokens (from domain layer)
 import {
   FILE_REPOSITORY,
-  FILE_STORAGE_OBJECT_REPOSITORY,
 } from '../../domain/file/repositories/file.repository.interface';
 import {
+  FILE_STORAGE_OBJECT_REPOSITORY,
+} from '../../domain/storage/file/repositories/file-storage-object.repository.interface';
+import {
   FOLDER_REPOSITORY,
-  FOLDER_STORAGE_OBJECT_REPOSITORY,
 } from '../../domain/folder/repositories/folder.repository.interface';
+import {
+  FOLDER_STORAGE_OBJECT_REPOSITORY,
+} from '../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
 import { TRASH_REPOSITORY, TRASH_QUERY_SERVICE } from '../../domain/trash/repositories/trash.repository.interface';
 import { SYNC_EVENT_REPOSITORY } from '../../domain/sync-event';
 import {

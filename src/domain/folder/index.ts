@@ -13,11 +13,9 @@ export * from './dto';
 export type {
   FindFolderOptions,
   IFolderRepository,
-  IFolderStorageObjectRepository,
 } from './repositories/folder.repository.interface';
 export {
   FOLDER_REPOSITORY,
-  FOLDER_STORAGE_OBJECT_REPOSITORY,
 } from './repositories/folder.repository.interface';
 
 // 도메인 서비스

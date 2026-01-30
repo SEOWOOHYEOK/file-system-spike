@@ -13,12 +13,13 @@ import { ApiTags } from '@nestjs/swagger';
 import { SYNC_EVENT_REPOSITORY } from '../../../domain/sync-event';
 import {
   FILE_REPOSITORY,
-  FILE_STORAGE_OBJECT_REPOSITORY,
   StorageType,
 } from '../../../domain/file';
+import { FILE_STORAGE_OBJECT_REPOSITORY } from '../../../domain/storage';
 
 import type { ISyncEventRepository } from '../../../domain/sync-event';
-import type { IFileRepository, IFileStorageObjectRepository } from '../../../domain/file';
+import type { IFileRepository } from '../../../domain/file';
+import type { IFileStorageObjectRepository } from '../../../domain/storage';
 
 import { ApiSyncEventStatus, ApiFileSyncStatus } from './sync-event.swagger';
 

@@ -5,6 +5,7 @@ import { QueueInfraModule } from '../../infra/queue/queue-infra.module';
 import { FolderDomainModule } from '../../domain/folder/folder.module';
 import { FileDomainModule } from '../../domain/file/file.module';
 import { TrashDomainModule } from '../../domain/trash/trash.module';
+import { AuditModule } from '../audit/audit.module';
 import { FolderQueryService } from './folder-query.service';
 import { FolderCommandService } from './folder-command.service';
 
@@ -20,6 +21,7 @@ import { FolderCommandService } from './folder-command.service';
     FolderDomainModule,
     FileDomainModule,
     TrashDomainModule,
+    AuditModule,
   ],
   providers: [FolderQueryService, FolderCommandService],
   exports: [FolderQueryService, FolderCommandService],

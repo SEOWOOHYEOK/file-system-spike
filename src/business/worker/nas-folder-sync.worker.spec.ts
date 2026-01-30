@@ -24,9 +24,9 @@ import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 import { NAS_STORAGE_PORT } from '../../domain/storage/ports/nas-storage.port';
 import {
   FOLDER_REPOSITORY,
-  FOLDER_STORAGE_OBJECT_REPOSITORY,
   FolderAvailabilityStatus,
 } from '../../domain/folder';
+import { FOLDER_STORAGE_OBJECT_REPOSITORY } from '../../domain/storage';
 import { SYNC_EVENT_REPOSITORY } from '../../domain/sync-event/repositories/sync-event.repository.interface';
 import {
   SyncEventEntity,

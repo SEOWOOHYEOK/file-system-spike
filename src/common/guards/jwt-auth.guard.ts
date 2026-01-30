@@ -7,12 +7,14 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
+import { RequestContext } from '../context/request-context';
 
 /**
  * JWT 인증 가드
  *
  * Authorization 헤더에서 Bearer 토큰을 추출하고 검증합니다.
  * 검증된 payload는 request.user에 설정됩니다.
+ * RequestContext에 사용자 정보를 설정합니다.
  */
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -41,6 +43,16 @@ export class JwtAuthGuard implements CanActivate {
 
       // request.user에 payload 설정
       request['user'] = payload;
+
+      // RequestContext에 사용자 정보 설정
+      // auth.controller.ts의 JWT payload 구조: { id, employeeNumber, name, email }
+      RequestContext.setUser({
+        userId: payload.id,
+        userType: 'INTERNAL',
+        userName: payload.name,
+        userEmail: payload.email,
+      });
+      
     } catch (error: any) {
       if (error.name === 'TokenExpiredError') {
         throw new UnauthorizedException('토큰이 만료되었습니다.');

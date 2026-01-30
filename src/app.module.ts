@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
@@ -8,6 +8,7 @@ import { InterfaceModule } from './interface/interface.module';
 import { RepositoryModule } from './infra/database/repository.module';
 import { SSOModule } from './integrations/sso';
 import { OrganizationMigrationModule } from './integrations/migration';
+import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
 
 /**
  * 루트 애플리케이션 모듈
@@ -41,4 +42,9 @@ import { OrganizationMigrationModule } from './integrations/migration';
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer): void {
+    // 모든 라우트에 RequestContextMiddleware 적용
+    consumer.apply(RequestContextMiddleware).forRoutes('*');
+  }
+}

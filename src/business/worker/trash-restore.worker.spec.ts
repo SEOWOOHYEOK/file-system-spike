@@ -11,9 +11,9 @@ import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.por
 import { NAS_STORAGE_PORT } from '../../domain/storage/ports/nas-storage.port';
 import {
   FILE_REPOSITORY,
-  FILE_STORAGE_OBJECT_REPOSITORY,
   FileState,
 } from '../../domain/file';
+import { FILE_STORAGE_OBJECT_REPOSITORY } from '../../domain/storage';
 import { FOLDER_REPOSITORY } from '../../domain/folder';
 import { TRASH_REPOSITORY } from '../../domain/trash';
 import { SYNC_EVENT_REPOSITORY, SyncEventStatus } from '../../domain/sync-event';

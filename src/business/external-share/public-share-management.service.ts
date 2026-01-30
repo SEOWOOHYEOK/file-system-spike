@@ -23,7 +23,7 @@ import {
 } from '../../domain/file/repositories/file.repository.interface';
 import { PublicShare } from '../../domain/external-share/entities/public-share.entity';
 import { SharePermission } from '../../domain/external-share/type/public-share.type';
-import { PublicShareDomainService } from '../../domain/external-share/service/public-share-domain.service';
+import { PublicShareDomainService } from './public-share-domain.service';
 import { FileState } from '../../domain/file/type/file.type';
 
 /**

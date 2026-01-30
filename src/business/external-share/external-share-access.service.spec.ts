@@ -53,7 +53,7 @@ import { ExternalUser } from '../../domain/external-share/entities/external-user
 import { SharePermission } from '../../domain/external-share/type/public-share.type';
 import { AccessAction } from '../../domain/external-share/entities/share-access-log.entity';
 import { FileDownloadService } from '../file/file-download.service';
-import { PublicShareDomainService } from '../../domain/external-share/service/public-share-domain.service';
+import { PublicShareDomainService } from './public-share-domain.service';
 
 // TokenStore mock
 const mockTokenStore: jest.Mocked<IContentTokenStore> = {

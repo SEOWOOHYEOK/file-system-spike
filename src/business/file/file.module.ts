@@ -5,6 +5,7 @@ import { QueueInfraModule } from '../../infra/queue/queue-infra.module';
 import { FileDomainModule } from '../../domain/file/file.module';
 import { FolderDomainModule } from '../../domain/folder/folder.module';
 import { TrashDomainModule } from '../../domain/trash/trash.module';
+import { AuditModule } from '../audit/audit.module';
 import { FileUploadService } from './file-upload.service';
 import { FileDownloadService } from './file-download.service';
 import { FileManageService } from './file-manage.service';
@@ -22,6 +23,7 @@ import { MultipartUploadService } from './multipart-upload.service';
     FileDomainModule,
     FolderDomainModule,
     TrashDomainModule,
+    AuditModule,
   ],
   providers: [FileUploadService, FileDownloadService, FileManageService, MultipartUploadService],
   exports: [FileUploadService, FileDownloadService, FileManageService, MultipartUploadService],

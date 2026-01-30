@@ -14,6 +14,7 @@ import {
   type IExternalUserRepository,
 } from '../../domain/external-share/repositories/external-user.repository.interface';
 import { TokenBlacklistService } from '../../business/external-share/security/token-blacklist.service';
+import { RequestContext } from '../context/request-context';
 
 /**
  * 외부 사용자 전용 JWT 인증 가드
@@ -99,6 +100,14 @@ export class ExternalJwtAuthGuard implements CanActivate {
         email: user.email,
         company: user.company,
       };
+
+      // RequestContext에 외부 사용자 정보 설정
+      RequestContext.setUser({
+        userId: user.id,
+        userType: 'EXTERNAL',
+        userName: user.name,
+        userEmail: user.email,
+      });
     } catch (error: any) {
       if (
         error instanceof UnauthorizedException ||

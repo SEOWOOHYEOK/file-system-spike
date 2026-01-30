@@ -12,16 +12,25 @@ import {
   SortBy,
   SortOrder,
   FOLDER_REPOSITORY,
-  FOLDER_STORAGE_OBJECT_REPOSITORY
 } from '../../domain/folder';
-import type { IFolderRepository, IFolderStorageObjectRepository } from '../../domain/folder';
+import type { IFolderRepository } from '../../domain/folder';
 import {
   StorageType,
   FILE_REPOSITORY,
-  FILE_STORAGE_OBJECT_REPOSITORY
 } from '../../domain/file';
-import type { IFileRepository, IFileStorageObjectRepository } from '../../domain/file';
+import type { IFileRepository } from '../../domain/file';
+import {
+  FILE_STORAGE_OBJECT_REPOSITORY,
+} from '../../domain/storage';
+import type { IFileStorageObjectRepository } from '../../domain/storage';
+import {
+  type IFolderStorageObjectRepository,
+} from '../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
 import { FileState } from '../../domain/file/type/file.type';
+
+import {
+  FOLDER_STORAGE_OBJECT_REPOSITORY,
+} from '../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
 
 /**
  * 폴더 조회 비즈니스 서비스

@@ -1,8 +1,6 @@
 /**
  * 파일 NAS 스토리지 도메인 서비스
  * FileStorageObjectEntity (NAS 타입)의 행위를 실행하고 영속성을 보장합니다.
- *
- * DDD 관점: NAS 스토리지 전용 도메인 서비스로, StorageType.NAS가 이미 내재되어 있습니다.
  */
 
 import { Inject, Injectable } from '@nestjs/common';
@@ -13,10 +11,10 @@ import {
 } from '../file-storage-object.entity';
 import {
   FILE_STORAGE_OBJECT_REPOSITORY,
-} from '../../../file/repositories/file.repository.interface';
+} from '../repositories/file-storage-object.repository.interface';
 import type {
   IFileStorageObjectRepository,
-} from '../../../file/repositories/file.repository.interface';
+} from '../repositories/file-storage-object.repository.interface';
 
 /**
  * NAS 스토리지 객체 생성 파라미터
@@ -51,7 +49,7 @@ export class FileNasStorageDomainService {
   /**
    * 파일 ID로 NAS 스토리지 조회 (락 획득)
    */
-  async 조회ForUpdate(fileId: string): Promise<FileStorageObjectEntity | null> {
+  async 잠금조회(fileId: string): Promise<FileStorageObjectEntity | null> {
     return this.repository.findByFileIdAndTypeForUpdate(fileId, this.storageType);
   }
 
@@ -86,13 +84,13 @@ export class FileNasStorageDomainService {
       throw new Error(`NAS 스토리지 객체를 찾을 수 없습니다: fileId=${fileId}`);
     }
 
-    return this.상태변경WithEntity(storageObject, status);
+    return this.엔티티상태변경(storageObject, status);
   }
 
   /**
    * 상태 변경 (엔티티 직접 전달)
    */
-  async 상태변경WithEntity(
+  async 엔티티상태변경(
     storageObject: FileStorageObjectEntity,
     status: AvailabilityStatus,
   ): Promise<FileStorageObjectEntity> {
@@ -109,16 +107,6 @@ export class FileNasStorageDomainService {
       throw new Error(`NAS 스토리지 객체를 찾을 수 없습니다: fileId=${fileId}`);
     }
 
-    return this.경로변경WithEntity(storageObject, newKey);
-  }
-
-  /**
-   * 경로 변경 (엔티티 직접 전달)
-   */
-  async 경로변경WithEntity(
-    storageObject: FileStorageObjectEntity,
-    newKey: string,
-  ): Promise<FileStorageObjectEntity> {
     storageObject.updateObjectKey(newKey);
     return this.repository.save(storageObject);
   }

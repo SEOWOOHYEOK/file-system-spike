@@ -10,11 +10,13 @@ import {
   UploadedFile,
   UploadedFiles,
   UseInterceptors,
+  UseGuards,
   Res,
   HttpCode,
   HttpStatus,
+  ParseUUIDPipe,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
 import { FileUploadService, FileDownloadService, FileManageService } from '../../../business/file';
@@ -37,12 +39,21 @@ import {
   ApiFileMove,
   ApiFileDelete,
 } from './file.swagger';
+import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { RequestContext } from '../../../common/context/request-context';
+import { AuditAction } from '../../../common/decorators';
+import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
+import { TargetType } from '../../../domain/audit/enums/common.enum';
 
 /**
  * 파일 컨트롤러
  * 파일 업로드, 다운로드, 조회, 관리 API
+ * 
+ * 인증: JWT Bearer 토큰 필수
  */
 @ApiTags('200.파일')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('v1/files')
 export class FileController {
   constructor(
@@ -56,11 +67,17 @@ export class FileController {
    */
   @Post('upload')
   @ApiFileUpload()
-  @UseInterceptors(FileInterceptor('file'))
+  @UseInterceptors(FileInterceptor('file'))//muliti part form 파싱처리를 위해서 해당  인터셉터 를 사용
   @HttpCode(HttpStatus.CREATED)
+  @AuditAction({
+    action: AuditActionEnum.FILE_UPLOAD,
+    targetType: TargetType.FILE,
+    targetIdParam: 'id',
+    targetNameParam: 'name',
+  })
   async upload(
     @UploadedFile() file: Express.Multer.File,
-    @Body('folderId') folderId: string,
+    @Body('folderId', new ParseUUIDPipe()) folderId: string,
     @Body('conflictStrategy') conflictStrategy?: ConflictStrategy,
   ): Promise<UploadFileResponse> {
     return this.fileUploadService.upload({
@@ -77,9 +94,14 @@ export class FileController {
   @ApiFilesUpload()
   @UseInterceptors(FilesInterceptor('files'))
   @HttpCode(HttpStatus.CREATED)
+  @AuditAction({
+    action: AuditActionEnum.FILE_UPLOAD,
+    targetType: TargetType.FOLDER,
+    targetIdParam: 'folderId',
+  })
   async uploadMany(
     @UploadedFiles() files: Express.Multer.File[],
-    @Body('folderId') folderId: string,
+    @Body('folderId', new ParseUUIDPipe()) folderId: string,
     @Body('conflictStrategy') conflictStrategy?: ConflictStrategy,
   ): Promise<UploadFileResponse[]> {
     return this.fileUploadService.uploadMany({
@@ -94,6 +116,11 @@ export class FileController {
    */
   @Get(':fileId')
   @ApiFileInfo()
+  @AuditAction({
+    action: AuditActionEnum.FILE_VIEW,
+    targetType: TargetType.FILE,
+    targetIdParam: 'fileId',
+  })
   async getFileInfo(@Param('fileId') fileId: string): Promise<FileInfoResponse> {
     return this.fileDownloadService.getFileInfo(fileId);
   }
@@ -103,6 +130,11 @@ export class FileController {
    */
   @Get(':fileId/download')
   @ApiFileDownload()
+  @AuditAction({
+    action: AuditActionEnum.FILE_DOWNLOAD,
+    targetType: TargetType.FILE,
+    targetIdParam: 'fileId',
+  })
   async download(
     @Param('fileId') fileId: string,
     @Res() res: Response,
@@ -139,12 +171,17 @@ export class FileController {
    */
   @Put(':fileId/rename')
   @ApiFileRename()
+  @AuditAction({
+    action: AuditActionEnum.FILE_RENAME,
+    targetType: TargetType.FILE,
+    targetIdParam: 'fileId',
+    targetNameParam: 'newName',
+  })
   async rename(
     @Param('fileId') fileId: string,
     @Body() request: RenameFileRequest,
   ): Promise<RenameFileResponse> {
-    // TODO: 실제 구현 시 인증된 사용자 ID 사용
-    const userId = 'system';
+    const userId = RequestContext.getUserId() || 'unknown';
     return this.fileManageService.rename(fileId, request, userId);
   }
 
@@ -153,12 +190,16 @@ export class FileController {
    */
   @Post(':fileId/move')
   @ApiFileMove()
+  @AuditAction({
+    action: AuditActionEnum.FILE_MOVE,
+    targetType: TargetType.FILE,
+    targetIdParam: 'fileId',
+  })
   async move(
     @Param('fileId') fileId: string,
     @Body() request: MoveFileRequest,
   ): Promise<MoveFileResponse> {
-    // TODO: 실제 구현 시 인증된 사용자 ID 사용
-    const userId = 'system';
+    const userId = RequestContext.getUserId() || 'unknown';
     return this.fileManageService.move(fileId, request, userId);
   }
 
@@ -170,9 +211,13 @@ export class FileController {
    */
   @Delete(':fileId')
   @ApiFileDelete()
+  @AuditAction({
+    action: AuditActionEnum.FILE_DELETE,
+    targetType: TargetType.FILE,
+    targetIdParam: 'fileId',
+  })
   async delete(@Param('fileId') fileId: string): Promise<DeleteFileResponse> {
-    // TODO: 실제 구현 시 인증된 사용자 ID 사용
-    const userId = 'system';
+    const userId = RequestContext.getUserId() || 'unknown';
     return this.fileManageService.delete(fileId, userId);
   }
 }

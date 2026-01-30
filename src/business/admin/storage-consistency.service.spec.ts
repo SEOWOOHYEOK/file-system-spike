@@ -21,11 +21,13 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { StorageConsistencyService } from './storage-consistency.service';
 import {
-  FILE_STORAGE_OBJECT_REPOSITORY,
-  IFileStorageObjectRepository,
   FILE_REPOSITORY,
   IFileRepository,
 } from '../../domain/file/repositories/file.repository.interface';
+import {
+  FILE_STORAGE_OBJECT_REPOSITORY,
+  IFileStorageObjectRepository,
+} from '../../domain/storage/file/repositories/file-storage-object.repository.interface';
 import {
   CACHE_STORAGE_PORT,
   ICacheStoragePort,

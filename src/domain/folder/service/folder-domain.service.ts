@@ -47,14 +47,14 @@ export class FolderDomainService {
   /**
    * ID로 폴더 조회 (락 획득)
    */
-  async 조회ForUpdate(folderId: string): Promise<FolderEntity | null> {
+  async 잠금조회(folderId: string): Promise<FolderEntity | null> {
     return this.folderRepository.findByIdForUpdate(folderId);
   }
 
   /**
    * 조건으로 폴더 조회
    */
-  async 조회ByOptions(options: FindFolderOptions): Promise<FolderEntity | null> {
+  async 조건조회(options: FindFolderOptions): Promise<FolderEntity | null> {
     return this.folderRepository.findOne(options);
   }
 
@@ -147,7 +147,7 @@ export class FolderDomainService {
    * @returns 업데이트된 폴더 엔티티
    * @throws Error - 폴더가 존재하지 않거나 활성 상태가 아닌 경우
    */
-  async 삭제ById(folderId: string): Promise<FolderEntity> {
+  async 삭제(folderId: string): Promise<FolderEntity> {
     const folder = await this.folderRepository.findByIdForUpdate(folderId);
     if (!folder) {
       throw new Error(`폴더를 찾을 수 없습니다: ${folderId}`);
@@ -173,7 +173,7 @@ export class FolderDomainService {
    * @param folder - 삭제할 폴더 엔티티
    * @returns 업데이트된 폴더 엔티티
    */
-  async 삭제WithEntity(folder: FolderEntity): Promise<FolderEntity> {
+  async 엔티티삭제(folder: FolderEntity): Promise<FolderEntity> {
     // 루트 폴더는 삭제 불가
     if (folder.isRoot()) {
       throw new Error('루트 폴더는 삭제할 수 없습니다.');
@@ -203,7 +203,7 @@ export class FolderDomainService {
       throw new Error(`폴더를 찾을 수 없습니다: ${folderId}`);
     }
 
-    return this.이름변경WithEntity(folder, newName, newPath);
+    return this.엔티티이름변경(folder, newName, newPath);
   }
 
   /**
@@ -215,7 +215,7 @@ export class FolderDomainService {
    * @param newPath - 새 경로 (비즈니스 레이어에서 계산하여 전달, 없으면 자동 계산)
    * @returns 업데이트된 폴더 엔티티
    */
-  async 이름변경WithEntity(folder: FolderEntity, newName: string, newPath?: string): Promise<FolderEntity> {
+  async 엔티티이름변경(folder: FolderEntity, newName: string, newPath?: string): Promise<FolderEntity> {
     // 루트 폴더는 이름 변경 불가
     if (folder.isRoot()) {
       throw new Error('루트 폴더는 이름을 변경할 수 없습니다.');
@@ -258,7 +258,7 @@ export class FolderDomainService {
       throw new Error(`폴더를 찾을 수 없습니다: ${folderId}`);
     }
 
-    return this.이동WithEntity(folder, targetParentId, newPath);
+    return this.엔티티이동(folder, targetParentId, newPath);
   }
 
   /**
@@ -270,7 +270,7 @@ export class FolderDomainService {
    * @param newPath - 새 경로 (비즈니스 레이어에서 계산하여 전달, 없으면 자동 계산)
    * @returns 업데이트된 폴더 엔티티
    */
-  async 이동WithEntity(folder: FolderEntity, targetParentId: string, newPath?: string): Promise<FolderEntity> {
+  async 엔티티이동(folder: FolderEntity, targetParentId: string, newPath?: string): Promise<FolderEntity> {
     // 루트 폴더는 이동 불가
     if (folder.isRoot()) {
       throw new Error('루트 폴더는 이동할 수 없습니다.');
@@ -317,7 +317,7 @@ export class FolderDomainService {
       throw new Error(`폴더를 찾을 수 없습니다: ${folderId}`);
     }
 
-    return this.영구삭제WithEntity(folder);
+    return this.엔티티영구삭제(folder);
   }
 
   /**
@@ -327,7 +327,7 @@ export class FolderDomainService {
    * @param folder - 영구 삭제할 폴더 엔티티
    * @returns 업데이트된 폴더 엔티티
    */
-  async 영구삭제WithEntity(folder: FolderEntity): Promise<FolderEntity> {
+  async 엔티티영구삭제(folder: FolderEntity): Promise<FolderEntity> {
     // 루트 폴더는 삭제 불가
     if (folder.isRoot()) {
       throw new Error('루트 폴더는 삭제할 수 없습니다.');

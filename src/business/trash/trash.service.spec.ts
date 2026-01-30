@@ -15,14 +15,16 @@ import {
 } from '../../domain/trash';
 import {
   FILE_REPOSITORY,
-  FILE_STORAGE_OBJECT_REPOSITORY,
   FileState,
 } from '../../domain/file';
 import {
   FOLDER_REPOSITORY,
-  FOLDER_STORAGE_OBJECT_REPOSITORY,
   FolderState,
 } from '../../domain/folder';
+import {
+  FILE_STORAGE_OBJECT_REPOSITORY,
+  FOLDER_STORAGE_OBJECT_REPOSITORY,
+} from '../../domain/storage';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 import { SYNC_EVENT_REPOSITORY, SyncEventStatus } from '../../domain/sync-event';
 

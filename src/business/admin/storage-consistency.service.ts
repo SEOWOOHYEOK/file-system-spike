@@ -4,9 +4,11 @@
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
-  FILE_STORAGE_OBJECT_REPOSITORY,
   FILE_REPOSITORY,
 } from '../../domain/file/repositories/file.repository.interface';
+import {
+  FILE_STORAGE_OBJECT_REPOSITORY,
+} from '../../domain/storage/file/repositories/file-storage-object.repository.interface';
 import {
   CACHE_STORAGE_PORT,
 } from '../../domain/storage/ports/cache-storage.port';
@@ -17,7 +19,7 @@ import {
   StorageType,
   FileStorageObjectEntity,
 } from '../../domain/storage/file/file-storage-object.entity';
-import type { IFileStorageObjectRepository } from '../../domain/file/repositories/file.repository.interface';
+import type { IFileStorageObjectRepository } from '../../domain/storage/file/repositories/file-storage-object.repository.interface';
 import type { IFileRepository } from '../../domain/file/repositories/file.repository.interface';
 import type { ICacheStoragePort } from '../../domain/storage/ports/cache-storage.port';
 import type { INasStoragePort } from '../../domain/storage/ports/nas-storage.port';

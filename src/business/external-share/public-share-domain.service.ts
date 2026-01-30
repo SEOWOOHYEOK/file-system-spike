@@ -1,28 +1,28 @@
 /**
- * PublicShare 도메인 서비스
+ * PublicShare 비즈니스 서비스
  *
  * PublicShare와 File Aggregate를 조합하여 완전한 공유 정보를 제공합니다.
  *
  * DDD 관점:
  * - Repository는 단일 Aggregate만 담당
- * - 도메인 서비스는 여러 Aggregate 조합 담당
+ * - 여러 Aggregate 조합은 비즈니스 레이어에서 담당
  */
 
 import { Inject, Injectable } from '@nestjs/common';
-import { PublicShare } from '../entities/public-share.entity';
+import { PublicShare } from '../../domain/external-share/entities/public-share.entity';
 import {
   PUBLIC_SHARE_REPOSITORY,
   type IPublicShareRepository,
-} from '../repositories/public-share.repository.interface';
+} from '../../domain/external-share/repositories/public-share.repository.interface';
 import {
   PaginationParams,
   PaginatedResult,
-} from '../repositories/external-user.repository.interface';
+} from '../../domain/external-share/repositories/external-user.repository.interface';
 import {
   FILE_REPOSITORY,
   type IFileRepository,
-} from '../../file/repositories/file.repository.interface';
-import type { FileEntity } from '../../file/entities/file.entity';
+} from '../../domain/file/repositories/file.repository.interface';
+import type { FileEntity } from '../../domain/file/entities/file.entity';
 
 /**
  * 파일 검증 결과
@@ -53,7 +53,7 @@ export class PublicShareDomainService {
    */
   async findALLWithFile(pagination: PaginationParams): Promise<PaginatedResult<PublicShare>> {
     const result = await this.shareRepo.findAll(pagination);
- 
+
 
     await this.enrichSharesWithFileMetadata(result.items);
     return result;

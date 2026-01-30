@@ -1,8 +1,6 @@
 /**
  * 폴더 스토리지 객체 도메인 서비스
  * FolderStorageObjectEntity의 행위를 실행하고 영속성을 보장합니다.
- *
- * DDD 관점: 도메인 서비스는 엔티티 행위 호출 후 Repository를 통해 변경사항을 영속화합니다.
  */
 
 import { Inject, Injectable } from '@nestjs/common';
@@ -12,10 +10,10 @@ import {
 } from '../folder-storage-object.entity';
 import {
   FOLDER_STORAGE_OBJECT_REPOSITORY,
-} from '../../../folder/repositories/folder.repository.interface';
+} from '../repositories/folder-storage-object.repository.interface';
 import type {
   IFolderStorageObjectRepository,
-} from '../../../folder/repositories/folder.repository.interface';
+} from '../repositories/folder-storage-object.repository.interface';
 
 /**
  * 폴더 스토리지 객체 생성 파라미터
@@ -32,7 +30,7 @@ export class FolderNasStorageObjectDomainService {
   constructor(
     @Inject(FOLDER_STORAGE_OBJECT_REPOSITORY)
     private readonly repository: IFolderStorageObjectRepository,
-  ) {}
+  ) { }
 
   // ============================================
   // 조회 메서드 (Query Methods)
@@ -48,7 +46,7 @@ export class FolderNasStorageObjectDomainService {
   /**
    * 폴더 ID로 조회 (락 획득)
    */
-  async 조회ForUpdate(folderId: string): Promise<FolderStorageObjectEntity | null> {
+  async 잠금조회(folderId: string): Promise<FolderStorageObjectEntity | null> {
     return this.repository.findByFolderIdForUpdate(folderId);
   }
 
@@ -93,16 +91,6 @@ export class FolderNasStorageObjectDomainService {
       throw new Error(`스토리지 객체를 찾을 수 없습니다: folderId=${folderId}`);
     }
 
-    return this.상태변경WithEntity(storageObject, status);
-  }
-
-  /**
-   * 상태 변경 (엔티티 직접 전달)
-   */
-  async 상태변경WithEntity(
-    storageObject: FolderStorageObjectEntity,
-    status: FolderAvailabilityStatus,
-  ): Promise<FolderStorageObjectEntity> {
     storageObject.updateStatus(status);
     return this.repository.save(storageObject);
   }
@@ -121,16 +109,6 @@ export class FolderNasStorageObjectDomainService {
       throw new Error(`스토리지 객체를 찾을 수 없습니다: folderId=${folderId}`);
     }
 
-    return this.경로변경WithEntity(storageObject, newKey);
-  }
-
-  /**
-   * 경로 변경 (엔티티 직접 전달)
-   */
-  async 경로변경WithEntity(
-    storageObject: FolderStorageObjectEntity,
-    newKey: string,
-  ): Promise<FolderStorageObjectEntity> {
     storageObject.updateObjectKey(newKey);
     return this.repository.save(storageObject);
   }
@@ -153,17 +131,6 @@ export class FolderNasStorageObjectDomainService {
       throw new Error(`스토리지 객체를 찾을 수 없습니다: folderId=${folderId}`);
     }
 
-    return this.상태및경로변경WithEntity(storageObject, status, newKey);
-  }
-
-  /**
-   * 상태 및 경로 동시 변경 (엔티티 직접 전달)
-   */
-  async 상태및경로변경WithEntity(
-    storageObject: FolderStorageObjectEntity,
-    status: FolderAvailabilityStatus,
-    newKey: string,
-  ): Promise<FolderStorageObjectEntity> {
     storageObject.updateStatus(status);
     storageObject.updateObjectKey(newKey);
     return this.repository.save(storageObject);

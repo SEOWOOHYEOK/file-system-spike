@@ -5,6 +5,7 @@ import { QueueInfraModule } from '../../infra/queue/queue-infra.module';
 import { FileDomainModule } from '../../domain/file/file.module';
 import { FolderDomainModule } from '../../domain/folder/folder.module';
 import { TrashDomainModule } from '../../domain/trash/trash.module';
+import { AuditModule } from '../audit/audit.module';
 import { TrashService } from './trash.service';
 
 /**
@@ -19,6 +20,7 @@ import { TrashService } from './trash.service';
     FileDomainModule,
     FolderDomainModule,
     TrashDomainModule,
+    AuditModule,
   ],
   providers: [TrashService],
   exports: [TrashService],

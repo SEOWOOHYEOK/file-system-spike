@@ -1,2 +1,1 @@
-export * from './user.decorator';
-export * from './external-user.decorator';
+export * from './audit-action.decorator';

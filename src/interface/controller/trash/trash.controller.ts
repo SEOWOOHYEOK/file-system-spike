@@ -22,6 +22,9 @@ import {
   PurgeResponse,
   EmptyTrashResponse,
 } from '../../../domain/trash';
+import { AuditAction } from '../../../common/decorators';
+import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
+import { TargetType } from '../../../domain/audit/enums/common.enum';
 
 /**
  * 휴지통 컨트롤러
@@ -38,6 +41,11 @@ export class TrashController {
    */
   @Get()
   @ApiOperation({ summary: '휴지통 목록 조회' })
+  @AuditAction({
+    action: AuditActionEnum.TRASH_VIEW,
+    targetType: TargetType.FOLDER,
+    targetIdParam: 'folderId',
+  })
   async getTrashList(@Query() query: TrashListQuery): Promise<TrashListResponse> {
     return this.trashService.getTrashList(query);
   }
@@ -58,6 +66,11 @@ export class TrashController {
   @Post('restore/execute')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '복원 실행' })
+  @AuditAction({
+    action: AuditActionEnum.FILE_RESTORE,
+    targetType: TargetType.FILE,
+    targetIdParam: 'itemIds',
+  })
   async executeRestore(@Body() request: RestoreExecuteRequest): Promise<RestoreExecuteResponse> {
     // TODO: 실제 구현 시 인증된 사용자 ID 사용
     const userId = 'system';
@@ -79,6 +92,11 @@ export class TrashController {
    */
   @Delete('files/:trashMetadataId')
   @ApiOperation({ summary: '파일 영구삭제' })
+  @AuditAction({
+    action: AuditActionEnum.FILE_PURGE,
+    targetType: TargetType.FILE,
+    targetIdParam: 'trashMetadataId',
+  })
   async purgeFile(
     @Param('trashMetadataId') trashMetadataId: string,
   ): Promise<PurgeResponse> {
@@ -92,6 +110,10 @@ export class TrashController {
    */
   @Delete('all')
   @ApiOperation({ summary: '휴지통 비우기' })
+  @AuditAction({
+    action: AuditActionEnum.TRASH_EMPTY,
+    targetType: TargetType.FOLDER,
+  })
   async emptyTrash(): Promise<EmptyTrashResponse> {
     // TODO: 실제 구현 시 인증된 사용자 ID 사용
     const userId = 'system';

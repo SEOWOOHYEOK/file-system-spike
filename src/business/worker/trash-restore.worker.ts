@@ -11,10 +11,10 @@ import {
 } from '../../domain/storage/ports/nas-storage.port';
 import {
   FILE_REPOSITORY,
-  FILE_STORAGE_OBJECT_REPOSITORY,
   StorageType,
   AvailabilityStatus
 } from '../../domain/file';
+import { FILE_STORAGE_OBJECT_REPOSITORY } from '../../domain/storage';
 import {
   FOLDER_REPOSITORY,
 } from '../../domain/folder';
@@ -29,7 +29,8 @@ import {
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 import type { ICacheStoragePort } from '../../domain/storage/ports/cache-storage.port';
 import type { INasStoragePort } from '../../domain/storage/ports/nas-storage.port';
-import type { IFileRepository, IFileStorageObjectRepository } from '../../domain/file';
+import type { IFileRepository } from '../../domain/file';
+import type { IFileStorageObjectRepository } from '../../domain/storage';
 import type { IFolderRepository } from '../../domain/folder';
 import type { ITrashRepository } from '../../domain/trash';
 import type { ISyncEventRepository } from '../../domain/sync-event';

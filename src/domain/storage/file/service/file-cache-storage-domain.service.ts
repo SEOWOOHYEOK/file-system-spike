@@ -1,8 +1,6 @@
 /**
  * 파일 캐시 스토리지 도메인 서비스
  * FileStorageObjectEntity (CACHE 타입)의 행위를 실행하고 영속성을 보장합니다.
- *
- * DDD 관점: 캐시 스토리지 전용 도메인 서비스로, StorageType.CACHE가 이미 내재되어 있습니다.
  */
 
 import { Inject, Injectable } from '@nestjs/common';
@@ -13,10 +11,10 @@ import {
 } from '../file-storage-object.entity';
 import {
   FILE_STORAGE_OBJECT_REPOSITORY,
-} from '../../../file/repositories/file.repository.interface';
+} from '../repositories/file-storage-object.repository.interface';
 import type {
   IFileStorageObjectRepository,
-} from '../../../file/repositories/file.repository.interface';
+} from '../repositories/file-storage-object.repository.interface';
 
 /**
  * 캐시 스토리지 객체 생성 파라미터
@@ -51,7 +49,7 @@ export class FileCacheStorageDomainService {
   /**
    * 파일 ID로 캐시 스토리지 조회 (락 획득)
    */
-  async 조회ForUpdate(fileId: string): Promise<FileStorageObjectEntity | null> {
+  async 잠금조회(fileId: string): Promise<FileStorageObjectEntity | null> {
     return this.repository.findByFileIdAndTypeForUpdate(fileId, this.storageType);
   }
 
@@ -86,13 +84,13 @@ export class FileCacheStorageDomainService {
       throw new Error(`캐시 스토리지 객체를 찾을 수 없습니다: fileId=${fileId}`);
     }
 
-    return this.상태변경WithEntity(storageObject, status);
+    return this.엔티티상태변경(storageObject, status);
   }
 
   /**
    * 상태 변경 (엔티티 직접 전달)
    */
-  async 상태변경WithEntity(
+  async 엔티티상태변경(
     storageObject: FileStorageObjectEntity,
     status: AvailabilityStatus,
   ): Promise<FileStorageObjectEntity> {
@@ -109,13 +107,13 @@ export class FileCacheStorageDomainService {
       throw new Error(`캐시 스토리지 객체를 찾을 수 없습니다: fileId=${fileId}`);
     }
 
-    return this.경로변경WithEntity(storageObject, newKey);
+    return this.엔티티경로변경(storageObject, newKey);
   }
 
   /**
    * 경로 변경 (엔티티 직접 전달)
    */
-  async 경로변경WithEntity(
+  async 엔티티경로변경(
     storageObject: FileStorageObjectEntity,
     newKey: string,
   ): Promise<FileStorageObjectEntity> {
@@ -124,41 +122,41 @@ export class FileCacheStorageDomainService {
   }
 
   /**
-   * Lease 획득 (다운로드 시작)
+   * 임대 획득 (다운로드 시작)
    */
-  async Lease획득(fileId: string): Promise<FileStorageObjectEntity> {
+  async 임대획득(fileId: string): Promise<FileStorageObjectEntity> {
     const storageObject = await this.repository.findByFileIdAndTypeForUpdate(fileId, this.storageType);
     if (!storageObject) {
       throw new Error(`캐시 스토리지 객체를 찾을 수 없습니다: fileId=${fileId}`);
     }
 
-    return this.Lease획득WithEntity(storageObject);
+    return this.엔티티임대획득(storageObject);
   }
 
   /**
-   * Lease 획득 (엔티티 직접 전달)
+   * 임대 획득 (엔티티 직접 전달)
    */
-  async Lease획득WithEntity(storageObject: FileStorageObjectEntity): Promise<FileStorageObjectEntity> {
+  async 엔티티임대획득(storageObject: FileStorageObjectEntity): Promise<FileStorageObjectEntity> {
     storageObject.acquireLease();
     return this.repository.save(storageObject);
   }
 
   /**
-   * Lease 해제 (다운로드 완료)
+   * 임대 해제 (다운로드 완료)
    */
-  async Lease해제(fileId: string): Promise<FileStorageObjectEntity> {
+  async 임대해제(fileId: string): Promise<FileStorageObjectEntity> {
     const storageObject = await this.repository.findByFileIdAndTypeForUpdate(fileId, this.storageType);
     if (!storageObject) {
       throw new Error(`캐시 스토리지 객체를 찾을 수 없습니다: fileId=${fileId}`);
     }
 
-    return this.Lease해제WithEntity(storageObject);
+    return this.엔티티임대해제(storageObject);
   }
 
   /**
-   * Lease 해제 (엔티티 직접 전달)
+   * 임대 해제 (엔티티 직접 전달)
    */
-  async Lease해제WithEntity(storageObject: FileStorageObjectEntity): Promise<FileStorageObjectEntity> {
+  async 엔티티임대해제(storageObject: FileStorageObjectEntity): Promise<FileStorageObjectEntity> {
     storageObject.releaseLease();
     return this.repository.save(storageObject);
   }

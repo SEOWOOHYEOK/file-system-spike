@@ -33,7 +33,7 @@ import {
   AccessAction,
 } from '../../domain/external-share/entities/share-access-log.entity';
 import { SharePermission } from '../../domain/external-share/type/public-share.type';
-import { PublicShareDomainService } from '../../domain/external-share/service/public-share-domain.service';
+import { PublicShareDomainService } from './public-share-domain.service';
 import { FileDownloadService } from '../file/file-download.service';
 import type { FileEntity } from '../../domain/file';
 

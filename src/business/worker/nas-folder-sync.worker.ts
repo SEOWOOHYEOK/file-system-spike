@@ -8,16 +8,24 @@ import {
 } from '../../domain/storage/ports/nas-storage.port';
 import {
   FOLDER_REPOSITORY,
-  FOLDER_STORAGE_OBJECT_REPOSITORY,
   FolderAvailabilityStatus,
 } from '../../domain/folder';
+
 import { SYNC_EVENT_REPOSITORY } from '../../domain/sync-event/repositories/sync-event.repository.interface';
 import { SyncEventEntity } from '../../domain/sync-event/entities/sync-event.entity';
 
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 import type { INasStoragePort } from '../../domain/storage/ports/nas-storage.port';
-import type { IFolderRepository, IFolderStorageObjectRepository } from '../../domain/folder';
+import type { IFolderRepository } from '../../domain/folder';
+
 import type { ISyncEventRepository } from '../../domain/sync-event/repositories/sync-event.repository.interface';
+
+import {
+  type IFolderStorageObjectRepository,
+} from '../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
+import {
+  FOLDER_STORAGE_OBJECT_REPOSITORY,
+} from '../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
 
 /**
  * NAS 폴더 동기화 Job 데이터 타입들
@@ -67,7 +75,7 @@ export class NasFolderSyncWorker implements OnModuleInit {
     private readonly folderStorageObjectRepository: IFolderStorageObjectRepository,
     @Inject(SYNC_EVENT_REPOSITORY)
     private readonly syncEventRepository: ISyncEventRepository,
-  ) {}
+  ) { }
 
   /**
    * SyncEvent 조회 (없으면 null)
@@ -364,7 +372,7 @@ export class NasFolderSyncWorker implements OnModuleInit {
     try {
       // 하위 폴더 스토리지 객체들 조회 및 업데이트
       const descendants = await this.folderStorageObjectRepository.findByObjectKeyPrefix(oldPathPrefix + '/');
-      
+
       for (const descendant of descendants) {
         const newObjectKey = descendant.objectKey.replace(oldPathPrefix, newPathPrefix);
         descendant.updateObjectKey(newObjectKey);

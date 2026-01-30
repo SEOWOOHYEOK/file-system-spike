@@ -3,7 +3,6 @@ import {
   StorageType,
   AvailabilityStatus,
   FILE_REPOSITORY,
-  FILE_STORAGE_OBJECT_REPOSITORY,
 } from '../../domain/file';
 
 import type {
@@ -11,8 +10,9 @@ import type {
   FileStorageObjectEntity,
   FileInfoResponse,
   IFileRepository,
-  IFileStorageObjectRepository,
 } from '../../domain/file';
+import { FILE_STORAGE_OBJECT_REPOSITORY } from '../../domain/storage';
+import type { IFileStorageObjectRepository } from '../../domain/storage';
 import { FOLDER_REPOSITORY } from '../../domain/folder';
 import type { IFolderRepository } from '../../domain/folder';
 import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';

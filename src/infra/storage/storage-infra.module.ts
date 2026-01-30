@@ -66,3 +66,4 @@ export type CacheStorageType = 'local' | 'seaweedfs';
   exports: [CACHE_STORAGE_PORT, NAS_STORAGE_PORT],
 })
 export class StorageInfraModule {}
+

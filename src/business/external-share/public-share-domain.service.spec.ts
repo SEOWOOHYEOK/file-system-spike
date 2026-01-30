@@ -22,14 +22,14 @@ import { PublicShareDomainService } from './public-share-domain.service';
 import {
   PUBLIC_SHARE_REPOSITORY,
   type IPublicShareRepository,
-} from '../repositories/public-share.repository.interface';
+} from '../../domain/external-share/repositories/public-share.repository.interface';
 import {
   FILE_REPOSITORY,
   type IFileRepository,
-} from '../../file/repositories/file.repository.interface';
-import { PublicShare } from '../entities/public-share.entity';
-import { FileEntity } from '../../file/entities/file.entity';
-import { SharePermission } from '../type/public-share.type';
+} from '../../domain/file/repositories/file.repository.interface';
+import { PublicShare } from '../../domain/external-share/entities/public-share.entity';
+import { FileEntity } from '../../domain/file/entities/file.entity';
+import { SharePermission } from '../../domain/external-share/type/public-share.type';
 
 describe('PublicShareDomainService (Unit Tests)', () => {
   let service: PublicShareDomainService;

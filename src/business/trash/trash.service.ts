@@ -18,16 +18,27 @@ import {
 import type { ITrashRepository, ITrashQueryService } from '../../domain/trash';
 import {
   FILE_REPOSITORY,
-  FILE_STORAGE_OBJECT_REPOSITORY,
 } from '../../domain/file';
 import { FileState } from '../../domain/file/type/file.type';
-import type { IFileRepository, IFileStorageObjectRepository } from '../../domain/file';
+import type { IFileRepository } from '../../domain/file';
 import {
   FolderState,
   FOLDER_REPOSITORY,
-  FOLDER_STORAGE_OBJECT_REPOSITORY,
 } from '../../domain/folder';
-import type { IFolderRepository, IFolderStorageObjectRepository } from '../../domain/folder';
+import type { IFolderRepository } from '../../domain/folder';
+import {
+  FILE_STORAGE_OBJECT_REPOSITORY,
+} from '../../domain/storage';
+
+import {
+  FOLDER_STORAGE_OBJECT_REPOSITORY,
+} from '../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
+
+import {
+  type IFolderStorageObjectRepository,
+} from '../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
+
+import type { IFileStorageObjectRepository } from '../../domain/storage';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 import {
@@ -142,7 +153,7 @@ export class TrashService {
     const items: RestorePreviewResponse['items'] = [];
     const summary = { available: 0, notFound: 0, conflict: 0 };
 
-    
+
     const trashMetadataIds = request.trashMetadataIds || [];
 
     for (const id of trashMetadataIds) {
@@ -161,7 +172,7 @@ export class TrashService {
       // 부모 폴더 경로를 추출해야 함 (예: "/projects/2024/")
       const originalPath = trashMetadata.originalPath;
       const parentFolderPath = this.extractParentFolderPath(originalPath);
-      
+
       const targetFolder = await this.folderRepository.findOne({
         path: parentFolderPath,
         state: FolderState.ACTIVE,

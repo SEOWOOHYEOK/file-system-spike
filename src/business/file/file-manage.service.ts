@@ -12,9 +12,9 @@ import {
   MoveConflictStrategy,
   ConflictStrategy,
   FILE_REPOSITORY,
-  FILE_STORAGE_OBJECT_REPOSITORY,
   TransactionOptions,
 } from '../../domain/file';
+import { FILE_STORAGE_OBJECT_REPOSITORY } from '../../domain/storage';
 import {
   FOLDER_REPOSITORY,
 } from '../../domain/folder';
@@ -27,7 +27,8 @@ import {
   SYNC_EVENT_REPOSITORY,
 } from '../../domain/sync-event';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
-import type { IFileRepository, IFileStorageObjectRepository } from '../../domain/file';
+import type { IFileRepository } from '../../domain/file';
+import type { IFileStorageObjectRepository } from '../../domain/storage';
 import type { IFolderRepository } from '../../domain/folder';
 import type { ITrashRepository } from '../../domain/trash';
 import type { ISyncEventRepository } from '../../domain/sync-event';
