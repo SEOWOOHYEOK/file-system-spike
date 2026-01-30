@@ -47,6 +47,20 @@ export class FileNasStorageDomainService {
   }
 
   /**
+   * 스토리지 타입별 페이징 조회
+   */
+  async 스토리지타입조회(limit: number, offset: number): Promise<FileStorageObjectEntity[]> {
+    return this.repository.findByStorageType(this.storageType, limit, offset);
+  }
+
+  /**
+   * 랜덤 샘플 조회
+   */
+  async 랜덤샘플조회(count: number): Promise<FileStorageObjectEntity[]> {
+    return this.repository.findRandomSamples(this.storageType, count);
+  }
+
+  /**
    * 파일 ID로 NAS 스토리지 조회 (락 획득)
    */
   async 잠금조회(fileId: string): Promise<FileStorageObjectEntity | null> {

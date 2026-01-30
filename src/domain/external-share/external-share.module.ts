@@ -1,6 +1,9 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { ExternalShareInfraModule } from '../../infra/database/external-share-infra.module';
 import { RepositoryModule } from '../../infra/database/repository.module';
+import { ExternalUserDomainService } from './service/external-user-domain.service';
+import { PublicShareDomainService } from './service/public-share-domain.service';
+import { ShareAccessLogDomainService } from './service/share-access-log-domain.service';
 
 /**
  * ExternalShare 도메인 모듈
@@ -17,8 +20,16 @@ import { RepositoryModule } from '../../infra/database/repository.module';
     // IFileRepository 제공
     RepositoryModule,
   ],
-  providers: [],
-  exports: [],
+  providers: [
+    ExternalUserDomainService,
+    PublicShareDomainService,
+    ShareAccessLogDomainService,
+  ],
+  exports: [
+    ExternalUserDomainService,
+    PublicShareDomainService,
+    ShareAccessLogDomainService,
+  ],
 })
 export class ExternalShareDomainModule {}
 

@@ -5,16 +5,40 @@ import {
   Query,
   UseGuards,
   ParseUUIDPipe,
+  ParseIntPipe,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { AuditLogService } from '../../../business/audit/audit-log.service';
 import { SecurityLogService } from '../../../business/audit/security-log.service';
 import { FileHistoryService } from '../../../business/audit/file-history.service';
-import { AuditAction } from '../../../domain/audit/enums/audit-action.enum';
-import { SecurityEventType, Severity } from '../../../domain/audit/enums/security-event.enum';
-import { FileChangeType } from '../../../domain/audit/enums/file-change.enum';
-import { LogResult, TargetType, UserType } from '../../../domain/audit/enums/common.enum';
+import { TargetType } from '../../../domain/audit/enums/common.enum';
+import { AuditLog } from '../../../domain/audit/entities/audit-log.entity';
+import { SecurityLog } from '../../../domain/audit/entities/security-log.entity';
+import { FileHistory } from '../../../domain/audit/entities/file-history.entity';
+import type { PaginatedResult } from '../../../domain/audit/repositories/audit-log.repository.interface';
+import {
+  ApiGetAuditLogs,
+  ApiGetAuditLog,
+  ApiGetAuditLogsByUser,
+  ApiGetAuditLogsByTarget,
+  ApiGetAuditLogsBySession,
+  ApiGetSecurityLogs,
+  ApiGetSecurityLogsByUser,
+  ApiGetLoginFailuresByIp,
+  ApiGetFileHistories,
+  ApiGetFileHistoryByFile,
+  ApiGetFileHistoryByVersion,
+  ApiGetFileHistoryByUser,
+} from './audit-log.swagger';
+import {
+  AuditLogQueryDto,
+  FileHistoryQueryDto,
+  LimitQueryDto,
+  LoginFailureCountResponseDto,
+  LoginFailureQueryDto,
+  SecurityLogQueryDto,
+} from './dto';
 
 /**
  * 관리자 감사 로그 조회 API
@@ -35,133 +59,99 @@ export class AuditLogController {
   // ========== 감사 로그 조회 ==========
 
   @Get()
-  @ApiOperation({ summary: '감사 로그 목록 조회' })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'userId', required: false, type: String })
-  @ApiQuery({ name: 'userType', required: false, enum: UserType })
-  @ApiQuery({ name: 'action', required: false, enum: AuditAction })
-  @ApiQuery({ name: 'targetType', required: false, enum: TargetType })
-  @ApiQuery({ name: 'targetId', required: false, type: String })
-  @ApiQuery({ name: 'result', required: false, enum: LogResult })
-  @ApiQuery({ name: 'ipAddress', required: false, type: String })
-  @ApiQuery({ name: 'startDate', required: false, type: String })
-  @ApiQuery({ name: 'endDate', required: false, type: String })
+  @ApiGetAuditLogs()
   async getAuditLogs(
-    @Query('page') page = 1,
-    @Query('limit') limit = 50,
-    @Query('userId') userId?: string,
-    @Query('userType') userType?: UserType,
-    @Query('action') action?: AuditAction,
-    @Query('targetType') targetType?: TargetType,
-    @Query('targetId') targetId?: string,
-    @Query('result') result?: LogResult,
-    @Query('ipAddress') ipAddress?: string,
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
-  ) {
+    @Query() query: AuditLogQueryDto,
+  ): Promise<PaginatedResult<AuditLog>> {
     return this.auditLogService.findByFilter(
       {
-        userId,
-        userType,
-        action,
-        targetType,
-        targetId,
-        result,
-        ipAddress,
-        startDate: startDate ? new Date(startDate) : undefined,
-        endDate: endDate ? new Date(endDate) : undefined,
+        userId: query.userId,
+        userType: query.userType,
+        action: query.action,
+        targetType: query.targetType,
+        targetId: query.targetId,
+        result: query.result,
+        ipAddress: query.ipAddress,
+        startDate: query.startDate ? new Date(query.startDate) : undefined,
+        endDate: query.endDate ? new Date(query.endDate) : undefined,
       },
-      { page: Number(page), limit: Number(limit) },
+      { page: query.page, limit: query.limit },
     );
   }
 
   @Get(':id')
-  @ApiOperation({ summary: '감사 로그 상세 조회' })
-  async getAuditLog(@Param('id', ParseUUIDPipe) id: string) {
+  @ApiGetAuditLog()
+  async getAuditLog(
+    @Param('id', ParseUUIDPipe) id: string,
+  ): Promise<AuditLog | null> {
     return this.auditLogService.findById(id);
   }
 
   @Get('user/:userId')
-  @ApiOperation({ summary: '특정 사용자의 감사 로그 조회' })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiGetAuditLogsByUser()
   async getAuditLogsByUser(
     @Param('userId', ParseUUIDPipe) userId: string,
-    @Query('limit') limit = 100,
-  ) {
-    return this.auditLogService.findByUserId(userId, Number(limit));
+    @Query() query: LimitQueryDto,
+  ): Promise<AuditLog[]> {
+    return this.auditLogService.findByUserId(userId, query.limit);
   }
 
   @Get('target/:targetType/:targetId')
-  @ApiOperation({ summary: '특정 대상의 접근 이력 조회' })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiGetAuditLogsByTarget()
   async getAuditLogsByTarget(
     @Param('targetType') targetType: TargetType,
     @Param('targetId', ParseUUIDPipe) targetId: string,
-    @Query('limit') limit = 100,
-  ) {
-    return this.auditLogService.findByTarget(targetType, targetId, Number(limit));
+    @Query() query: LimitQueryDto,
+  ): Promise<AuditLog[]> {
+    return this.auditLogService.findByTarget(targetType, targetId, query.limit);
   }
 
   @Get('session/:sessionId')
-  @ApiOperation({ summary: '특정 세션의 활동 로그 조회' })
-  async getAuditLogsBySession(@Param('sessionId') sessionId: string) {
+  @ApiGetAuditLogsBySession()
+  async getAuditLogsBySession(
+    @Param('sessionId') sessionId: string,
+  ): Promise<AuditLog[]> {
     return this.auditLogService.findBySessionId(sessionId);
   }
 
   // ========== 보안 로그 조회 ==========
 
   @Get('security')
-  @ApiOperation({ summary: '보안 로그 목록 조회' })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'eventType', required: false, enum: SecurityEventType })
-  @ApiQuery({ name: 'userId', required: false, type: String })
-  @ApiQuery({ name: 'ipAddress', required: false, type: String })
-  @ApiQuery({ name: 'severity', required: false, enum: Severity })
-  @ApiQuery({ name: 'startDate', required: false, type: String })
-  @ApiQuery({ name: 'endDate', required: false, type: String })
+  @ApiGetSecurityLogs()
   async getSecurityLogs(
-    @Query('page') page = 1,
-    @Query('limit') limit = 50,
-    @Query('eventType') eventType?: SecurityEventType,
-    @Query('userId') userId?: string,
-    @Query('ipAddress') ipAddress?: string,
-    @Query('severity') severity?: Severity,
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
-  ) {
+    @Query() query: SecurityLogQueryDto,
+  ): Promise<PaginatedResult<SecurityLog>> {
     return this.securityLogService.findByFilter(
       {
-        eventType,
-        userId,
-        ipAddress,
-        severity,
-        startDate: startDate ? new Date(startDate) : undefined,
-        endDate: endDate ? new Date(endDate) : undefined,
+        eventType: query.eventType,
+        userId: query.userId,
+        ipAddress: query.ipAddress,
+        severity: query.severity,
+        startDate: query.startDate ? new Date(query.startDate) : undefined,
+        endDate: query.endDate ? new Date(query.endDate) : undefined,
       },
-      { page: Number(page), limit: Number(limit) },
+      { page: query.page, limit: query.limit },
     );
   }
 
   @Get('security/user/:userId')
-  @ApiOperation({ summary: '특정 사용자의 보안 로그 조회' })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiGetSecurityLogsByUser()
   async getSecurityLogsByUser(
     @Param('userId', ParseUUIDPipe) userId: string,
-    @Query('limit') limit = 100,
-  ) {
-    return this.securityLogService.findByUserId(userId, Number(limit));
+    @Query() query: LimitQueryDto,
+  ): Promise<SecurityLog[]> {
+    return this.securityLogService.findByUserId(userId, query.limit);
   }
 
   @Get('security/login-failures/ip/:ipAddress')
-  @ApiOperation({ summary: 'IP별 로그인 실패 횟수 조회' })
-  @ApiQuery({ name: 'since', required: false, type: String, description: '조회 시작 시간 (ISO 8601)' })
+  @ApiGetLoginFailuresByIp()
   async getLoginFailuresByIp(
     @Param('ipAddress') ipAddress: string,
-    @Query('since') since?: string,
-  ) {
-    const sinceDate = since ? new Date(since) : new Date(Date.now() - 24 * 60 * 60 * 1000); // 기본 24시간
+    @Query() query: LoginFailureQueryDto,
+  ): Promise<LoginFailureCountResponseDto> {
+    const sinceDate = query.since
+      ? new Date(query.since)
+      : new Date(Date.now() - 24 * 60 * 60 * 1000); // 기본 24시간
     const count = await this.securityLogService.countLoginFailuresByIp(
       ipAddress,
       sinceDate,
@@ -172,61 +162,46 @@ export class AuditLogController {
   // ========== 파일 이력 조회 ==========
 
   @Get('file-history')
-  @ApiOperation({ summary: '파일 이력 목록 조회' })
-  @ApiQuery({ name: 'page', required: false, type: Number })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
-  @ApiQuery({ name: 'fileId', required: false, type: String })
-  @ApiQuery({ name: 'changeType', required: false, enum: FileChangeType })
-  @ApiQuery({ name: 'changedBy', required: false, type: String })
-  @ApiQuery({ name: 'startDate', required: false, type: String })
-  @ApiQuery({ name: 'endDate', required: false, type: String })
+  @ApiGetFileHistories()
   async getFileHistories(
-    @Query('page') page = 1,
-    @Query('limit') limit = 50,
-    @Query('fileId') fileId?: string,
-    @Query('changeType') changeType?: FileChangeType,
-    @Query('changedBy') changedBy?: string,
-    @Query('startDate') startDate?: string,
-    @Query('endDate') endDate?: string,
-  ) {
+    @Query() query: FileHistoryQueryDto,
+  ): Promise<PaginatedResult<FileHistory>> {
     return this.fileHistoryService.findByFilter(
       {
-        fileId,
-        changeType,
-        changedBy,
-        startDate: startDate ? new Date(startDate) : undefined,
-        endDate: endDate ? new Date(endDate) : undefined,
+        fileId: query.fileId,
+        changeType: query.changeType,
+        changedBy: query.changedBy,
+        startDate: query.startDate ? new Date(query.startDate) : undefined,
+        endDate: query.endDate ? new Date(query.endDate) : undefined,
       },
-      { page: Number(page), limit: Number(limit) },
+      { page: query.page, limit: query.limit },
     );
   }
 
   @Get('file-history/file/:fileId')
-  @ApiOperation({ summary: '특정 파일의 변경 이력 조회' })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiGetFileHistoryByFile()
   async getFileHistoryByFile(
     @Param('fileId', ParseUUIDPipe) fileId: string,
-    @Query('limit') limit = 100,
-  ) {
-    return this.fileHistoryService.findByFileId(fileId, Number(limit));
+    @Query() query: LimitQueryDto,
+  ): Promise<FileHistory[]> {
+    return this.fileHistoryService.findByFileId(fileId, query.limit);
   }
 
   @Get('file-history/file/:fileId/version/:version')
-  @ApiOperation({ summary: '특정 파일의 특정 버전 조회' })
+  @ApiGetFileHistoryByVersion()
   async getFileHistoryByVersion(
     @Param('fileId', ParseUUIDPipe) fileId: string,
-    @Param('version') version: number,
-  ) {
-    return this.fileHistoryService.findByFileIdAndVersion(fileId, Number(version));
+    @Param('version', ParseIntPipe) version: number,
+  ): Promise<FileHistory | null> {
+    return this.fileHistoryService.findByFileIdAndVersion(fileId, version);
   }
 
   @Get('file-history/user/:userId')
-  @ApiOperation({ summary: '특정 사용자가 변경한 파일 이력 조회' })
-  @ApiQuery({ name: 'limit', required: false, type: Number })
+  @ApiGetFileHistoryByUser()
   async getFileHistoryByUser(
     @Param('userId', ParseUUIDPipe) userId: string,
-    @Query('limit') limit = 100,
-  ) {
-    return this.fileHistoryService.findByChangedBy(userId, Number(limit));
+    @Query() query: LimitQueryDto,
+  ): Promise<FileHistory[]> {
+    return this.fileHistoryService.findByChangedBy(userId, query.limit);
   }
 }

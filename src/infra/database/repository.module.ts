@@ -17,6 +17,10 @@ import {
   SyncEventOrmEntity,
   UploadSessionOrmEntity,
   UploadPartOrmEntity,
+  AuditLogOrmEntity,
+  SecurityLogOrmEntity,
+  FileHistoryOrmEntity,
+  UserOrmEntity,
 } from './entities';
 
 // Repository Implementations
@@ -29,6 +33,10 @@ import {
   TrashQueryRepository,
   UploadSessionRepository,
   UploadPartRepository,
+  AuditLogRepository,
+  SecurityLogRepository,
+  FileHistoryRepository,
+  UserRepository,
 } from './repositories';
 import { SyncEventRepository } from './repositories/sync-event.repository';
 
@@ -51,6 +59,18 @@ import {
   UPLOAD_SESSION_REPOSITORY,
   UPLOAD_PART_REPOSITORY,
 } from '../../domain/upload-session/repositories/upload-session.repository.interface';
+import {
+  AUDIT_LOG_REPOSITORY,
+} from '../../domain/audit/repositories/audit-log.repository.interface';
+import {
+  SECURITY_LOG_REPOSITORY,
+} from '../../domain/audit/repositories/security-log.repository.interface';
+import {
+  FILE_HISTORY_REPOSITORY,
+} from '../../domain/audit/repositories/file-history.repository.interface';
+import {
+  USER_REPOSITORY,
+} from '../../domain/user/repositories/user.repository.interface';
 
 /**
  * TypeORM forFeature에 등록할 엔티티 목록
@@ -65,6 +85,10 @@ const entities = [
   SyncEventOrmEntity,
   UploadSessionOrmEntity,
   UploadPartOrmEntity,
+  AuditLogOrmEntity,
+  SecurityLogOrmEntity,
+  FileHistoryOrmEntity,
+  UserOrmEntity,
 ];
 
 @Module({
@@ -118,6 +142,26 @@ const entities = [
       provide: UPLOAD_PART_REPOSITORY,
       useClass: UploadPartRepository,
     },
+    // Audit Log Repository
+    {
+      provide: AUDIT_LOG_REPOSITORY,
+      useClass: AuditLogRepository,
+    },
+    // Security Log Repository
+    {
+      provide: SECURITY_LOG_REPOSITORY,
+      useClass: SecurityLogRepository,
+    },
+    // File History Repository
+    {
+      provide: FILE_HISTORY_REPOSITORY,
+      useClass: FileHistoryRepository,
+    },
+    // User Repository
+    {
+      provide: USER_REPOSITORY,
+      useClass: UserRepository,
+    },
   ],
   exports: [
     FILE_REPOSITORY,
@@ -129,6 +173,10 @@ const entities = [
     SYNC_EVENT_REPOSITORY,
     UPLOAD_SESSION_REPOSITORY,
     UPLOAD_PART_REPOSITORY,
+    AUDIT_LOG_REPOSITORY,
+    SECURITY_LOG_REPOSITORY,
+    FILE_HISTORY_REPOSITORY,
+    USER_REPOSITORY,
   ],
 })
 export class RepositoryModule {}

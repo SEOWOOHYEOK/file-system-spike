@@ -1,21 +1,14 @@
 import {
   Injectable,
-  Inject,
   NotFoundException,
   BadRequestException,
   Logger,
 } from '@nestjs/common';
-import {
-  USER_REPOSITORY,
-} from '../../domain/user/repositories/user.repository.interface';
-import {
-  ROLE_REPOSITORY,
-} from '../../domain/role/repositories/role.repository.interface';
 import { User } from '../../domain/user/entities/user.entity';
 import { Role } from '../../domain/role/entities/role.entity';
 import { RoleNameEnum } from '../../domain/role/role-name.enum';
-import type { IUserRepository } from '../../domain/user/repositories/user.repository.interface';
-import type { IRoleRepository } from '../../domain/role/repositories/role.repository.interface';
+import { UserDomainService } from '../../domain/user';
+import { RoleDomainService } from '../../domain/role';
 
 /**
  * User 비즈니스 서비스
@@ -27,17 +20,15 @@ export class UserService {
   private readonly logger = new Logger(UserService.name);
 
   constructor(
-    @Inject(USER_REPOSITORY)
-    private readonly userRepo: IUserRepository,
-    @Inject(ROLE_REPOSITORY)
-    private readonly roleRepo: IRoleRepository,
+    private readonly userDomainService: UserDomainService,
+    private readonly roleDomainService: RoleDomainService,
   ) {}
 
   /**
    * 전체 User 목록 조회
    */
   async findAll(): Promise<User[]> {
-    return this.userRepo.findAll();
+    return this.userDomainService.전체조회();
   }
 
   /**
@@ -45,7 +36,7 @@ export class UserService {
    * @throws NotFoundException User가 존재하지 않는 경우
    */
   async findById(id: string): Promise<User> {
-    const user = await this.userRepo.findById(id);
+    const user = await this.userDomainService.조회(id);
     if (!user) {
       throw new NotFoundException(`User with ID ${id} not found`);
     }
@@ -58,7 +49,7 @@ export class UserService {
    * @throws BadRequestException User가 비활성 상태인 경우
    */
   async assignRole(userId: string, roleId: string): Promise<User> {
-    const user = await this.userRepo.findById(userId);
+    const user = await this.userDomainService.조회(userId);
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
@@ -67,13 +58,13 @@ export class UserService {
       throw new BadRequestException('Cannot assign role to inactive user');
     }
 
-    const role = await this.roleRepo.findById(roleId);
+    const role = await this.roleDomainService.조회(roleId);
     if (!role) {
       throw new NotFoundException(`Role with ID ${roleId} not found`);
     }
 
     user.assignRole(roleId);
-    return this.userRepo.save(user);
+    return this.userDomainService.저장(user);
   }
 
   /**
@@ -81,13 +72,13 @@ export class UserService {
    * @throws NotFoundException User가 존재하지 않는 경우
    */
   async removeRole(userId: string): Promise<User> {
-    const user = await this.userRepo.findById(userId);
+    const user = await this.userDomainService.조회(userId);
     if (!user) {
       throw new NotFoundException(`User with ID ${userId} not found`);
     }
 
     user.removeRole();
-    return this.userRepo.save(user);
+    return this.userDomainService.저장(user);
   }
 
   /**
@@ -100,7 +91,7 @@ export class UserService {
   ): Promise<{ user: User; role: Role | null }> {
     this.logger.debug(`[findByIdWithRole] 시작 - userId: ${userId}`);
 
-    const user = await this.userRepo.findById(userId);
+    const user = await this.userDomainService.조회(userId);
     if (!user) {
       this.logger.warn(`[findByIdWithRole] User를 찾을 수 없음 - userId: ${userId}`);
       throw new NotFoundException(`User with ID ${userId} not found`);
@@ -115,7 +106,7 @@ export class UserService {
     // 기존 Role이 있는 경우
     if (user.roleId) {
       this.logger.debug(`[findByIdWithRole] 기존 roleId 존재 - roleId: ${user.roleId}`);
-      role = await this.roleRepo.findById(user.roleId);
+      role = await this.roleDomainService.조회(user.roleId);
 
       if (role) {
         this.logger.debug(
@@ -134,7 +125,7 @@ export class UserService {
         `[findByIdWithRole] Role이 없음 - 기본 ${RoleNameEnum.USER} 역할 자동 할당 시작 - userId: ${userId}`,
       );
 
-      const defaultRole = await this.roleRepo.findByName(RoleNameEnum.USER);
+      const defaultRole = await this.roleDomainService.이름조회(RoleNameEnum.USER);
 
       if (!defaultRole) {
         this.logger.error(
@@ -154,7 +145,7 @@ export class UserService {
         );
 
         user.assignRole(defaultRole.id);
-        const savedUser = await this.userRepo.save(user);
+        const savedUser = await this.userDomainService.저장(user);
 
         this.logger.log(
           `[findByIdWithRole] 기본 역할 할당 완료 - userId: ${savedUser.id}, roleId: ${savedUser.roleId}, updatedAt: ${savedUser.updatedAt}`,

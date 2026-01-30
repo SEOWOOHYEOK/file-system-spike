@@ -1,30 +1,21 @@
 import {
   Injectable,
-  Inject,
   ConflictException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
-import {
-  PUBLIC_SHARE_REPOSITORY,
-  type IPublicShareRepository,
-  SharedFileStats,
-} from '../../domain/external-share/repositories/public-share.repository.interface';
-import {
-  EXTERNAL_USER_REPOSITORY,
-  type IExternalUserRepository,
-  PaginationParams,
-  PaginatedResult,
-} from '../../domain/external-share/repositories/external-user.repository.interface';
-import {
-  FILE_REPOSITORY,
-  type IFileRepository,
-} from '../../domain/file/repositories/file.repository.interface';
+import type { SharedFileStats } from '../../domain/external-share/repositories/public-share.repository.interface';
+import type { PaginationParams, PaginatedResult } from '../../common/types/pagination';
 import { PublicShare } from '../../domain/external-share/entities/public-share.entity';
 import { SharePermission } from '../../domain/external-share/type/public-share.type';
 import { PublicShareDomainService } from './public-share-domain.service';
 import { FileState } from '../../domain/file/type/file.type';
+import { FileDomainService } from '../../domain/file';
+import {
+  ExternalUserDomainService,
+  PublicShareDomainService as PublicShareRepositoryService,
+} from '../../domain/external-share';
 
 /**
  * 외부 공유 생성 DTO 
@@ -48,13 +39,10 @@ export interface CreatePublicShareDto {
 @Injectable()
 export class PublicShareManagementService {
   constructor(
-    @Inject(PUBLIC_SHARE_REPOSITORY)
-    private readonly shareRepo: IPublicShareRepository,
-    @Inject(EXTERNAL_USER_REPOSITORY)
-    private readonly userRepo: IExternalUserRepository,
-    @Inject(FILE_REPOSITORY)
-    private readonly fileRepo: IFileRepository,
     private readonly shareDomainService: PublicShareDomainService,
+    private readonly shareRepositoryService: PublicShareRepositoryService,
+    private readonly externalUserDomainService: ExternalUserDomainService,
+    private readonly fileDomainService: FileDomainService,
   ) { }
 
   /**
@@ -65,7 +53,7 @@ export class PublicShareManagementService {
     dto: CreatePublicShareDto,
   ): Promise<PublicShare> {
     // 파일 존재 확인
-    const file = await this.fileRepo.findById(dto.fileId);
+    const file = await this.fileDomainService.조회(dto.fileId);
     if (!file) {
       throw new NotFoundException('파일을 찾을 수 없습니다.');
     }
@@ -75,13 +63,13 @@ export class PublicShareManagementService {
     }
 
     // 외부 사용자 존재 확인
-    const externalUser = await this.userRepo.findById(dto.externalUserId);
+    const externalUser = await this.externalUserDomainService.조회(dto.externalUserId);
     if (!externalUser) {
       throw new NotFoundException('공유 대상 사용자를 찾을 수 없습니다.');
     }
 
     // 중복 공유 확인
-    const existing = await this.shareRepo.findByFileAndExternalUser(
+    const existing = await this.shareRepositoryService.파일외부사용자조회(
       dto.fileId,
       dto.externalUserId,
     );
@@ -108,14 +96,14 @@ export class PublicShareManagementService {
       createdAt: new Date(),
     });
 
-    return this.shareRepo.save(share);
+    return this.shareRepositoryService.저장(share);
   }
 
   /**
    * 공유 취소 (내부 사용자용 - 소유자만)
    */
   async revokeShare(ownerId: string, shareId: string): Promise<PublicShare> {
-    const share = await this.shareRepo.findById(shareId);
+    const share = await this.shareRepositoryService.조회(shareId);
     if (!share) {
       throw new NotFoundException('Share not found');
     }
@@ -125,7 +113,7 @@ export class PublicShareManagementService {
     }
 
     share.revoke();
-    return this.shareRepo.save(share);
+    return this.shareRepositoryService.저장(share);
   }
 
   /**
@@ -142,26 +130,26 @@ export class PublicShareManagementService {
    * 공유 차단 
    */
   async blockShare(adminId: string, shareId: string): Promise<PublicShare> {
-    const share = await this.shareRepo.findById(shareId);
+    const share = await this.shareRepositoryService.조회(shareId);
     if (!share) {
       throw new NotFoundException('Share not found');
     }
 
     share.block(adminId);
-    return this.shareRepo.save(share);
+    return this.shareRepositoryService.저장(share);
   }
 
   /**
    * 차단 해제 
    */
   async unblockShare(shareId: string): Promise<PublicShare> {
-    const share = await this.shareRepo.findById(shareId);
+    const share = await this.shareRepositoryService.조회(shareId);
     if (!share) {
       throw new NotFoundException('Share not found');
     }
 
     share.unblock();
-    return this.shareRepo.save(share);
+    return this.shareRepositoryService.저장(share);
   }
 
   /**
@@ -171,7 +159,7 @@ export class PublicShareManagementService {
     adminId: string,
     fileId: string,
   ): Promise<{ blockedCount: number }> {
-    const blockedCount = await this.shareRepo.blockAllByFileId(fileId, adminId);
+    const blockedCount = await this.shareRepositoryService.파일공유일괄차단(fileId, adminId);
     return { blockedCount };
   }
 
@@ -181,7 +169,7 @@ export class PublicShareManagementService {
   async unblockAllSharesByFile(
     fileId: string,
   ): Promise<{ unblockedCount: number }> {
-    const unblockedCount = await this.shareRepo.unblockAllByFileId(fileId);
+    const unblockedCount = await this.shareRepositoryService.파일공유일괄차단해제(fileId);
     return { unblockedCount };
   }
 
@@ -192,7 +180,7 @@ export class PublicShareManagementService {
     adminId: string,
     externalUserId: string,
   ): Promise<{ blockedCount: number }> {
-    const blockedCount = await this.shareRepo.blockAllByExternalUserId(
+    const blockedCount = await this.shareRepositoryService.외부사용자공유일괄차단(
       externalUserId,
       adminId,
     );
@@ -211,7 +199,7 @@ export class PublicShareManagementService {
    * 공유 상세 조회
    */
   async getPublicShareById(shareId: string): Promise<PublicShare> {
-    const share = await this.shareRepo.findById(shareId);
+    const share = await this.shareRepositoryService.조회(shareId);
     if (!share) {
       throw new NotFoundException('Share not found');
     }
@@ -222,6 +210,6 @@ export class PublicShareManagementService {
    * 특정 파일의 공유 목록
    */
   async getSharesByFileId(fileId: string): Promise<PublicShare[]> {
-    return this.shareRepo.findByFileId(fileId);
+    return this.shareRepositoryService.파일별조회(fileId);
   }
 }

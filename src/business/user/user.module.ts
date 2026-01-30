@@ -2,8 +2,8 @@ import { Module } from '@nestjs/common';
 import { UserService } from './user.service';
 import { UserSyncService } from './user-sync.service';
 import { UserQueryService } from './user-query.service';
-import { UserInfraModule } from '../../infra/database/user-infra.module';
-import { RoleInfraModule } from '../../infra/database/role-infra.module';
+import { UserDomainModule } from '../../domain/user/user.module';
+import { RoleDomainModule } from '../../domain/role/role.module';
 import { OrganizationModule } from '../../integrations/migration/organization/organization.module';
 
 /**
@@ -12,7 +12,7 @@ import { OrganizationModule } from '../../integrations/migration/organization/or
  * User 관련 비즈니스 로직 제공
  */
 @Module({
-  imports: [UserInfraModule, RoleInfraModule, OrganizationModule],
+  imports: [UserDomainModule, RoleDomainModule, OrganizationModule],
   providers: [UserService, UserSyncService, UserQueryService],
   exports: [UserService, UserSyncService, UserQueryService],
 })

@@ -1,8 +1,5 @@
 import { ShareAccessLog, AccessAction } from '../entities/share-access-log.entity';
-import {
-  PaginationParams,
-  PaginatedResult,
-} from './external-user.repository.interface';
+import type { PaginationParams, PaginatedResult } from '../../../common/types/pagination';
 
 /**
  * 접근 로그 필터

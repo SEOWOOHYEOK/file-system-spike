@@ -1,7 +1,4 @@
-import { Injectable, Inject } from '@nestjs/common';
-import {
-  USER_REPOSITORY,
-} from '../../domain/user/repositories/user.repository.interface';
+import { Injectable } from '@nestjs/common';
 import { User } from '../../domain/user/entities/user.entity';
 import {
   Employee,
@@ -9,7 +6,7 @@ import {
 } from '../../integrations/migration/organization/entities/employee.entity';
 import { DomainEmployeeService } from '../../integrations/migration/organization/services/employee.service';
 
-import type { IUserRepository } from '../../domain/user/repositories/user.repository.interface';    
+import { UserDomainService } from '../../domain/user';
 
 /**
  * 동기화 결과 인터페이스
@@ -38,8 +35,7 @@ export interface SyncResult {
 @Injectable()
 export class UserSyncService {
   constructor(
-    @Inject(USER_REPOSITORY)
-    private readonly userRepo: IUserRepository,
+    private readonly userDomainService: UserDomainService,
     private readonly employeeService: DomainEmployeeService,
   ) {}
 
@@ -69,7 +65,7 @@ export class UserSyncService {
     const employees = await this.employeeService.findAll();
 
     // 2. 모든 User 조회
-    const users = await this.userRepo.findAll();
+    const users = await this.userDomainService.전체조회();
     const userMap = new Map<string, User>(users.map((u) => [u.id, u]));
 
     // 3. 변경된 User 수집
@@ -117,7 +113,7 @@ export class UserSyncService {
 
     // 4. 변경된 User 일괄 저장
     if (usersToSave.length > 0) {
-      await this.userRepo.saveMany(usersToSave);
+      await this.userDomainService.다중저장(usersToSave);
     }
 
     result.processingTimeMs = Date.now() - startTime;

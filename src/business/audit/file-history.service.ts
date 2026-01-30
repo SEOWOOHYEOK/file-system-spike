@@ -1,11 +1,10 @@
-import { Injectable, Logger, OnModuleDestroy, Inject } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import {
   FileHistory,
   CreateFileHistoryParams,
 } from '../../domain/audit/entities/file-history.entity';
-import {
-  type IFileHistoryRepository,
-  FILE_HISTORY_REPOSITORY,
+import { FileHistoryDomainService } from '../../domain/audit/service/file-history-domain.service';
+import type {
   FileHistoryFilterOptions,
 } from '../../domain/audit/repositories/file-history.repository.interface';
 import {
@@ -30,8 +29,7 @@ export class FileHistoryService implements OnModuleDestroy {
   private readonly flushIntervalMs = 5000;
 
   constructor(
-    @Inject(FILE_HISTORY_REPOSITORY)
-    private readonly fileHistoryRepository: IFileHistoryRepository,
+    private readonly fileHistoryDomainService: FileHistoryDomainService,
   ) {
     this.startAutoFlush();
   }
@@ -218,7 +216,7 @@ export class FileHistoryService implements OnModuleDestroy {
    */
   async logImmediate(params: CreateFileHistoryParams): Promise<FileHistory> {
     const history = FileHistory.create(params);
-    return this.fileHistoryRepository.save(history);
+    return this.fileHistoryDomainService.저장(history);
   }
 
   /**
@@ -233,7 +231,7 @@ export class FileHistoryService implements OnModuleDestroy {
     this.buffer.length = 0;
 
     try {
-      await this.fileHistoryRepository.saveMany(historiesToSave);
+      await this.fileHistoryDomainService.다중저장(historiesToSave);
       this.logger.debug(`Flushed ${historiesToSave.length} file histories`);
     } catch (error) {
       this.logger.error(
@@ -261,7 +259,7 @@ export class FileHistoryService implements OnModuleDestroy {
    * 다음 버전 번호 조회
    */
   private async getNextVersion(fileId: string): Promise<number> {
-    const latestVersion = await this.fileHistoryRepository.getLatestVersion(fileId);
+    const latestVersion = await this.fileHistoryDomainService.최신버전조회(fileId);
     return latestVersion + 1;
   }
 
@@ -272,14 +270,14 @@ export class FileHistoryService implements OnModuleDestroy {
     filter: FileHistoryFilterOptions,
     pagination: PaginationOptions,
   ): Promise<PaginatedResult<FileHistory>> {
-    return this.fileHistoryRepository.findByFilter(filter, pagination);
+    return this.fileHistoryDomainService.필터조회(filter, pagination);
   }
 
   /**
    * 파일별 이력 조회
    */
   async findByFileId(fileId: string, limit?: number): Promise<FileHistory[]> {
-    return this.fileHistoryRepository.findByFileId(fileId, limit);
+    return this.fileHistoryDomainService.파일별조회(fileId, limit);
   }
 
   /**
@@ -289,13 +287,13 @@ export class FileHistoryService implements OnModuleDestroy {
     fileId: string,
     version: number,
   ): Promise<FileHistory | null> {
-    return this.fileHistoryRepository.findByFileIdAndVersion(fileId, version);
+    return this.fileHistoryDomainService.파일버전조회(fileId, version);
   }
 
   /**
    * 사용자별 변경 이력 조회
    */
   async findByChangedBy(changedBy: string, limit?: number): Promise<FileHistory[]> {
-    return this.fileHistoryRepository.findByChangedBy(changedBy, limit);
+    return this.fileHistoryDomainService.사용자별조회(changedBy, limit);
   }
 }

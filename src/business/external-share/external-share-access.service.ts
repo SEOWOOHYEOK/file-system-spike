@@ -1,28 +1,15 @@
 import {
   Injectable,
-  Inject,
   ForbiddenException,
   NotFoundException,
   UnauthorizedException,
   GoneException,
   HttpException,
   HttpStatus,
+  Inject
 } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
-import {
-  PUBLIC_SHARE_REPOSITORY,
-  type IPublicShareRepository,
-} from '../../domain/external-share/repositories/public-share.repository.interface';
-import {
-  EXTERNAL_USER_REPOSITORY,
-  type IExternalUserRepository,
-  PaginationParams,
-  PaginatedResult,
-} from '../../domain/external-share/repositories/external-user.repository.interface';
-import {
-  SHARE_ACCESS_LOG_REPOSITORY,
-  type IShareAccessLogRepository,
-} from '../../domain/external-share/repositories/share-access-log.repository.interface';
+import type { PaginationParams, PaginatedResult } from '../../common/types/pagination';
 import {
   CONTENT_TOKEN_STORE,
   type IContentTokenStore,
@@ -33,6 +20,11 @@ import {
   AccessAction,
 } from '../../domain/external-share/entities/share-access-log.entity';
 import { SharePermission } from '../../domain/external-share/type/public-share.type';
+import {
+  ExternalUserDomainService,
+  PublicShareDomainService as PublicShareRepositoryService,
+  ShareAccessLogDomainService,
+} from '../../domain/external-share';
 import { PublicShareDomainService } from './public-share-domain.service';
 import { FileDownloadService } from '../file/file-download.service';
 import type { FileEntity } from '../../domain/file';
@@ -95,16 +87,13 @@ export class ExternalShareAccessService {
   private readonly TOKEN_TTL_SECONDS = 60;
 
   constructor(
-    @Inject(PUBLIC_SHARE_REPOSITORY)
-    private readonly shareRepo: IPublicShareRepository,
-    @Inject(EXTERNAL_USER_REPOSITORY)
-    private readonly userRepo: IExternalUserRepository,
-    @Inject(SHARE_ACCESS_LOG_REPOSITORY)
-    private readonly logRepo: IShareAccessLogRepository,
     @Inject(CONTENT_TOKEN_STORE)
     private readonly tokenStore: IContentTokenStore,
     private readonly fileDownloadService: FileDownloadService,
     private readonly shareDomainService: PublicShareDomainService,
+    private readonly shareRepositoryService: PublicShareRepositoryService,
+    private readonly externalUserDomainService: ExternalUserDomainService,
+    private readonly shareAccessLogDomainService: ShareAccessLogDomainService,
   ) {}
 
   /**
@@ -239,7 +228,7 @@ export class ExternalShareAccessService {
       }
 
       // 공유 조회
-      share = await this.shareRepo.findById(shareId);
+      share = await this.shareRepositoryService.조회(shareId);
       if (!share) {
         failReason = 'SHARE_NOT_FOUND';
         throw new NotFoundException('공유를 찾을 수 없습니다.');
@@ -256,7 +245,7 @@ export class ExternalShareAccessService {
       }
 
       // 3. 사용자 상태 검증
-      const user = await this.userRepo.findById(externalUserId);
+      const user = await this.externalUserDomainService.조회(externalUserId);
       if (!user || !user.isActive) {
         failReason = 'USER_BLOCKED';
         throw new ForbiddenException('계정이 비활성화되었습니다.');
@@ -310,7 +299,7 @@ export class ExternalShareAccessService {
       } else {
         share.incrementDownloadCount();
       }
-      await this.shareRepo.save(share);
+      await this.shareRepositoryService.저장(share);
 
       // 9. 성공 로그 기록
       const successLog = ShareAccessLog.createSuccess({
@@ -323,7 +312,7 @@ export class ExternalShareAccessService {
       });
 
       successLog.id = uuidv4();
-      await this.logRepo.save(successLog);
+      await this.shareAccessLogDomainService.저장(successLog);
 
       return {
         success: true,
@@ -354,7 +343,7 @@ export class ExternalShareAccessService {
       });
       failLog.id = uuidv4();
 
-      await this.logRepo.save(failLog);
+      await this.shareAccessLogDomainService.저장(failLog);
 
       throw error;
     }

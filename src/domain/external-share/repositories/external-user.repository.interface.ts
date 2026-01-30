@@ -1,27 +1,5 @@
 import { ExternalUser } from '../entities/external-user.entity';
-
-/**
- * 페이지네이션 요청 파라미터
- */
-export interface PaginationParams {
-  page: number;
-  pageSize: number;
-  sortBy?: string;
-  sortOrder?: 'asc' | 'desc';
-}
-
-/**
- * 페이지네이션 응답
- */
-export interface PaginatedResult<T> {
-  items: T[];
-  page: number;
-  pageSize: number;
-  totalItems: number;
-  totalPages: number;
-  hasNext: boolean;
-  hasPrev: boolean;
-}
+import type { PaginationParams, PaginatedResult } from '../../../common/types/pagination';
 
 /**
  * ExternalUser Repository 인터페이스

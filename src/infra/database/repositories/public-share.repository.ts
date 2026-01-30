@@ -6,10 +6,7 @@ import {
   IPublicShareRepository,
   SharedFileStats,
 } from '../../../domain/external-share/repositories/public-share.repository.interface';
-import {
-  PaginationParams,
-  PaginatedResult,
-} from '../../../domain/external-share/repositories/external-user.repository.interface';
+import type { PaginationParams, PaginatedResult } from '../../../common/types/pagination';
 import { PublicShare } from '../../../domain/external-share/entities/public-share.entity';
 import { PublicShareMapper } from '../mapper/public-share.mapper';
 

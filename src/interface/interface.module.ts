@@ -25,10 +25,12 @@ import { AdminModule } from './controller/admin/admin.module';
 import { BusinessModule } from '../business/business.module';
 import { SSOModule } from '../integrations/sso/sso.module';
 import { OrganizationMigrationModule } from '../integrations/migration/migration.module';
-import { RepositoryModule } from '../infra/database/repository.module';
+import { ExternalShareModule } from '../business/external-share/external-share.module';
+import { ExternalShareDomainModule } from '../domain/external-share/external-share.module';
 
 // 인터셉터
 import { AuditLogInterceptor } from '../common/interceptors';
+import { DomainModule } from '../domain/domain.module';
 
 /**
  * 인터페이스 레이어 통합 모듈
@@ -37,9 +39,9 @@ import { AuditLogInterceptor } from '../common/interceptors';
 @Module({
   imports: [
     // 기능 모듈
+    DomainModule,
     AdminModule,
     BusinessModule,
-    RepositoryModule,
     SSOModule,
     OrganizationMigrationModule,
     ConfigModule,

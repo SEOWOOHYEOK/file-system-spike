@@ -4,12 +4,6 @@
  */
 import { Inject, Injectable, Logger } from '@nestjs/common';
 import {
-  FILE_REPOSITORY,
-} from '../../domain/file/repositories/file.repository.interface';
-import {
-  FILE_STORAGE_OBJECT_REPOSITORY,
-} from '../../domain/storage/file/repositories/file-storage-object.repository.interface';
-import {
   CACHE_STORAGE_PORT,
 } from '../../domain/storage/ports/cache-storage.port';
 import {
@@ -19,10 +13,13 @@ import {
   StorageType,
   FileStorageObjectEntity,
 } from '../../domain/storage/file/file-storage-object.entity';
-import type { IFileStorageObjectRepository } from '../../domain/storage/file/repositories/file-storage-object.repository.interface';
-import type { IFileRepository } from '../../domain/file/repositories/file.repository.interface';
 import type { ICacheStoragePort } from '../../domain/storage/ports/cache-storage.port';
 import type { INasStoragePort } from '../../domain/storage/ports/nas-storage.port';
+import { FileDomainService } from '../../domain/file';
+import {
+  FileCacheStorageDomainService,
+  FileNasStorageDomainService,
+} from '../../domain/storage';
 
 /**
  * 일관성 이슈 타입
@@ -76,10 +73,9 @@ export class StorageConsistencyService {
   private readonly logger = new Logger(StorageConsistencyService.name);
 
   constructor(
-    @Inject(FILE_STORAGE_OBJECT_REPOSITORY)
-    private readonly storageObjectRepo: IFileStorageObjectRepository,
-    @Inject(FILE_REPOSITORY)
-    private readonly fileRepo: IFileRepository,
+    private readonly fileDomainService: FileDomainService,
+    private readonly fileCacheStorageDomainService: FileCacheStorageDomainService,
+    private readonly fileNasStorageDomainService: FileNasStorageDomainService,
     @Inject(CACHE_STORAGE_PORT)
     private readonly cacheStorage: ICacheStoragePort,
     @Inject(NAS_STORAGE_PORT)
@@ -100,9 +96,10 @@ export class StorageConsistencyService {
     let totalChecked = 0;
 
     for (const storageType of storageTypes) {
+      const storageService = this.getStorageDomainService(storageType);
       const storageObjects = params.sample
-        ? await this.storageObjectRepo.findRandomSamples(storageType, params.limit)
-        : await this.storageObjectRepo.findByStorageType(storageType, params.limit, params.offset);
+        ? await storageService.랜덤샘플조회(params.limit)
+        : await storageService.스토리지타입조회(params.limit, params.offset);
 
       totalChecked += storageObjects.length;
 
@@ -130,7 +127,7 @@ export class StorageConsistencyService {
     const issues: ConsistencyIssue[] = [];
 
     // 1. 파일 레코드 조회
-    const file = await this.fileRepo.findById(storageObject.fileId);
+    const file = await this.fileDomainService.조회(storageObject.fileId);
     if (!file) {
       issues.push({
         fileId: storageObject.fileId,
@@ -225,5 +222,13 @@ export class StorageConsistencyService {
     } else {
       return this.nasStorage.파일크기조회(objectKey);
     }
+  }
+
+  private getStorageDomainService(
+    storageType: StorageType,
+  ): FileCacheStorageDomainService | FileNasStorageDomainService {
+    return storageType === StorageType.CACHE
+      ? this.fileCacheStorageDomainService
+      : this.fileNasStorageDomainService;
   }
 }

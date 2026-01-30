@@ -8,6 +8,7 @@ import { RoleModule } from './role/role.module';
 import { UserModule } from './user/user.module';
 import { ExternalShareModule } from './external-share/external-share.module';
 import { AuditModule } from './audit/audit.module';
+import { SyncEventBusinessModule } from './sync-event/sync-event.module';
 
 /**
  * 비즈니스 레이어 통합 모듈
@@ -24,6 +25,7 @@ import { AuditModule } from './audit/audit.module';
     UserModule,
     ExternalShareModule,
     AuditModule,
+    SyncEventBusinessModule,
   ],
   exports: [
     FileBusinessModule,
@@ -35,6 +37,7 @@ import { AuditModule } from './audit/audit.module';
     UserModule,
     ExternalShareModule,
     AuditModule,
+    SyncEventBusinessModule,
   ],
 })
 export class BusinessModule { }

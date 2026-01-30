@@ -47,6 +47,13 @@ export class FileDomainService {
     }
 
     /**
+     * 여러 ID로 파일 조회
+     */
+    async 아이디목록조회(fileIds: string[]): Promise<FileEntity[]> {
+        return this.fileRepository.findByIds(fileIds);
+    }
+
+    /**
      * ID로 파일 조회 (락 획득)
      */
     async 잠금조회(fileId: string): Promise<FileEntity | null> {

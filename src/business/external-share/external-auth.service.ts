@@ -7,10 +7,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
-import {
-  EXTERNAL_USER_REPOSITORY,
-  type IExternalUserRepository,
-} from '../../domain/external-share/repositories/external-user.repository.interface';
+import { ExternalUserDomainService } from '../../domain/external-share';
 import { LoginAttemptService } from './security/login-attempt.service';
 import { TokenBlacklistService } from './security/token-blacklist.service';
 
@@ -81,8 +78,7 @@ export class ExternalAuthService {
   private readonly REFRESH_TOKEN_EXPIRES_IN = 7 * 24 * 60 * 60; // 7일 (초)
 
   constructor(
-    @Inject(EXTERNAL_USER_REPOSITORY)
-    private readonly userRepo: IExternalUserRepository,
+    private readonly externalUserDomainService: ExternalUserDomainService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly loginAttemptService: LoginAttemptService,
@@ -108,7 +104,7 @@ export class ExternalAuthService {
     }
 
     // 2. 사용자 조회
-    const user = await this.userRepo.findByUsername(dto.username);
+    const user = await this.externalUserDomainService.사용자명조회(dto.username);
     if (!user) {
       // 실패 기록 (사용자 존재 여부를 노출하지 않기 위해 동일한 메시지)
       this.loginAttemptService.recordFailedAttempt(dto.username);
@@ -139,7 +135,7 @@ export class ExternalAuthService {
 
     // 마지막 로그인 시간 갱신
     user.updateLastLogin();
-    await this.userRepo.save(user);
+    await this.externalUserDomainService.저장(user);
 
     // 토큰 발급
     const tokens = this.generateTokens(user.id, user.username);
@@ -177,7 +173,7 @@ export class ExternalAuthService {
       }
 
       // 사용자 상태 확인
-      const user = await this.userRepo.findById(payload.sub);
+      const user = await this.externalUserDomainService.조회(payload.sub);
       if (!user || !user.isActive) {
         throw new ForbiddenException('계정이 비활성화되었습니다.');
       }
@@ -234,7 +230,7 @@ export class ExternalAuthService {
     dto: ChangePasswordDto,
     currentAccessToken?: string,
   ): Promise<void> {
-    const user = await this.userRepo.findById(userId);
+    const user = await this.externalUserDomainService.조회(userId);
     if (!user) {
       throw new UnauthorizedException('사용자를 찾을 수 없습니다.');
     }
@@ -251,7 +247,7 @@ export class ExternalAuthService {
     // 새 비밀번호 해시 및 저장
     const newPasswordHash = await bcrypt.hash(dto.newPassword, this.SALT_ROUNDS);
     user.updatePassword(newPasswordHash);
-    await this.userRepo.save(user);
+    await this.externalUserDomainService.저장(user);
 
     // 기존 토큰 무효화
     if (currentAccessToken) {

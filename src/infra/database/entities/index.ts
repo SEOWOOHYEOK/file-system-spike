@@ -9,6 +9,7 @@ export * from './folder-storage-object.orm-entity';
 export * from './sync-event.orm-entity';
 export * from './upload-session.orm-entity';
 export * from './upload-part.orm-entity';
+export * from './user.orm-entity';
 
 // Audit Log Entities
 export * from './audit-log.orm-entity';

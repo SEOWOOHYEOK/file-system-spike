@@ -6,10 +6,7 @@ import {
   IShareAccessLogRepository,
   AccessLogFilter,
 } from '../../../domain/external-share/repositories/share-access-log.repository.interface';
-import {
-  PaginationParams,
-  PaginatedResult,
-} from '../../../domain/external-share/repositories/external-user.repository.interface';
+import type { PaginationParams, PaginatedResult } from '../../../common/types/pagination';
 import { ShareAccessLog } from '../../../domain/external-share/entities/share-access-log.entity';
 import { ShareAccessLogMapper } from '../mapper/share-access-log.mapper';
 

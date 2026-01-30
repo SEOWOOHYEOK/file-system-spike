@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ExternalShareInfraModule } from '../../infra/database/external-share-infra.module';
-import { RepositoryModule } from '../../infra/database/repository.module';
 import { CacheInfraModule } from '../../infra/cache/cache-infra.module';
 import { FileBusinessModule } from '../file/file.module';
 import { AuditModule } from '../audit/audit.module';
+import { ExternalShareDomainModule } from '../../domain/external-share/external-share.module';
+import { FileDomainModule } from '../../domain/file/file.module';
 
 // Services
 import { ExternalUserManagementService } from './external-user-management.service';
@@ -33,8 +33,8 @@ import { TokenBlacklistService } from './security/token-blacklist.service';
  */
 @Module({
   imports: [
-    ExternalShareInfraModule,
-    RepositoryModule,
+    ExternalShareDomainModule,
+    FileDomainModule,
     CacheInfraModule,
     ConfigModule,
     // 파일 다운로드를 위한 FileBusinessModule
@@ -72,8 +72,6 @@ import { TokenBlacklistService } from './security/token-blacklist.service';
     TokenBlacklistService,
   ],
   exports: [
-    // Infra Module (가드에서 Repository 사용)
-    ExternalShareInfraModule,
     // Business Services
     ExternalUserManagementService,
     PublicShareManagementService,

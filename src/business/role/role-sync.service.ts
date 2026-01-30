@@ -1,13 +1,10 @@
-import { Injectable, OnModuleInit, Inject, Logger } from '@nestjs/common';
-import { ROLE_REPOSITORY } from '../../domain/role/repositories/role.repository.interface';
-import { PERMISSION_REPOSITORY } from '../../domain/role/repositories/permission.repository.interface';
+import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
 import { RoleNameEnum, RoleDescriptions } from '../../domain/role/role-name.enum';
 import { PermissionEnum } from '../../domain/role/permission.enum';
 import { Role } from '../../domain/role/entities/role.entity';
 import { v4 as uuidv4 } from 'uuid';
 
-import type { IRoleRepository } from '../../domain/role/repositories/role.repository.interface';
-import type { IPermissionRepository } from '../../domain/role/repositories/permission.repository.interface';
+import { RoleDomainService, PermissionDomainService } from '../../domain/role';
 
 /**
  * 역할별 기본 권한 매핑
@@ -51,10 +48,8 @@ export class RoleSyncService implements OnModuleInit {
 
 
   constructor(
-    @Inject(ROLE_REPOSITORY)
-    private readonly roleRepo: IRoleRepository,
-    @Inject(PERMISSION_REPOSITORY)
-    private readonly permissionRepo: IPermissionRepository,
+    private readonly roleDomainService: RoleDomainService,
+    private readonly permissionDomainService: PermissionDomainService,
   ) {}
 
   async onModuleInit() {
@@ -68,7 +63,7 @@ export class RoleSyncService implements OnModuleInit {
   }
 
   private async syncRole(roleName: RoleNameEnum): Promise<void> {
-    const existing = await this.roleRepo.findByName(roleName);
+    const existing = await this.roleDomainService.이름조회(roleName);
 
     if (existing) {
       this.logger.debug(`Role ${roleName} already exists, skipping`);
@@ -79,7 +74,7 @@ export class RoleSyncService implements OnModuleInit {
     // 해당 역할의 권한들 조회
     const permissionCodes = RolePermissions[roleName];
     const permissions = await Promise.all(
-      permissionCodes.map((code) => this.permissionRepo.findByCode(code)),
+      permissionCodes.map((code) => this.permissionDomainService.코드조회(code)),
     );
 
     const validPermissions = permissions.filter((p) => p !== null);
@@ -91,7 +86,7 @@ export class RoleSyncService implements OnModuleInit {
       permissions: validPermissions,
     });
 
-    await this.roleRepo.save(role);
+    await this.roleDomainService.저장(role);
     this.logger.log(`Created role: ${roleName} with ${validPermissions.length} permissions`);
   }
 }

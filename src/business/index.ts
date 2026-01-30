@@ -11,6 +11,9 @@ export * from './folder';
 // 휴지통 비즈니스
 export * from './trash';
 
+// 동기화 이벤트 비즈니스
+export * from './sync-event';
+
 // 비즈니스 모듈
 export * from './business.module';
 

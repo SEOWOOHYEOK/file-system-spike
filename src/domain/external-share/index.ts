@@ -7,3 +7,9 @@ export * from './entities/share-access-log.entity';
 export * from './repositories/external-user.repository.interface';
 export * from './repositories/public-share.repository.interface';
 export * from './repositories/share-access-log.repository.interface';
+
+// Domain Services
+export * from './service';
+
+// Module
+export * from './external-share.module';

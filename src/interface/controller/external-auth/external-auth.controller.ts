@@ -37,7 +37,7 @@ import {
 @Controller('v1/ext-auth')
 export class ExternalAuthController {
   constructor(
-    private readonly authService: ExternalAuthService,
+    private readonly externalAuthService: ExternalAuthService,
   ) { }
 
   /**
@@ -48,7 +48,7 @@ export class ExternalAuthController {
   async login(
     @Body() dto: ExternalLoginRequestDto,
   ): Promise<ExternalLoginResponseDto> {
-    const result = await this.authService.login(dto);
+    const result = await this.externalAuthService.login(dto);
     return {
       accessToken: result.accessToken,
       refreshToken: result.refreshToken,
@@ -64,7 +64,7 @@ export class ExternalAuthController {
   async refreshToken(
     @Body() dto: ExternalRefreshTokenRequestDto,
   ): Promise<ExternalRefreshTokenResponseDto> {
-    return this.authService.refreshToken(dto);
+    return this.externalAuthService.refreshToken(dto);
   }
 
   /**
@@ -79,7 +79,7 @@ export class ExternalAuthController {
     @Req() req: Request,
   ): Promise<ExternalLogoutResponseDto> {
     const accessToken = req['accessToken'] as string;
-    await this.authService.logout(accessToken, user.id);
+    await this.externalAuthService.logout(accessToken, user.id);
     return { message: 'Logged out successfully' };
   }
 
@@ -96,7 +96,7 @@ export class ExternalAuthController {
     @Req() req: Request,
   ): Promise<ChangePasswordResponseDto> {
     const accessToken = req['accessToken'] as string;
-    await this.authService.changePassword(user.id, dto, accessToken);
+    await this.externalAuthService.changePassword(user.id, dto, accessToken);
     return { message: 'Password changed successfully. Please login again.' };
   }
 }

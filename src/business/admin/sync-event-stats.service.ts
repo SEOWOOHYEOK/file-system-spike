@@ -14,16 +14,13 @@
  * ============================================================
  */
 
-import { Inject, Injectable } from '@nestjs/common';
-import {
-  SYNC_EVENT_REPOSITORY,
-} from '../../domain/sync-event/repositories/sync-event.repository.interface';
+import { Injectable } from '@nestjs/common';
 import {
   SyncEventEntity,
   SyncEventStatus,
   SyncEventType,
 } from '../../domain/sync-event/entities/sync-event.entity';
-import type { ISyncEventRepository } from '../../domain/sync-event/repositories/sync-event.repository.interface';
+import { SyncEventDomainService } from '../../domain/sync-event';
 /**
  * 이벤트 조회 결과
  */
@@ -89,8 +86,7 @@ const STUCK_PROCESSING_MS = 30 * 60 * 1000; // PROCESSING 상태에서 30분 이
 @Injectable()
 export class SyncEventStatsService {
   constructor(
-    @Inject(SYNC_EVENT_REPOSITORY)
-    private readonly syncEventRepo: ISyncEventRepository,
+    private readonly syncEventDomainService: SyncEventDomainService,
   ) {}
 
   /**
@@ -111,14 +107,14 @@ export class SyncEventStatsService {
 
     if (params.status) {
       // 특정 상태만 조회
-      events = await this.syncEventRepo.findByStatus(params.status);
+      events = await this.syncEventDomainService.상태별조회(params.status);
     } else {
       // 모든 상태 조회 (PENDING, PROCESSING, FAILED, DONE)
       const [pending, processing, failed, done] = await Promise.all([
-        this.syncEventRepo.findByStatus(SyncEventStatus.PENDING),
-        this.syncEventRepo.findByStatus(SyncEventStatus.PROCESSING),
-        this.syncEventRepo.findByStatus(SyncEventStatus.FAILED),
-        this.syncEventRepo.findByStatus(SyncEventStatus.DONE),
+        this.syncEventDomainService.상태별조회(SyncEventStatus.PENDING),
+        this.syncEventDomainService.상태별조회(SyncEventStatus.PROCESSING),
+        this.syncEventDomainService.상태별조회(SyncEventStatus.FAILED),
+        this.syncEventDomainService.상태별조회(SyncEventStatus.DONE),
       ]);
       events = [...pending, ...processing, ...failed, ...done];
     }

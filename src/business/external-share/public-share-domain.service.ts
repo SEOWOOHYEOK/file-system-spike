@@ -8,20 +8,13 @@
  * - 여러 Aggregate 조합은 비즈니스 레이어에서 담당
  */
 
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { PublicShare } from '../../domain/external-share/entities/public-share.entity';
+import type { PaginationParams, PaginatedResult } from '../../common/types/pagination';
+import { FileDomainService } from '../../domain/file';
 import {
-  PUBLIC_SHARE_REPOSITORY,
-  type IPublicShareRepository,
-} from '../../domain/external-share/repositories/public-share.repository.interface';
-import {
-  PaginationParams,
-  PaginatedResult,
-} from '../../domain/external-share/repositories/external-user.repository.interface';
-import {
-  FILE_REPOSITORY,
-  type IFileRepository,
-} from '../../domain/file/repositories/file.repository.interface';
+  PublicShareDomainService as PublicShareRepositoryService,
+} from '../../domain/external-share';
 import type { FileEntity } from '../../domain/file/entities/file.entity';
 
 /**
@@ -37,10 +30,8 @@ export interface FileValidationResult {
 @Injectable()
 export class PublicShareDomainService {
   constructor(
-    @Inject(PUBLIC_SHARE_REPOSITORY)
-    private readonly shareRepo: IPublicShareRepository,
-    @Inject(FILE_REPOSITORY)
-    private readonly fileRepo: IFileRepository,
+    private readonly shareRepositoryService: PublicShareRepositoryService,
+    private readonly fileDomainService: FileDomainService,
   ) {}
 
   // ============================================
@@ -52,7 +43,7 @@ export class PublicShareDomainService {
    * ID로 공유 조회 + 파일 메타데이터 채움
    */
   async findALLWithFile(pagination: PaginationParams): Promise<PaginatedResult<PublicShare>> {
-    const result = await this.shareRepo.findAll(pagination);
+    const result = await this.shareRepositoryService.전체조회(pagination);
 
 
     await this.enrichSharesWithFileMetadata(result.items);
@@ -63,7 +54,7 @@ export class PublicShareDomainService {
    * ID로 공유 조회 + 파일 메타데이터 채움
    */
   async findByIdWithFile(id: string): Promise<PublicShare | null> {
-    const share = await this.shareRepo.findById(id);
+    const share = await this.shareRepositoryService.조회(id);
     if (!share) {
       return null;
     }
@@ -79,7 +70,7 @@ export class PublicShareDomainService {
     externalUserId: string,
     pagination: PaginationParams,
   ): Promise<PaginatedResult<PublicShare>> {
-    const result = await this.shareRepo.findByExternalUser(
+    const result = await this.shareRepositoryService.외부사용자별조회(
       externalUserId,
       pagination,
     );
@@ -97,7 +88,7 @@ export class PublicShareDomainService {
     ownerId: string,
     pagination: PaginationParams,
   ): Promise<PaginatedResult<PublicShare>> {
-    const result = await this.shareRepo.findByOwner(ownerId, pagination);
+    const result = await this.shareRepositoryService.소유자별조회(ownerId, pagination);
 
     // 배치로 파일 정보 조회 (N+1 방지)
     await this.enrichSharesWithFileMetadata(result.items);
@@ -117,7 +108,7 @@ export class PublicShareDomainService {
    * - ACTIVE 상태 여부 (휴지통/삭제됨 아님)
    */
   async validateFileForShare(fileId: string): Promise<FileValidationResult> {
-    const file = await this.fileRepo.findById(fileId);
+    const file = await this.fileDomainService.조회(fileId);
 
     if (!file) {
       return {
@@ -160,7 +151,7 @@ export class PublicShareDomainService {
    * 단일 share에 파일 메타데이터 채움
    */
   private async enrichShareWithFileMetadata(share: PublicShare): Promise<void> {
-    const file = await this.fileRepo.findById(share.fileId);
+    const file = await this.fileDomainService.조회(share.fileId);
     if (file) {
       share.fileName = file.name;
       share.mimeType = file.mimeType;
@@ -180,7 +171,7 @@ export class PublicShareDomainService {
     const fileIds = [...new Set(shares.map((s) => s.fileId))];
 
     // 배치로 파일 조회
-    const files = await this.fileRepo.findByIds(fileIds);
+    const files = await this.fileDomainService.아이디목록조회(fileIds);
 
     // fileId -> FileEntity 맵 생성
     const fileMap = new Map<string, FileEntity>();

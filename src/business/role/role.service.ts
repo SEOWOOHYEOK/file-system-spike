@@ -1,28 +1,25 @@
-import { Injectable, Inject, ConflictException, NotFoundException } from '@nestjs/common';
-import { ROLE_REPOSITORY } from '../../domain/role/repositories/role.repository.interface';
-import { PERMISSION_REPOSITORY } from '../../domain/role/repositories/permission.repository.interface';
+import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
 import { CreateRoleDto } from '../../domain/role/dto/create-role.dto';
 import { Role } from '../../domain/role/entities/role.entity';
 import { PermissionEnum } from '../../domain/role/permission.enum';
 import { v4 as uuidv4 } from 'uuid';
 
-import type { IRoleRepository } from '../../domain/role/repositories/role.repository.interface';
-import type { IPermissionRepository } from '../../domain/role/repositories/permission.repository.interface';
+import { RoleDomainService, PermissionDomainService } from '../../domain/role';
 
 @Injectable()
 export class RoleService {
   constructor(
-    @Inject(ROLE_REPOSITORY) private readonly roleRepo: IRoleRepository,
-    @Inject(PERMISSION_REPOSITORY) private readonly permRepo: IPermissionRepository,
+    private readonly roleDomainService: RoleDomainService,
+    private readonly permissionDomainService: PermissionDomainService,
   ) { }
 
   async createRole(dto: CreateRoleDto): Promise<Role> {
-    const existing = await this.roleRepo.findByName(dto.name);
+    const existing = await this.roleDomainService.이름조회(dto.name);
     if (existing) {
       throw new ConflictException(`Role with name ${dto.name} already exists`);
     }
 
-    const permissions = await this.permRepo.findByCodes(dto.permissionCodes);
+    const permissions = await this.permissionDomainService.코드목록조회(dto.permissionCodes);
 
     const role = new Role({
       id: uuidv4(),
@@ -31,15 +28,15 @@ export class RoleService {
       permissions: permissions
     });
 
-    return this.roleRepo.save(role);
+    return this.roleDomainService.저장(role);
   }
 
   async findAll(): Promise<Role[]> {
-    return this.roleRepo.findAll();
+    return this.roleDomainService.전체조회();
   }
 
   async findById(id: string): Promise<Role> {
-    const role = await this.roleRepo.findById(id);
+    const role = await this.roleDomainService.조회(id);
     if (!role) {
       throw new NotFoundException(`Role with ID ${id} not found`);
     }
@@ -47,11 +44,11 @@ export class RoleService {
   }
 
   async delete(id: string): Promise<void> {
-    await this.roleRepo.delete(id);
+    await this.roleDomainService.삭제(id);
   }
 
   async getUserPermissions(userId: string): Promise<PermissionEnum[]> {
-    const roles = await this.roleRepo.findByUserId(userId);
+    const roles = await this.roleDomainService.사용자별조회(userId);
     const permissions = new Set<PermissionEnum>();
 
     for (const role of roles) {

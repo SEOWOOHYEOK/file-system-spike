@@ -12,7 +12,7 @@ import {
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../../common/guards';
 import { ExternalUserManagementService } from '../../../../business/external-share/external-user-management.service';
-import { PaginationParams } from '../../../../domain/external-share/repositories/external-user.repository.interface';
+import type { PaginationParams } from '../../../../common/types/pagination';
 import { User } from '../../../../common/decorators/user.decorator';
 import {
   ApiCreateExternalUser,

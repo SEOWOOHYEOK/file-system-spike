@@ -2,10 +2,10 @@ import { Module } from '@nestjs/common';
 import { RoleService } from './role.service';
 import { PermissionSyncService } from './permission-sync.service';
 import { RoleSyncService } from './role-sync.service';
-import { RoleInfraModule } from '../../infra/database/role-infra.module';
+import { RoleDomainModule } from '../../domain/role/role.module';
 
 @Module({
-  imports: [RoleInfraModule],
+  imports: [RoleDomainModule],
   providers: [RoleService, PermissionSyncService, RoleSyncService],
   exports: [RoleService]
 })

@@ -1,8 +1,5 @@
 import { PublicShare } from '../entities/public-share.entity';
-import {
-  PaginationParams,
-  PaginatedResult,
-} from './external-user.repository.interface';
+import type { PaginationParams, PaginatedResult } from '../../../common/types/pagination';
 
 /**
  * 공유된 파일 통계 정보

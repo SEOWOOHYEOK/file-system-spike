@@ -1,11 +1,10 @@
-import { Injectable, Logger, OnModuleDestroy, Inject } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import {
   AuditLog,
   CreateAuditLogParams,
 } from '../../domain/audit/entities/audit-log.entity';
-import {
-  type IAuditLogRepository,
-  AUDIT_LOG_REPOSITORY,
+import { AuditLogDomainService } from '../../domain/audit/service/audit-log-domain.service';
+import type {
   AuditLogFilterOptions,
   PaginationOptions,
   PaginatedResult,
@@ -42,8 +41,7 @@ export class AuditLogService implements OnModuleDestroy {
   private readonly config: LogBufferConfig;
 
   constructor(
-    @Inject(AUDIT_LOG_REPOSITORY)
-    private readonly auditLogRepository: IAuditLogRepository,
+    private readonly auditLogDomainService: AuditLogDomainService,
   ) {
     this.config = DEFAULT_BUFFER_CONFIG;
     this.startAutoFlush();
@@ -107,7 +105,7 @@ export class AuditLogService implements OnModuleDestroy {
    */
   async logImmediate(params: CreateAuditLogParams): Promise<AuditLog> {
     const log = AuditLog.create(params);
-    return this.auditLogRepository.save(log);
+    return this.auditLogDomainService.저장(log);
   }
 
   /**
@@ -122,7 +120,7 @@ export class AuditLogService implements OnModuleDestroy {
     this.buffer.length = 0;
 
     try {
-      await this.auditLogRepository.saveMany(logsToSave);
+      await this.auditLogDomainService.다중저장(logsToSave);
       this.logger.debug(`Flushed ${logsToSave.length} audit logs`);
     } catch (error) {
       this.logger.error(`Failed to flush ${logsToSave.length} audit logs`, error);
@@ -154,7 +152,7 @@ export class AuditLogService implements OnModuleDestroy {
    * ID로 로그 조회
    */
   async findById(id: string): Promise<AuditLog | null> {
-    return this.auditLogRepository.findById(id);
+    return this.auditLogDomainService.조회(id);
   }
 
   /**
@@ -164,14 +162,14 @@ export class AuditLogService implements OnModuleDestroy {
     filter: AuditLogFilterOptions,
     pagination: PaginationOptions,
   ): Promise<PaginatedResult<AuditLog>> {
-    return this.auditLogRepository.findByFilter(filter, pagination);
+    return this.auditLogDomainService.필터조회(filter, pagination);
   }
 
   /**
    * 사용자별 최근 로그 조회
    */
   async findByUserId(userId: string, limit?: number): Promise<AuditLog[]> {
-    return this.auditLogRepository.findByUserId(userId, limit);
+    return this.auditLogDomainService.사용자별조회(userId, limit);
   }
 
   /**
@@ -182,14 +180,14 @@ export class AuditLogService implements OnModuleDestroy {
     targetId: string,
     limit?: number,
   ): Promise<AuditLog[]> {
-    return this.auditLogRepository.findByTarget(targetType, targetId, limit);
+    return this.auditLogDomainService.대상별조회(targetType, targetId, limit);
   }
 
   /**
    * 세션별 로그 조회
    */
   async findBySessionId(sessionId: string): Promise<AuditLog[]> {
-    return this.auditLogRepository.findBySessionId(sessionId);
+    return this.auditLogDomainService.세션별조회(sessionId);
   }
 
   /**
@@ -200,7 +198,7 @@ export class AuditLogService implements OnModuleDestroy {
     action: AuditAction,
     since: Date,
   ): Promise<number> {
-    return this.auditLogRepository.countByUserAndAction(userId, action, since);
+    return this.auditLogDomainService.사용자액션카운트(userId, action, since);
   }
 
   /**
@@ -211,6 +209,6 @@ export class AuditLogService implements OnModuleDestroy {
     actions: AuditAction[],
     since: Date,
   ): Promise<number> {
-    return this.auditLogRepository.countByUserActions(userId, actions, since);
+    return this.auditLogDomainService.사용자액션들카운트(userId, actions, since);
   }
 }

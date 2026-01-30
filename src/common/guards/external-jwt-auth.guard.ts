@@ -9,10 +9,7 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
-import {
-  EXTERNAL_USER_REPOSITORY,
-  type IExternalUserRepository,
-} from '../../domain/external-share/repositories/external-user.repository.interface';
+import { ExternalUserDomainService } from '../../domain/external-share';
 import { TokenBlacklistService } from '../../business/external-share/security/token-blacklist.service';
 import { RequestContext } from '../context/request-context';
 
@@ -34,8 +31,7 @@ export class ExternalJwtAuthGuard implements CanActivate {
   constructor(
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
-    @Inject(EXTERNAL_USER_REPOSITORY)
-    private readonly externalUserRepo: IExternalUserRepository,
+    private readonly externalUserDomainService: ExternalUserDomainService,
     private readonly tokenBlacklistService: TokenBlacklistService,
   ) {}
 
@@ -82,7 +78,7 @@ export class ExternalJwtAuthGuard implements CanActivate {
       }
 
       // 계정 활성 상태 실시간 검증
-      const user = await this.externalUserRepo.findById(userId);
+      const user = await this.externalUserDomainService.조회(userId);
       if (!user) {
         throw new UnauthorizedException('사용자를 찾을 수 없습니다.');
       }

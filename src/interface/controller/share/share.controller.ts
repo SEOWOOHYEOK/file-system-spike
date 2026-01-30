@@ -13,7 +13,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../common/guards';
 import { PublicShareManagementService } from '../../../business/external-share/public-share-management.service';
 import { ExternalUserManagementService } from '../../../business/external-share/external-user-management.service';
-import { PaginationParams } from '../../../domain/external-share/repositories/external-user.repository.interface';
+import type { PaginationParams } from '../../../common/types/pagination';
 import { User } from '../../../common/decorators/user.decorator';
 import {
   ApiCreatePublicShare,
@@ -43,8 +43,7 @@ import { TargetType } from '../../../domain/audit/enums/common.enum';
 @UseGuards(JwtAuthGuard)
 export class PublicShareController {
   constructor(
-    private readonly shareService: PublicShareManagementService,
-    private readonly userService: ExternalUserManagementService,
+    private readonly shareService: PublicShareManagementService
   ) { }
 
   /**

@@ -1,11 +1,10 @@
-import { Injectable, Logger, OnModuleDestroy, Inject } from '@nestjs/common';
+import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import {
   SecurityLog,
   CreateSecurityLogParams,
 } from '../../domain/audit/entities/security-log.entity';
-import {
-  type ISecurityLogRepository,
-  SECURITY_LOG_REPOSITORY,
+import { SecurityLogDomainService } from '../../domain/audit/service/security-log-domain.service';
+import type {
   SecurityLogFilterOptions,
 } from '../../domain/audit/repositories/security-log.repository.interface';
 import {
@@ -28,8 +27,7 @@ export class SecurityLogService implements OnModuleDestroy {
   private readonly flushIntervalMs = 3000; // 3초 (보안 로그는 더 빠르게)
 
   constructor(
-    @Inject(SECURITY_LOG_REPOSITORY)
-    private readonly securityLogRepository: ISecurityLogRepository,
+    private readonly securityLogDomainService: SecurityLogDomainService,
   ) {
     this.startAutoFlush();
   }
@@ -121,7 +119,7 @@ export class SecurityLogService implements OnModuleDestroy {
    */
   async logImmediate(params: CreateSecurityLogParams): Promise<SecurityLog> {
     const log = SecurityLog.create(params);
-    return this.securityLogRepository.save(log);
+    return this.securityLogDomainService.저장(log);
   }
 
   /**
@@ -136,7 +134,7 @@ export class SecurityLogService implements OnModuleDestroy {
     this.buffer.length = 0;
 
     try {
-      await this.securityLogRepository.saveMany(logsToSave);
+      await this.securityLogDomainService.다중저장(logsToSave);
       this.logger.debug(`Flushed ${logsToSave.length} security logs`);
     } catch (error) {
       this.logger.error(`Failed to flush ${logsToSave.length} security logs`, error);
@@ -164,21 +162,21 @@ export class SecurityLogService implements OnModuleDestroy {
     filter: SecurityLogFilterOptions,
     pagination: PaginationOptions,
   ): Promise<PaginatedResult<SecurityLog>> {
-    return this.securityLogRepository.findByFilter(filter, pagination);
+    return this.securityLogDomainService.필터조회(filter, pagination);
   }
 
   /**
    * 사용자별 최근 보안 로그 조회
    */
   async findByUserId(userId: string, limit?: number): Promise<SecurityLog[]> {
-    return this.securityLogRepository.findByUserId(userId, limit);
+    return this.securityLogDomainService.사용자별조회(userId, limit);
   }
 
   /**
    * IP별 로그인 실패 횟수
    */
   async countLoginFailuresByIp(ipAddress: string, since: Date): Promise<number> {
-    return this.securityLogRepository.countLoginFailuresByIp(ipAddress, since);
+    return this.securityLogDomainService.IP로그인실패카운트(ipAddress, since);
   }
 
   /**
@@ -188,7 +186,7 @@ export class SecurityLogService implements OnModuleDestroy {
     usernameAttempted: string,
     since: Date,
   ): Promise<number> {
-    return this.securityLogRepository.countLoginFailuresByUsername(
+    return this.securityLogDomainService.사용자명로그인실패카운트(
       usernameAttempted,
       since,
     );
