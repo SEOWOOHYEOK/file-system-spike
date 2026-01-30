@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, Logger, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, Logger, InternalServerErrorException, ConflictException } from '@nestjs/common';
 import {
   StorageType,
   AvailabilityStatus,
@@ -139,11 +139,21 @@ export class FileDownloadService {
       StorageType.NAS,
     );
 
+    // 3-B-1. NAS 동기화 중인 경우 - 사용자에게 재시도 안내
+    if (nasObject && nasObject.isSyncing()) {
+      this.logger.warn(`File is syncing to NAS: ${fileId}`);
+      throw new ConflictException({
+        code: 'FILE_SYNCING',
+        message: '파일이 NAS에 동기화 중입니다. 잠시 후 다시 시도해주세요.',
+      });
+    }
+
+    // 3-B-2. NAS 사용 가능 - 다운로드 진행
     if (nasObject && nasObject.isAvailable()) {
       return this.downloadFromNas(file, nasObject);
     }
 
-    // 3-C. NAS 객체가 있지만 AVAILABLE이 아닌 경우
+    // 3-C. NAS 객체가 있지만 AVAILABLE이 아닌 경우 (ERROR, MISSING, EVICTING 등)
     if (nasObject && !nasObject.isAvailable()) {
       this.logger.error(
         `NAS storage not available for file: ${fileId}, status: ${nasObject.availabilityStatus}`,
