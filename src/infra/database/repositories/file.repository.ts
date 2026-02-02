@@ -157,4 +157,30 @@ export class FileRepository implements IFileRepository {
       .execute();
     return result.affected || 0;
   }
+
+  async searchByNamePattern(
+    namePattern: string,
+    limit: number,
+    offset: number,
+  ): Promise<{ items: FileEntity[]; total: number }> {
+    const qb = this.repository
+      .createQueryBuilder('file')
+      .where('file.name LIKE :pattern', { pattern: `%${namePattern}%` })
+      .andWhere('file.state = :state', { state: FileState.ACTIVE });
+
+    // 총 개수 조회
+    const total = await qb.getCount();
+
+    // 페이지네이션 적용하여 결과 조회
+    const orms = await qb
+      .orderBy('file.updatedAt', 'DESC')
+      .skip(offset)
+      .take(limit)
+      .getMany();
+
+    return {
+      items: orms.map((orm) => this.toDomain(orm)),
+      total,
+    };
+  }
 }

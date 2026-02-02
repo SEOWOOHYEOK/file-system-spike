@@ -445,3 +445,123 @@ export const ApiFolderDelete = () =>
     }),
     ApiResponse({ status: 404, description: '폴더를 찾을 수 없음' }),
   );
+
+/**
+ * 파일/폴더 검색 API 문서
+ */
+export const ApiFolderSearch = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: '파일/폴더 검색',
+      description: `
+키워드로 파일명, 폴더명을 검색합니다.
+
+### 검색 옵션
+- \`keyword\`: 검색어 (필수, 최소 2자)
+- \`type\`: 검색 대상 (\`file\`, \`folder\`, 미지정 시 전체)
+
+### 정렬 옵션 (sortBy)
+| 값 | 설명 |
+|---|---|
+| \`name\` | 이름순 |
+| \`type\` | 유형순 |
+| \`updatedAt\` | 수정일순 (기본값) |
+| \`size\` | 크기순 (파일만) |
+
+### 정렬 순서 (sortOrder)
+| 값 | 설명 |
+|---|---|
+| \`asc\` | 오름차순 |
+| \`desc\` | 내림차순 (기본값) |
+
+### 페이지네이션
+- \`page\`: 페이지 번호 (1부터 시작, 기본값: 1)
+- \`pageSize\`: 페이지 크기 (기본값: 50, 최대: 100)
+
+### 응답 정보
+- 검색 결과에는 해당 항목의 위치(path) 정보가 포함됩니다.
+- **폴더**: path 필드에 해당 폴더의 전체 경로, parentId로 상위 폴더 이동 가능
+- **파일**: path 필드에 해당 파일이 위치한 폴더의 경로, folderId로 해당 폴더 이동 가능
+      `,
+    }),
+    ApiQuery({
+      name: 'keyword',
+      required: true,
+      type: String,
+      description: '검색 키워드 (최소 2자)',
+      example: '회의록',
+    }),
+    ApiQuery({
+      name: 'type',
+      required: false,
+      enum: ['file', 'folder'],
+      description: '검색 대상 타입 (미지정 시 전체 검색)',
+    }),
+    ApiQuery({
+      name: 'sortBy',
+      required: false,
+      enum: ['name', 'type', 'createdAt', 'updatedAt', 'size'],
+      description: '정렬 기준',
+      example: 'updatedAt',
+    }),
+    ApiQuery({
+      name: 'sortOrder',
+      required: false,
+      enum: ['asc', 'desc'],
+      description: '정렬 순서',
+      example: 'desc',
+    }),
+    ApiQuery({
+      name: 'page',
+      required: false,
+      type: Number,
+      description: '페이지 번호',
+      example: 1,
+    }),
+    ApiQuery({
+      name: 'pageSize',
+      required: false,
+      type: Number,
+      description: '페이지 크기 (1~100)',
+      example: 50,
+    }),
+    ApiResponse({
+      status: 200,
+      description: '검색 성공',
+      schema: {
+        type: 'object',
+        properties: {
+          results: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', example: 'uuid-123' },
+                name: { type: 'string', example: '2024년 회의록.docx' },
+                type: { type: 'string', enum: ['file', 'folder'], example: 'file' },
+                path: { type: 'string', example: '/Documents/회의', description: '파일/폴더 위치 경로' },
+                folderId: { type: 'string', example: 'folder-uuid', description: '파일인 경우: 소속 폴더 ID' },
+                parentId: { type: 'string', example: 'parent-uuid', description: '폴더인 경우: 상위 폴더 ID' },
+                size: { type: 'number', example: 102400, description: '파일인 경우: 파일 크기 (bytes)' },
+                mimeType: { type: 'string', example: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', description: '파일인 경우: MIME 타입' },
+                updatedAt: { type: 'string', example: '2024-01-23T10:00:00.000Z' },
+              },
+            },
+          },
+          pagination: {
+            type: 'object',
+            properties: {
+              page: { type: 'number', example: 1 },
+              pageSize: { type: 'number', example: 50 },
+              totalItems: { type: 'number', example: 125 },
+              totalPages: { type: 'number', example: 3 },
+              hasNext: { type: 'boolean', example: true },
+              hasPrev: { type: 'boolean', example: false },
+            },
+          },
+          keyword: { type: 'string', example: '회의록' },
+        },
+      },
+    }),
+    ApiResponse({ status: 400, description: '잘못된 검색 파라미터 (키워드 2자 미만 등)' }),
+  );

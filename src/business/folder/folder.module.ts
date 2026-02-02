@@ -8,6 +8,7 @@ import { TrashDomainModule } from '../../domain/trash/trash.module';
 import { AuditModule } from '../audit/audit.module';
 import { FolderQueryService } from './folder-query.service';
 import { FolderCommandService } from './folder-command.service';
+import { SearchService } from './search.service';
 
 /**
  * 폴더 비즈니스 모듈
@@ -23,7 +24,7 @@ import { FolderCommandService } from './folder-command.service';
     TrashDomainModule,
     AuditModule,
   ],
-  providers: [FolderQueryService, FolderCommandService],
-  exports: [FolderQueryService, FolderCommandService],
+  providers: [FolderQueryService, FolderCommandService, SearchService],
+  exports: [FolderQueryService, FolderCommandService, SearchService],
 })
 export class FolderBusinessModule {}

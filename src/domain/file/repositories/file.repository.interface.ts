@@ -80,6 +80,19 @@ export interface IFileRepository {
    * 다수 파일 상태 일괄 변경
    */
   updateStateByFolderIds(folderIds: string[], state: FileState, options?: TransactionOptions): Promise<number>;
+
+  /**
+   * 이름 패턴으로 파일 검색 (ACTIVE 상태만)
+   * @param namePattern 검색할 이름 패턴 (LIKE 검색)
+   * @param limit 최대 결과 수
+   * @param offset 오프셋
+   * @returns 검색된 파일 목록과 총 개수
+   */
+  searchByNamePattern(
+    namePattern: string,
+    limit: number,
+    offset: number,
+  ): Promise<{ items: FileEntity[]; total: number }>;
 }
 
 /**

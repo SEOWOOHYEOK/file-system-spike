@@ -11,7 +11,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { FolderQueryService, FolderCommandService } from '../../../business/folder';
+import { FolderQueryService, FolderCommandService, SearchService } from '../../../business/folder';
 import {
   CreateFolderRequest,
   CreateFolderResponse,
@@ -23,6 +23,8 @@ import {
   MoveFolderRequest,
   MoveFolderResponse,
   FolderState,
+  SearchQuery,
+  SearchResponse,
 } from '../../../domain/folder';
 import {
   ApiFolderCreate,
@@ -31,6 +33,7 @@ import {
   ApiFolderRename,
   ApiFolderMove,
   ApiFolderDelete,
+  ApiFolderSearch,
 } from './folder.swagger';
 import { AuditAction } from '../../../common/decorators';
 import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
@@ -46,6 +49,7 @@ export class FolderController {
   constructor(
     private readonly folderQueryService: FolderQueryService,
     private readonly folderCommandService: FolderCommandService,
+    private readonly searchService: SearchService,
   ) { }
 
   /**
@@ -78,6 +82,15 @@ export class FolderController {
   })
   async getRootFolderInfo(): Promise<FolderInfoResponse> {
     return this.folderQueryService.getRootFolderInfo();
+  }
+
+  /**
+   * GET /folders/search - 파일/폴더 검색
+   */
+  @Get('search')
+  @ApiFolderSearch()
+  async search(@Query() query: SearchQuery): Promise<SearchResponse> {
+    return this.searchService.search(query);
   }
 
   /**

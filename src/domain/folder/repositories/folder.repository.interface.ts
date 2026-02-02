@@ -94,6 +94,19 @@ export interface IFolderRepository {
     folderCount: number;
     totalSize: number;
   }>;
+
+  /**
+   * 이름 패턴으로 폴더 검색 (ACTIVE 상태만)
+   * @param namePattern 검색할 이름 패턴 (LIKE 검색)
+   * @param limit 최대 결과 수
+   * @param offset 오프셋
+   * @returns 검색된 폴더 목록과 총 개수
+   */
+  searchByNamePattern(
+    namePattern: string,
+    limit: number,
+    offset: number,
+  ): Promise<{ items: FolderEntity[]; total: number }>;
 }
 
 /**

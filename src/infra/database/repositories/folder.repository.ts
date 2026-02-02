@@ -223,4 +223,30 @@ export class FolderRepository implements IFolderRepository {
       totalSize: Number(sizeResult?.totalSize || 0),
     };
   }
+
+  async searchByNamePattern(
+    namePattern: string,
+    limit: number,
+    offset: number,
+  ): Promise<{ items: FolderEntity[]; total: number }> {
+    const qb = this.repository
+      .createQueryBuilder('folder')
+      .where('folder.name LIKE :pattern', { pattern: `%${namePattern}%` })
+      .andWhere('folder.state = :state', { state: FolderState.ACTIVE });
+
+    // 총 개수 조회
+    const total = await qb.getCount();
+
+    // 페이지네이션 적용하여 결과 조회
+    const orms = await qb
+      .orderBy('folder.updatedAt', 'DESC')
+      .skip(offset)
+      .take(limit)
+      .getMany();
+
+    return {
+      items: orms.map((orm) => this.toDomain(orm)),
+      total,
+    };
+  }
 }
