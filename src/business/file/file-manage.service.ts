@@ -27,6 +27,10 @@ import {
   SYNC_EVENT_REPOSITORY,
 } from '../../domain/sync-event';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
+import {
+  NAS_FILE_SYNC_QUEUE_PREFIX,
+  type NasFileSyncJobData,
+} from '../worker/nas-file-sync.worker';
 import type { IFileRepository } from '../../domain/file';
 import type { IFileStorageObjectRepository } from '../../domain/storage';
 import type { IFolderRepository } from '../../domain/folder';
@@ -56,7 +60,7 @@ export class FileManageService {
     @Inject(JOB_QUEUE_PORT)
     private readonly jobQueue: IJobQueuePort,
     private readonly dataSource: DataSource,
-  ) {}
+  ) { }
 
   /**
    * 파일명 변경
@@ -127,9 +131,10 @@ export class FileManageService {
         StorageType.NAS,
         txOptions,
       );
+      
       if (nasObject) {
         oldObjectKey = nasObject.objectKey;
-        const timestamp = this.extractTimestampFromObjectKey(oldObjectKey) ?? this.formatTimestamp(file.createdAt);
+        const timestamp = this.extractTimestampFromObjectKey(oldObjectKey);
         newObjectKey = `${timestamp}__${finalName}`;
         nasObject.updateObjectKey(newObjectKey);
         nasObject.updateStatus(AvailabilityStatus.SYNCING);
@@ -154,15 +159,19 @@ export class FileManageService {
       await queryRunner.commitTransaction();
       this.logger.debug(`File renamed: ${fileId} -> ${finalName}`);
 
-      // 8. Bull 큐 등록 (NAS_SYNC_RENAME) - 트랜잭션 커밋 후 실행
+      // 8. Bull 큐 등록 (파일 기반 통합 큐) - 트랜잭션 커밋 후 실행
       if (oldObjectKey && newObjectKey) {
-        await this.jobQueue.addJob('NAS_SYNC_RENAME', {
-          fileId,
-          syncEventId,
-          oldObjectKey,
-          newObjectKey,
-        });
-        this.logger.debug(`NAS_SYNC_RENAME job added for file: ${fileId}`);
+        await this.jobQueue.addJob<NasFileSyncJobData>(
+          NAS_FILE_SYNC_QUEUE_PREFIX,
+          {
+            fileId,
+            action: 'rename',
+            syncEventId,
+            oldObjectKey,
+            newObjectKey,
+          },
+        );
+        this.logger.debug(`NAS_FILE_SYNC rename job added for file: ${fileId}`);
       }
 
       return {
@@ -308,17 +317,21 @@ export class FileManageService {
       await queryRunner.commitTransaction();
       this.logger.debug(`File moved: ${fileId} -> folder ${targetFolderId}`);
 
-      // 8. Bull 큐 등록 (NAS_SYNC_MOVE) - 트랜잭션 커밋 후 실행
+      // 8. Bull 큐 등록 (파일 기반 통합 큐) - 트랜잭션 커밋 후 실행
       if (sourcePath && targetPath && originalFolderId) {
-        await this.jobQueue.addJob('NAS_SYNC_MOVE', {
-          fileId,
-          syncEventId,
-          sourcePath,
-          targetPath,
-          originalFolderId,
-          targetFolderId,
-        });
-        this.logger.debug(`NAS_SYNC_MOVE job added for file: ${fileId}`);
+        await this.jobQueue.addJob<NasFileSyncJobData>(
+          NAS_FILE_SYNC_QUEUE_PREFIX,
+          {
+            fileId,
+            action: 'move',
+            syncEventId,
+            sourcePath,
+            targetPath,
+            originalFolderId,
+            targetFolderId,
+          },
+        );
+        this.logger.debug(`NAS_FILE_SYNC move job added for file: ${fileId}`);
       }
 
       return {
@@ -425,8 +438,8 @@ export class FileManageService {
       // 7. NAS 상태 업데이트 (nasObject는 checkNasSyncStatus에서 이미 조회됨)
       if (nasObject) {
         currentObjectKey = nasObject.objectKey;
-          // 휴지통 경로: .trash/{fileId}_{fileName}
-          trashPath = `.trash/${file.createdAt.getTime()}_${file.name}`; // 1769417075898_222.txt
+        // 휴지통 경로: .trash/{fileId}_{fileName}
+        trashPath = `.trash/${this.extractFileNameFromPath(nasObject.objectKey)}`; // 1769417075898_222.txt
         nasObject.updateStatus(AvailabilityStatus.SYNCING);
         await this.fileStorageObjectRepository.save(nasObject, txOptions);
       }
@@ -446,15 +459,19 @@ export class FileManageService {
       await queryRunner.commitTransaction();
       this.logger.debug(`File deleted (moved to trash): ${fileId}`);
 
-      // 8. Bull 큐 등록 (NAS_MOVE_TO_TRASH) - 트랜잭션 커밋 후 실행
+      // 8. Bull 큐 등록 (파일 기반 통합 큐) - 트랜잭션 커밋 후 실행
       if (currentObjectKey && trashPath) {
-        await this.jobQueue.addJob('NAS_MOVE_TO_TRASH', {
-          fileId,
-          syncEventId,
-          currentObjectKey,
-          trashPath,
-        });
-        this.logger.debug(`NAS_MOVE_TO_TRASH job added for file: ${fileId}`);
+        await this.jobQueue.addJob<NasFileSyncJobData>(
+          NAS_FILE_SYNC_QUEUE_PREFIX,
+          {
+            fileId,
+            action: 'trash',
+            syncEventId,
+            currentObjectKey,
+            trashPath,
+          },
+        );
+        this.logger.debug(`NAS_FILE_SYNC trash job added for file: ${fileId}`);
       }
 
       return {
@@ -679,5 +696,19 @@ export class FileManageService {
     const mm = createdAt.getUTCMinutes().toString().padStart(2, '0');
     const ss = createdAt.getUTCSeconds().toString().padStart(2, '0');
     return `${y}${m}${d}${hh}${mm}${ss}`;
+  }
+
+
+  /**
+ * 경로에서 파일명 추출
+ * 예: ".trash/1769424469467_333.txt" → "1769424469467_333.txt"
+ * 예: "/folder/subfolder/file.txt" → "file.txt"
+ */
+  private extractFileNameFromPath(filePath: string): string {
+    const lastSlashIndex = filePath.lastIndexOf('/');
+    if (lastSlashIndex === -1) {
+      return filePath;
+    }
+    return filePath.substring(lastSlashIndex + 1);
   }
 }

@@ -36,8 +36,6 @@ import { AbortSessionResponse } from '../../domain/upload-session/dto/session-st
 import {
   FileEntity,
   FileStorageObjectEntity,
-  StorageType,
-  AvailabilityStatus,
   ConflictStrategy,
   FILE_REPOSITORY,
 } from '../../domain/file';
@@ -50,6 +48,10 @@ import {
 
 } from '../../domain/storage';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
+import {
+  NAS_FILE_SYNC_QUEUE_PREFIX,
+  type NasFileSyncJobData,
+} from '../worker/nas-file-sync.worker';
 
 import type { IUploadSessionRepository, IUploadPartRepository } from '../../domain/upload-session';
 import type { IFileRepository } from '../../domain/file';
@@ -339,13 +341,13 @@ export class MultipartUploadService {
     await this.fileRepository.save(fileEntity);
 
     // 9. 스토리지 객체 생성
-    const nasObjectKey = this.buildNasObjectKey(uploadCreatedAt, finalFileName);
-    await this.createStorageObjects(fileId, nasObjectKey);
+    await this.createStorageObjects(fileId, uploadCreatedAt, finalFileName);
 
     // 10. 폴더 경로 조회
     const folder = await this.folderRepository.findById(session.folderId);
     const folderPath = folder ? folder.path : '';
     const filePath = folderPath === '/' ? `/${finalFileName}` : `${folderPath}/${finalFileName}`;
+    const nasObjectKey = FileStorageObjectEntity.buildNasObjectKey(uploadCreatedAt, finalFileName);
     const nasPath = folderPath === '/' ? `/${nasObjectKey}` : `${folderPath}/${nasObjectKey}`;
 
     // 11. sync_events 생성
@@ -360,8 +362,15 @@ export class MultipartUploadService {
     });
     await this.syncEventRepository.save(syncEvent);
 
-    // 12. Bull 큐 등록
-    await this.jobQueue.addJob('NAS_SYNC_UPLOAD', { fileId, syncEventId });
+    // 12. Bull 큐 등록 - 파일 기반 통합 큐 사용
+    await this.jobQueue.addJob<NasFileSyncJobData>(
+      NAS_FILE_SYNC_QUEUE_PREFIX,
+      {
+        fileId,
+        action: 'upload',
+        syncEventId,
+      },
+    );
 
     // 13. 세션 완료 처리
     session.complete(fileId);
@@ -587,49 +596,26 @@ export class MultipartUploadService {
   /**
    * 스토리지 객체 생성
    */
-  private async createStorageObjects(fileId: string, nasObjectKey: string): Promise<void> {
-    // 캐시 스토리지 객체 (AVAILABLE)
-    const cacheObject = new FileStorageObjectEntity({
+  private async createStorageObjects(
+    fileId: string,
+    createdAt: Date,
+    fileName: string,
+  ): Promise<void> {
+    const cacheObject = FileStorageObjectEntity.createForCache({
       id: uuidv4(),
       fileId,
-      storageType: StorageType.CACHE,
-      objectKey: fileId,
-      availabilityStatus: AvailabilityStatus.AVAILABLE,
-      lastAccessed: new Date(),
-      accessCount: 1,
-      leaseCount: 0,
-      createdAt: new Date(),
     });
 
-    // NAS 스토리지 객체 (SYNCING)
-    const nasObject = new FileStorageObjectEntity({
+    const nasObject = FileStorageObjectEntity.createForNas({
       id: uuidv4(),
       fileId,
-      storageType: StorageType.NAS,
-      objectKey: nasObjectKey,
-      availabilityStatus: AvailabilityStatus.SYNCING,
-      accessCount: 0,
-      leaseCount: 0,
-      createdAt: new Date(),
+      createdAt,
+      fileName,
     });
 
     await Promise.all([
       this.fileStorageObjectRepository.save(cacheObject),
       this.fileStorageObjectRepository.save(nasObject),
     ]);
-  }
-
-  /**
-   * NAS objectKey 생성
-   */
-  private buildNasObjectKey(createdAt: Date, fileName: string): string {
-    const y = createdAt.getUTCFullYear().toString().padStart(4, '0');
-    const m = (createdAt.getUTCMonth() + 1).toString().padStart(2, '0');
-    const d = createdAt.getUTCDate().toString().padStart(2, '0');
-    const hh = createdAt.getUTCHours().toString().padStart(2, '0');
-    const mm = createdAt.getUTCMinutes().toString().padStart(2, '0');
-    const ss = createdAt.getUTCSeconds().toString().padStart(2, '0');
-    const timestamp = `${y}${m}${d}${hh}${mm}${ss}`;
-    return `${timestamp}__${fileName}`;
   }
 }

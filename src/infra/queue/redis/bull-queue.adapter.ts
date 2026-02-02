@@ -17,6 +17,7 @@ import type {
   JobProcessor,
   JobStatus,
   QueueStats,
+  ProcessorOptions,
 } from '../../../domain/queue/ports/job-queue.port';
 
 @Injectable()
@@ -119,15 +120,20 @@ export class BullQueueAdapter implements IJobQueuePort, OnModuleDestroy {
     return this.mapBullJobToJob(bullJob, queueName);
   }
 
-  async processJobs<T = JobData>(queueName: string, processor: JobProcessor<T>): Promise<void> {
+  async processJobs<T = JobData>(
+    queueName: string,
+    processor: JobProcessor<T>,
+    options?: ProcessorOptions,
+  ): Promise<void> {
     const queue = this.getOrCreateQueue(queueName);
+    const concurrency = options?.concurrency ?? 1;
 
-    queue.process(async (bullJob: BullJob<T>) => {
+    queue.process(concurrency, async (bullJob: BullJob<T>) => {
       const job = this.mapBullJobToJob<T>(bullJob, queueName);
       await processor(job);
     });
 
-    this.logger.log(`Processor registered for queue: ${queueName}`);
+    this.logger.log(`Processor registered for queue: ${queueName} (concurrency: ${concurrency})`);
   }
 
   async getJob<T = JobData>(queueName: string, jobId: string): Promise<Job<T> | null> {

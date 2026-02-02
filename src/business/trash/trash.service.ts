@@ -42,6 +42,7 @@ import {
 import type { IFileStorageObjectRepository } from '../../domain/storage';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
+import { NAS_FILE_SYNC_QUEUE_PREFIX, NasFileSyncJobData } from '../worker/nas-file-sync.worker';
 import {
   SYNC_EVENT_REPOSITORY,
   SyncEventStatus,
@@ -290,6 +291,8 @@ export class TrashService {
           path: parentFolderPath,
           state: FolderState.ACTIVE,
         });
+
+        
         if (resolvedFolder) {
           targetFolderId = resolvedFolder.id;
         }
@@ -328,13 +331,15 @@ export class TrashService {
 
       // 7. 큐에 복원 작업 추가
       const syncEventId = uuidv4();
-      await this.jobQueuePort.addJob('file-restore', {
+      const jobData: NasFileSyncJobData = {
+        fileId: file.id,
+        action: 'restore',
         syncEventId,
         trashMetadataId: item.trashMetadataId,
-        fileId: file.id,
-        targetFolderId,
+        restoreTargetFolderId: targetFolderId,
         userId,
-      });
+      };
+      await this.jobQueuePort.addJob(NAS_FILE_SYNC_QUEUE_PREFIX, jobData);
 
       syncEventIds.push(syncEventId);
       queued++;
@@ -439,11 +444,16 @@ export class TrashService {
     file.permanentDelete();
     await this.fileRepository.save(file);
 
-    // 4. 휴지통 메타데이터 삭제
-    await this.trashRepository.delete(trashMetadataId);
-
-    // TODO: SeaweedFS(캐시) 삭제
-    // TODO: Bull Queue에 NAS 영구삭제 작업 등록
+    // 4. 큐에 영구삭제 작업 추가 (캐시/NAS 스토리지 삭제)
+    const syncEventId = uuidv4();
+    const jobData: NasFileSyncJobData = {
+      fileId: file.id,
+      action: 'purge',
+      syncEventId,
+      trashMetadataId,
+      userId,
+    };
+    await this.jobQueuePort.addJob(NAS_FILE_SYNC_QUEUE_PREFIX, jobData);
 
     return {
       id: file.id,
@@ -484,7 +494,7 @@ export class TrashService {
 
   /**
    * 파일의 전체 경로에서 부모 폴더 경로 추출
-   * 예: "/projects/2024/report.pdf" → "/projects/2024/"
+   * 예: "/projects/2024/report.pdf" → "/projects/2024"
    * 예: "/333.txt" → "/"
    */
   private extractParentFolderPath(filePath: string): string {
@@ -493,7 +503,8 @@ export class TrashService {
       // 루트 폴더의 파일인 경우 (예: "/333.txt")
       return '/';
     }
-    // 부모 폴더 경로 반환 (마지막 슬래시 포함)
-    return filePath.substring(0, lastSlashIndex + 1);
+    // 부모 폴더 경로 반환 (마지막 슬래시 미포함)
+    const parentPath = filePath.substring(0, lastSlashIndex);
+    return parentPath === '' ? '/' : parentPath;
   }
 }

@@ -27,6 +27,7 @@ import type {
   JobProcessor,
   JobStatus,
   QueueStats,
+  ProcessorOptions,
 } from '../../../domain/queue/ports/job-queue.port';
 
 /**
@@ -44,6 +45,8 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
   private readonly basePath: string;
   private readonly pollingInterval: number;
   private readonly processors: Map<string, JobProcessor> = new Map();
+  private readonly concurrencyMap: Map<string, number> = new Map();
+  private readonly activeJobsCount: Map<string, number> = new Map();
   private readonly pollingTimers: Map<string, NodeJS.Timeout> = new Map();
   private readonly pausedQueues: Set<string> = new Set();
 
@@ -187,10 +190,17 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
     return job;
   }
 
-  async processJobs<T = JobData>(queueName: string, processor: JobProcessor<T>): Promise<void> {
+  async processJobs<T = JobData>(
+    queueName: string,
+    processor: JobProcessor<T>,
+    options?: ProcessorOptions,
+  ): Promise<void> {
+    const concurrency = options?.concurrency ?? 1;
     this.processors.set(queueName, processor as JobProcessor);
+    this.concurrencyMap.set(queueName, concurrency);
+    this.activeJobsCount.set(queueName, 0);
     this.startPolling(queueName);
-    this.logger.log(`Processor registered for queue: ${queueName}`);
+    this.logger.log(`Processor registered for queue: ${queueName} (concurrency: ${concurrency})`);
   }
 
   /**
@@ -240,22 +250,38 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
   }
 
   /**
-   * 대기 중인 작업 처리
+   * 대기 중인 작업 처리 (concurrency 지원)
    */
   private async processWaitingJobs(queueName: string): Promise<void> {
     const processor = this.processors.get(queueName);
     if (!processor) return;
+
+    const concurrency = this.concurrencyMap.get(queueName) ?? 1;
+    const activeCount = this.activeJobsCount.get(queueName) ?? 0;
+    const availableSlots = concurrency - activeCount;
+
+    if (availableSlots <= 0) return;
 
     const jobIds = await this.listJobFiles(queueName, 'waiting');
 
     // 우선순위 기반 정렬 (파일 이름 = timestamp 기반)
     jobIds.sort();
 
-    for (const jobId of jobIds) {
-      if (this.pausedQueues.has(queueName)) break;
+    // 동시 처리할 작업들 선택
+    const jobsToProcess = jobIds.slice(0, availableSlots);
+
+    // 각 작업을 비동기로 병렬 처리
+    const processPromises = jobsToProcess.map(async (jobId) => {
+      if (this.pausedQueues.has(queueName)) return;
 
       const jobFile = await this.readJobFile<JobData>(queueName, jobId, 'waiting');
-      if (!jobFile) continue;
+      if (!jobFile) return;
+
+      // active 카운트 증가
+      this.activeJobsCount.set(
+        queueName,
+        (this.activeJobsCount.get(queueName) ?? 0) + 1,
+      );
 
       // active로 이동
       jobFile.job.status = 'active';
@@ -284,7 +310,7 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
 
         const maxAttempts = jobFile.options?.attempts || 1;
         if (jobFile.job.attemptsMade! < maxAttempts) {
-          // 재시도: 다시 waiting으로
+          // 재시도: delayed로 이동
           jobFile.job.status = 'waiting';
           const backoff = jobFile.options?.backoff || 1000;
           jobFile.scheduledAt = Date.now() + backoff * jobFile.job.attemptsMade!;
@@ -302,8 +328,17 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
 
           this.logger.error(`Job ${jobId} failed permanently: ${error.message}`);
         }
+      } finally {
+        // active 카운트 감소
+        this.activeJobsCount.set(
+          queueName,
+          Math.max(0, (this.activeJobsCount.get(queueName) ?? 1) - 1),
+        );
       }
-    }
+    });
+
+    // 모든 작업 병렬 실행 (에러 무시 - 개별 작업에서 처리됨)
+    await Promise.allSettled(processPromises);
   }
 
   async getJob<T = JobData>(queueName: string, jobId: string): Promise<Job<T> | null> {

@@ -24,19 +24,27 @@ jest.mock('uuid', () => ({
 }));
 
 import { Test, TestingModule } from '@nestjs/testing';
-import { NasSyncWorker } from './nas-file-sync.worker';
+import { NasSyncWorker, NAS_FILE_SYNC_QUEUE_PREFIX } from './nas-file-sync.worker';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
+import { DISTRIBUTED_LOCK_PORT } from '../../domain/queue/ports/distributed-lock.port';
 import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';
 import { NAS_STORAGE_PORT } from '../../domain/storage/ports/nas-storage.port';
 import { FILE_REPOSITORY, StorageType, AvailabilityStatus } from '../../domain/file';
 import { FILE_STORAGE_OBJECT_REPOSITORY } from '../../domain/storage/file/repositories/file-storage-object.repository.interface';
 import { FOLDER_REPOSITORY } from '../../domain/folder';
+import { TRASH_REPOSITORY } from '../../domain/trash';
 import { SYNC_EVENT_REPOSITORY } from '../../domain/sync-event/repositories/sync-event.repository.interface';
 import { SyncEventEntity, SyncEventStatus, SyncEventType, SyncEventTargetType } from '../../domain/sync-event/entities/sync-event.entity';
 
 describe('NasSyncWorker', () => {
   const mockJobQueue = {
     processJobs: jest.fn(),
+  };
+  const mockDistributedLock = {
+    acquire: jest.fn(),
+    withLock: jest.fn((key: string, fn: () => Promise<any>) => fn()),
+    isLocked: jest.fn(),
+    forceRelease: jest.fn(),
   };
   const mockCacheStorage = {
     파일스트림읽기: jest.fn(),
@@ -56,6 +64,10 @@ describe('NasSyncWorker', () => {
   const mockFolderRepository = {
     findById: jest.fn(),
   };
+  const mockTrashRepository = {
+    findById: jest.fn(),
+    delete: jest.fn(),
+  };
   const mockSyncEventRepository = {
     findById: jest.fn(),
     save: jest.fn(),
@@ -69,11 +81,13 @@ describe('NasSyncWorker', () => {
       providers: [
         NasSyncWorker,
         { provide: JOB_QUEUE_PORT, useValue: mockJobQueue },
+        { provide: DISTRIBUTED_LOCK_PORT, useValue: mockDistributedLock },
         { provide: CACHE_STORAGE_PORT, useValue: mockCacheStorage },
         { provide: NAS_STORAGE_PORT, useValue: mockNasStorage },
         { provide: FILE_REPOSITORY, useValue: mockFileRepository },
         { provide: FILE_STORAGE_OBJECT_REPOSITORY, useValue: mockFileStorageObjectRepository },
         { provide: FOLDER_REPOSITORY, useValue: mockFolderRepository },
+        { provide: TRASH_REPOSITORY, useValue: mockTrashRepository },
         { provide: SYNC_EVENT_REPOSITORY, useValue: mockSyncEventRepository },
       ],
     }).compile();
@@ -84,111 +98,93 @@ describe('NasSyncWorker', () => {
 
   /**
    * ============================================================
-   * 📦 파일명 변경 동기화 테스트
-   * ============================================================
-   */
-  describe('processRenameJob', () => {
-    /**
-     * 📌 테스트 시나리오: 기존 타임스탬프 유지 rename
-     *
-     * 🎯 검증 목적:
-     *   - 1769478135014_111.txt → 1769478135014_999.txt
-     *
-     * ✅ 기대 결과:
-     *   - NAS 이동 경로가 기존 타임스탬프를 유지
-     */
-    it('기존 타임스탬프를 유지한 이름으로 NAS rename을 수행해야 한다', async () => {
-      // ═══════════════════════════════════════════════════════
-      // 📥 GIVEN (사전 조건 설정)
-      // ═══════════════════════════════════════════════════════
-      const fileId = 'file-1';
-      const oldObjectKey = '1769478135014_111.txt';
-      const newObjectKey = '20260127014215__999.txt';
-
-      mockFileStorageObjectRepository.findByFileIdAndType.mockResolvedValue({
-        id: 'nas-1',
-        fileId,
-        storageType: StorageType.NAS,
-        objectKey: oldObjectKey,
-        availabilityStatus: AvailabilityStatus.SYNCING,
-        updateStatus: jest.fn(),
-        updateObjectKey: jest.fn(),
-        isAvailable: () => false,
-      });
-
-      // SyncEvent가 없는 경우도 처리해야 함 (하위 호환성)
-      mockSyncEventRepository.findById.mockResolvedValue(null);
-
-      await worker.onModuleInit();
-      const renameProcessor = mockJobQueue.processJobs.mock.calls[1][1];
-
-      // ═══════════════════════════════════════════════════════
-      // 🎬 WHEN (테스트 실행)
-      // ═══════════════════════════════════════════════════════
-      await renameProcessor({ data: { fileId, oldObjectKey, newObjectKey } });
-
-      // ═══════════════════════════════════════════════════════
-      // ✅ THEN (결과 검증)
-      // ═══════════════════════════════════════════════════════
-      expect(mockNasStorage.파일이동).toHaveBeenCalledWith(
-        '1769478135014_111.txt',
-        '1769478135014_999.txt',
-      );
-    });
-  });
-
-  /**
-   * ============================================================
-   * 📦 SyncEvent 상태 관리 테스트
+   * 📦 통합 큐 (NAS_FILE_SYNC) 테스트
    * ============================================================
    *
    * 🎯 검증 목적:
-   *   - Worker가 작업 처리 시 SyncEvent 상태를 올바르게 업데이트하는지 확인
-   *   - PENDING → PROCESSING → DONE 흐름 검증
-   *   - 실패 시 retry 또는 FAILED 처리 검증
+   *   - 파일 기반 통합 큐가 올바르게 작동하는지 확인
+   *   - 파일별 락을 통한 순차 처리 보장 검증
    * ============================================================
    */
-  describe('SyncEvent 상태 관리', () => {
+  describe('processFileSyncJob (통합 큐)', () => {
     /**
-     * 📌 테스트 시나리오: 업로드 성공 시 SyncEvent DONE 처리
-     *
-     * 🎯 검증 목적:
-     *   작업 성공 시 SyncEvent 상태가 DONE으로 변경되어야 한다.
-     *
-     * ✅ 기대 결과:
-     *   - SyncEvent.startProcessing() 호출
-     *   - SyncEvent.complete() 호출
-     *   - SyncEvent 저장
+     * 📌 테스트 시나리오: 통합 큐가 등록되어야 한다
      */
-    it('업로드 성공 시 SyncEvent를 PROCESSING → DONE으로 업데이트해야 한다', async () => {
+    it('onModuleInit에서 NAS_FILE_SYNC 큐가 concurrency와 함께 등록되어야 한다', async () => {
       // ═══════════════════════════════════════════════════════
-      // 📥 GIVEN (사전 조건 설정)
+      // 🎬 WHEN
+      // ═══════════════════════════════════════════════════════
+      await worker.onModuleInit();
+
+      // ═══════════════════════════════════════════════════════
+      // ✅ THEN
+      // ═══════════════════════════════════════════════════════
+      expect(mockJobQueue.processJobs).toHaveBeenCalledWith(
+        NAS_FILE_SYNC_QUEUE_PREFIX,
+        expect.any(Function),
+        expect.objectContaining({ concurrency: 5 }),
+      );
+    });
+
+    /**
+     * 📌 테스트 시나리오: 파일별 락을 사용해야 한다
+     */
+    it('작업 처리 시 파일별 락을 획득해야 한다', async () => {
+      // ═══════════════════════════════════════════════════════
+      // 📥 GIVEN
       // ═══════════════════════════════════════════════════════
       const fileId = 'file-1';
-      const syncEventId = 'sync-event-1';
-
-      const mockSyncEvent = new SyncEventEntity({
-        id: syncEventId,
-        eventType: SyncEventType.CREATE,
-        targetType: SyncEventTargetType.FILE,
-        fileId,
-        sourcePath: '/cache/file1.pdf',
-        targetPath: '/nas/file1.pdf',
-        status: SyncEventStatus.PENDING,
-        retryCount: 0,
-        maxRetries: 3,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      mockSyncEventRepository.findById.mockResolvedValue(mockSyncEvent);
-      mockSyncEventRepository.save.mockResolvedValue(mockSyncEvent);
 
       mockFileStorageObjectRepository.findByFileIdAndType.mockResolvedValue({
         id: 'nas-1',
         fileId,
         storageType: StorageType.NAS,
-        objectKey: 'nas/file1.pdf',
+        objectKey: 'test.txt',
+        availabilityStatus: AvailabilityStatus.AVAILABLE,
+        updateStatus: jest.fn(),
+        updateObjectKey: jest.fn(),
+        isAvailable: () => true,
+      });
+
+      await worker.onModuleInit();
+      
+      // 첫 번째 호출이 NAS_FILE_SYNC 큐
+      const fileSyncProcessor = mockJobQueue.processJobs.mock.calls[0][1];
+
+      // ═══════════════════════════════════════════════════════
+      // 🎬 WHEN
+      // ═══════════════════════════════════════════════════════
+      await fileSyncProcessor({
+        data: {
+          fileId,
+          action: 'upload',
+        },
+      });
+
+      // ═══════════════════════════════════════════════════════
+      // ✅ THEN
+      // ═══════════════════════════════════════════════════════
+      expect(mockDistributedLock.withLock).toHaveBeenCalledWith(
+        `file-sync:${fileId}`,
+        expect.any(Function),
+        expect.objectContaining({ ttl: 60000, waitTimeout: 30000 }),
+      );
+    });
+
+    /**
+     * 📌 테스트 시나리오: action에 따라 올바른 핸들러가 호출되어야 한다
+     */
+    it('upload action은 handleUpload를 실행해야 한다', async () => {
+      // ═══════════════════════════════════════════════════════
+      // 📥 GIVEN
+      // ═══════════════════════════════════════════════════════
+      const fileId = 'file-1';
+
+      mockFileStorageObjectRepository.findByFileIdAndType.mockResolvedValue({
+        id: 'nas-1',
+        fileId,
+        storageType: StorageType.NAS,
+        objectKey: 'test.txt',
         availabilityStatus: AvailabilityStatus.SYNCING,
         updateStatus: jest.fn(),
         updateObjectKey: jest.fn(),
@@ -197,122 +193,42 @@ describe('NasSyncWorker', () => {
 
       mockFileRepository.findById.mockResolvedValue({
         id: fileId,
-        name: 'file1.pdf',
+        name: 'test.txt',
         createdAt: new Date(),
       });
 
       mockCacheStorage.파일스트림읽기.mockResolvedValue({});
 
       await worker.onModuleInit();
-      const uploadProcessor = mockJobQueue.processJobs.mock.calls[0][1];
+      const fileSyncProcessor = mockJobQueue.processJobs.mock.calls[0][1];
 
       // ═══════════════════════════════════════════════════════
-      // 🎬 WHEN (테스트 실행)
+      // 🎬 WHEN
       // ═══════════════════════════════════════════════════════
-      await uploadProcessor({ data: { fileId, syncEventId } });
+      await fileSyncProcessor({
+        data: {
+          fileId,
+          action: 'upload',
+        },
+      });
 
       // ═══════════════════════════════════════════════════════
-      // ✅ THEN (결과 검증)
+      // ✅ THEN
       // ═══════════════════════════════════════════════════════
-      expect(mockSyncEventRepository.findById).toHaveBeenCalledWith(syncEventId);
-      expect(mockSyncEventRepository.save).toHaveBeenCalled();
-
-      // 저장된 SyncEvent의 상태 확인
-      const savedSyncEvent = mockSyncEventRepository.save.mock.calls[0][0];
-      expect(savedSyncEvent.status).toBe(SyncEventStatus.DONE);
+      expect(mockCacheStorage.파일스트림읽기).toHaveBeenCalledWith(fileId);
+      expect(mockNasStorage.파일스트림쓰기).toHaveBeenCalled();
     });
 
     /**
-     * 📌 테스트 시나리오: 업로드 실패 시 SyncEvent retry 처리
-     *
-     * 🎯 검증 목적:
-     *   작업 실패 시 재시도 가능하면 PENDING으로 복귀, 아니면 FAILED
-     *
-     * ✅ 기대 결과:
-     *   - SyncEvent.retry() 호출 (retryCount 증가)
-     *   - 에러 메시지 기록
+     * 📌 테스트 시나리오: rename action 처리
      */
-    it('업로드 실패 시 SyncEvent retry 처리해야 한다', async () => {
+    it('rename action은 handleRename를 실행해야 한다', async () => {
       // ═══════════════════════════════════════════════════════
-      // 📥 GIVEN (사전 조건 설정)
+      // 📥 GIVEN
       // ═══════════════════════════════════════════════════════
       const fileId = 'file-1';
-      const syncEventId = 'sync-event-1';
-
-      const mockSyncEvent = new SyncEventEntity({
-        id: syncEventId,
-        eventType: SyncEventType.CREATE,
-        targetType: SyncEventTargetType.FILE,
-        fileId,
-        sourcePath: '/cache/file1.pdf',
-        targetPath: '/nas/file1.pdf',
-        status: SyncEventStatus.PENDING,
-        retryCount: 0,
-        maxRetries: 3,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      mockSyncEventRepository.findById.mockResolvedValue(mockSyncEvent);
-      mockSyncEventRepository.save.mockResolvedValue(mockSyncEvent);
-
-      mockFileStorageObjectRepository.findByFileIdAndType.mockResolvedValue({
-        id: 'nas-1',
-        fileId,
-        storageType: StorageType.NAS,
-        objectKey: 'nas/file1.pdf',
-        availabilityStatus: AvailabilityStatus.SYNCING,
-        updateStatus: jest.fn(),
-        updateObjectKey: jest.fn(),
-        isAvailable: () => false,
-      });
-
-      mockFileRepository.findById.mockResolvedValue({
-        id: fileId,
-        name: 'file1.pdf',
-        createdAt: new Date(),
-      });
-
-      // 파일 읽기 실패 시뮬레이션
-      mockCacheStorage.파일스트림읽기.mockRejectedValue(new Error('Cache read failed'));
-
-      await worker.onModuleInit();
-      const uploadProcessor = mockJobQueue.processJobs.mock.calls[0][1];
-
-      // ═══════════════════════════════════════════════════════
-      // 🎬 WHEN (테스트 실행)
-      // ═══════════════════════════════════════════════════════
-      await expect(
-        uploadProcessor({ data: { fileId, syncEventId } }),
-      ).rejects.toThrow('Cache read failed');
-
-      // ═══════════════════════════════════════════════════════
-      // ✅ THEN (결과 검증)
-      // ═══════════════════════════════════════════════════════
-      expect(mockSyncEventRepository.save).toHaveBeenCalled();
-
-      // 저장된 SyncEvent의 상태 확인
-      const savedSyncEvent = mockSyncEventRepository.save.mock.calls[0][0];
-      expect(savedSyncEvent.retryCount).toBe(1);
-      expect(savedSyncEvent.errorMessage).toBe('Cache read failed');
-    });
-
-    /**
-     * 📌 테스트 시나리오: syncEventId 없이도 작업 처리 가능 (하위 호환성)
-     *
-     * 🎯 검증 목적:
-     *   syncEventId가 없는 기존 작업도 정상 처리되어야 한다.
-     *
-     * ✅ 기대 결과:
-     *   - SyncEvent 조회/업데이트 없이 작업 완료
-     */
-    it('syncEventId 없이도 작업이 정상 처리되어야 한다 (하위 호환성)', async () => {
-      // ═══════════════════════════════════════════════════════
-      // 📥 GIVEN (사전 조건 설정)
-      // ═══════════════════════════════════════════════════════
-      const fileId = 'file-1';
-      const oldObjectKey = '1769478135014_test.txt';
-      const newObjectKey = '1769478135014_renamed.txt';
+      const oldObjectKey = '1769478135014_old.txt';
+      const newObjectKey = '1769478135014_new.txt';
 
       mockFileStorageObjectRepository.findByFileIdAndType.mockResolvedValue({
         id: 'nas-1',
@@ -326,20 +242,74 @@ describe('NasSyncWorker', () => {
       });
 
       await worker.onModuleInit();
-      const renameProcessor = mockJobQueue.processJobs.mock.calls[1][1];
+      const fileSyncProcessor = mockJobQueue.processJobs.mock.calls[0][1];
 
       // ═══════════════════════════════════════════════════════
-      // 🎬 WHEN (테스트 실행) - syncEventId 없이 호출
+      // 🎬 WHEN
       // ═══════════════════════════════════════════════════════
-      await renameProcessor({ data: { fileId, oldObjectKey, newObjectKey } });
+      await fileSyncProcessor({
+        data: {
+          fileId,
+          action: 'rename',
+          oldObjectKey,
+          newObjectKey,
+        },
+      });
 
       // ═══════════════════════════════════════════════════════
-      // ✅ THEN (결과 검증)
+      // ✅ THEN
       // ═══════════════════════════════════════════════════════
-      // SyncEvent 조회는 호출되지 않아야 함 (syncEventId가 없으므로)
-      expect(mockSyncEventRepository.findById).not.toHaveBeenCalled();
-      // 작업은 정상 완료
-      expect(mockNasStorage.파일이동).toHaveBeenCalled();
+      expect(mockNasStorage.파일이동).toHaveBeenCalledWith(
+        oldObjectKey,
+        '1769478135014_new.txt',
+      );
+    });
+
+    /**
+     * 📌 테스트 시나리오: trash action 처리
+     */
+    it('trash action은 handleTrash를 실행해야 한다', async () => {
+      // ═══════════════════════════════════════════════════════
+      // 📥 GIVEN
+      // ═══════════════════════════════════════════════════════
+      const fileId = 'file-1';
+      const currentObjectKey = '/folder/test.txt';
+      const trashPath = '/.trash/test.txt';
+
+      mockFileStorageObjectRepository.findByFileIdAndType.mockResolvedValue({
+        id: 'nas-1',
+        fileId,
+        storageType: StorageType.NAS,
+        objectKey: currentObjectKey,
+        availabilityStatus: AvailabilityStatus.SYNCING,
+        leaseCount: 0,
+        updateStatus: jest.fn(),
+        updateObjectKey: jest.fn(),
+        isAvailable: () => false,
+      });
+
+      await worker.onModuleInit();
+      const fileSyncProcessor = mockJobQueue.processJobs.mock.calls[0][1];
+
+      // ═══════════════════════════════════════════════════════
+      // 🎬 WHEN
+      // ═══════════════════════════════════════════════════════
+      await fileSyncProcessor({
+        data: {
+          fileId,
+          action: 'trash',
+          currentObjectKey,
+          trashPath,
+        },
+      });
+
+      // ═══════════════════════════════════════════════════════
+      // ✅ THEN
+      // ═══════════════════════════════════════════════════════
+      expect(mockNasStorage.파일이동).toHaveBeenCalledWith(
+        currentObjectKey,
+        trashPath,
+      );
     });
   });
 });

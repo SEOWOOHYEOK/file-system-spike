@@ -3,8 +3,6 @@ import { v4 as uuidv4 } from 'uuid';
 import {
   FileEntity,
   FileStorageObjectEntity,
-  StorageType,
-  AvailabilityStatus,
   UploadFileRequest,
   UploadFilesRequest,
   UploadFileResponse,
@@ -26,6 +24,10 @@ import {
 
 } from '../../domain/storage';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
+import {
+  NAS_FILE_SYNC_QUEUE_PREFIX,
+  type NasFileSyncJobData,
+} from '../worker/nas-file-sync.worker';
 import { AuditLogHelper } from '../audit/audit-log-helper.service';
 import { UserType } from '../../domain/audit/enums/common.enum';
 import { RequestContext } from '../../common/context/request-context';
@@ -120,17 +122,18 @@ export class FileUploadService {
 
     // 6. DB 저장
     const fileEntity = await this.createFileEntity(fileId, finalFileName, folderId, file, uploadCreatedAt);
-    const nasObjectKey = this.buildNasObjectKey(uploadCreatedAt, finalFileName);
-    await this.createStorageObjects(fileId, nasObjectKey);
+    await this.createStorageObjects(fileId, uploadCreatedAt, finalFileName);
 
     // 7. 폴더 경로 조회
     const folder = await this.folderRepository.findById(folderId);
     const folderPath = folder ? folder.path : '';
     const filePath = folderPath === '/' ? `/${finalFileName}` : `${folderPath}/${finalFileName}`;
+    const nasObjectKey = FileStorageObjectEntity.buildNasObjectKey(uploadCreatedAt, finalFileName);
     const nasPath = folderPath === '/' ? `/${nasObjectKey}` : `${folderPath}/${nasObjectKey}`;
 
     // 8. sync_events 생성 (문서 요구사항)
     const syncEventId = uuidv4();
+    
     const syncEvent = SyncEventFactory.createFileCreateEvent({
       id: syncEventId,
       fileId,
@@ -141,8 +144,15 @@ export class FileUploadService {
     });
     await this.syncEventRepository.save(syncEvent);
 
-    // 9. Bull 큐 등록 (NAS 동기화)
-    await this.jobQueue.addJob('NAS_SYNC_UPLOAD', { fileId, syncEventId });
+    // 9. Bull 큐 등록 (NAS 동기화) - 파일 기반 통합 큐 사용
+    await this.jobQueue.addJob<NasFileSyncJobData>(
+      NAS_FILE_SYNC_QUEUE_PREFIX,
+      {
+        fileId,
+        action: 'upload',
+        syncEventId,
+      },
+    );
 
     // 10. 감사 로그 및 파일 이력 기록
     const ctx = RequestContext.get();
@@ -339,50 +349,26 @@ export class FileUploadService {
   /**
    * 스토리지 객체 생성
    */
-  private async createStorageObjects(fileId: string, nasObjectKey: string): Promise<void> {
-    // 캐시 스토리지 객체 (AVAILABLE)
-    const cacheObject = new FileStorageObjectEntity({
+  private async createStorageObjects(
+    fileId: string,
+    createdAt: Date,
+    fileName: string,
+  ): Promise<void> {
+    const cacheObject = FileStorageObjectEntity.createForCache({
       id: uuidv4(),
       fileId,
-      storageType: StorageType.CACHE,
-      objectKey: fileId,
-      availabilityStatus: AvailabilityStatus.AVAILABLE,
-      lastAccessed: new Date(),
-      accessCount: 1,
-      leaseCount: 0,
-      createdAt: new Date(),
     });
 
-    // NAS 스토리지 객체 (SYNCING)
-    const nasObject = new FileStorageObjectEntity({
+    const nasObject = FileStorageObjectEntity.createForNas({
       id: uuidv4(),
       fileId,
-      storageType: StorageType.NAS,
-      objectKey: nasObjectKey,
-      availabilityStatus: AvailabilityStatus.SYNCING,
-      accessCount: 0,
-      leaseCount: 0,
-      createdAt: new Date(),
+      createdAt,
+      fileName,
     });
 
     await Promise.all([
       this.fileStorageObjectRepository.save(cacheObject),
       this.fileStorageObjectRepository.save(nasObject),
     ]);
-  }
-
-  /**
-   * NAS objectKey 생성
-   * 형식: YYYYMMDDHHmmss__파일명 (UTC 기준)
-   */
-  private buildNasObjectKey(createdAt: Date, fileName: string): string {
-    const y = createdAt.getUTCFullYear().toString().padStart(4, '0');
-    const m = (createdAt.getUTCMonth() + 1).toString().padStart(2, '0');
-    const d = createdAt.getUTCDate().toString().padStart(2, '0');
-    const hh = createdAt.getUTCHours().toString().padStart(2, '0');
-    const mm = createdAt.getUTCMinutes().toString().padStart(2, '0');
-    const ss = createdAt.getUTCSeconds().toString().padStart(2, '0');
-    const timestamp = `${y}${m}${d}${hh}${mm}${ss}`;
-    return `${timestamp}__${fileName}`;
   }
 }

@@ -93,6 +93,7 @@ export class FileStorageObjectEntity {
   /**
    * 상태 변경
    */
+  
   updateStatus(status: AvailabilityStatus): void {
     this.availabilityStatus = status;
     this.updatedAt = new Date();
@@ -104,5 +105,60 @@ export class FileStorageObjectEntity {
   updateObjectKey(newKey: string): void {
     this.objectKey = newKey;
     this.updatedAt = new Date();
+  }
+
+  /**
+   * NAS objectKey 생성 (도메인 규칙)
+   * 형식: YYYYMMDDHHmmss__파일명 (UTC 기준)
+   */
+  static buildNasObjectKey(createdAt: Date, fileName: string): string {
+    const y = createdAt.getUTCFullYear().toString().padStart(4, '0');
+    const m = (createdAt.getUTCMonth() + 1).toString().padStart(2, '0');
+    const d = createdAt.getUTCDate().toString().padStart(2, '0');
+    const hh = createdAt.getUTCHours().toString().padStart(2, '0');
+    const mm = createdAt.getUTCMinutes().toString().padStart(2, '0');
+    const ss = createdAt.getUTCSeconds().toString().padStart(2, '0');
+    return `${y}${m}${d}${hh}${mm}${ss}__${fileName}`;
+  }
+
+  /**
+   * 캐시 스토리지 객체 생성 팩토리
+   */
+  static createForCache(params: {
+    id: string;
+    fileId: string;
+  }): FileStorageObjectEntity {
+    return new FileStorageObjectEntity({
+      id: params.id,
+      fileId: params.fileId,
+      storageType: StorageType.CACHE,
+      objectKey: params.fileId,
+      availabilityStatus: AvailabilityStatus.AVAILABLE,
+      lastAccessed: new Date(),
+      accessCount: 1,
+      leaseCount: 0,
+      createdAt: new Date(),
+    });
+  }
+
+  /**
+   * NAS 스토리지 객체 생성 팩토리
+   */
+  static createForNas(params: {
+    id: string;
+    fileId: string;
+    createdAt: Date;
+    fileName: string;
+  }): FileStorageObjectEntity {
+    return new FileStorageObjectEntity({
+      id: params.id,
+      fileId: params.fileId,
+      storageType: StorageType.NAS,
+      objectKey: FileStorageObjectEntity.buildNasObjectKey(params.createdAt, params.fileName),
+      availabilityStatus: AvailabilityStatus.SYNCING,
+      accessCount: 0,
+      leaseCount: 0,
+      createdAt: params.createdAt,
+    });
   }
 }

@@ -87,6 +87,14 @@ export interface Job<T = JobData> {
 export type JobProcessor<T = JobData> = (job: Job<T>) => Promise<void>;
 
 /**
+ * 프로세서 옵션
+ */
+export interface ProcessorOptions {
+  /** 동시 처리 수 (기본값: 1) */
+  concurrency?: number;
+}
+
+/**
  * 작업 큐 인터페이스
  */
 export interface IJobQueuePort {
@@ -103,8 +111,13 @@ export interface IJobQueuePort {
    * 작업 처리기 등록
    * @param queueName - 큐 이름
    * @param processor - 처리 함수
+   * @param options - 프로세서 옵션 (concurrency 등)
    */
-  processJobs<T = JobData>(queueName: string, processor: JobProcessor<T>): Promise<void>;
+  processJobs<T = JobData>(
+    queueName: string,
+    processor: JobProcessor<T>,
+    options?: ProcessorOptions,
+  ): Promise<void>;
 
   /**
    * 작업 조회
