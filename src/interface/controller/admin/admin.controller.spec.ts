@@ -22,7 +22,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AdminController } from './admin.controller';
 import { AdminService } from '../../../business/admin';
-import { StorageType } from '../../../domain/storage/file/file-storage-object.entity';
+import { StorageType } from '../../../domain/storage/file/entity/file-storage-object.entity';
 import {
   SyncEventStatus,
   SyncEventType,

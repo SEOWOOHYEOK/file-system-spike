@@ -27,9 +27,9 @@ import {
   SortBy,
   SortOrder,
 } from '../../domain/folder';
-import { FolderStorageObjectEntity, FolderAvailabilityStatus } from '../../domain/storage/folder/folder-storage-object.entity';
+import { FolderStorageObjectEntity, FolderAvailabilityStatus } from '../../domain/storage/folder/entity/folder-storage-object.entity';
 import { FileState, StorageType } from '../../domain/file';
-import { FileStorageObjectEntity, AvailabilityStatus } from '../../domain/storage/file/file-storage-object.entity';
+import { FileStorageObjectEntity, AvailabilityStatus } from '../../domain/storage/file/entity/file-storage-object.entity';
 import { NotFoundException } from '@nestjs/common';
 
 describe('FolderQueryService', () => {

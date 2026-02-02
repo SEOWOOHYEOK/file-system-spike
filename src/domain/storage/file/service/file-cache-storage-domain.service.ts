@@ -8,7 +8,7 @@ import {
   FileStorageObjectEntity,
   StorageType,
   AvailabilityStatus,
-} from '../file-storage-object.entity';
+} from '../entity/file-storage-object.entity';
 import {
   FILE_STORAGE_OBJECT_REPOSITORY,
 } from '../repositories/file-storage-object.repository.interface';

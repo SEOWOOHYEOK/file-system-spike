@@ -3,7 +3,7 @@
  */
 
 // 엔티티
-export * from './folder-storage-object.entity';
+export * from './entity/folder-storage-object.entity';
 
 // 리포지토리 인터페이스
 export * from './repositories/folder-storage-object.repository.interface';

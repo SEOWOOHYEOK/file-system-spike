@@ -7,7 +7,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import {
   FolderStorageObjectEntity,
   FolderAvailabilityStatus,
-} from '../folder-storage-object.entity';
+} from '../entity/folder-storage-object.entity';
 import {
   FOLDER_STORAGE_OBJECT_REPOSITORY,
 } from '../repositories/folder-storage-object.repository.interface';

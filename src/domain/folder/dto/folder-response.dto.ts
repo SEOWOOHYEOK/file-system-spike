@@ -5,7 +5,7 @@
 import { Transform } from 'class-transformer';
 import { IsEnum, IsInt, IsOptional, Max, Min } from 'class-validator';
 import { FolderState } from '../entities/folder.entity';
-import { FolderAvailabilityStatus } from '../../storage/folder/folder-storage-object.entity';
+import { FolderAvailabilityStatus } from '../../storage/folder/entity/folder-storage-object.entity';
 
 /**
  * 폴더 스토리지 상태 DTO

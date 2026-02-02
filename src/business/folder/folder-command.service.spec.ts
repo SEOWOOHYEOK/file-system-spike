@@ -35,7 +35,7 @@ import {
   FolderConflictStrategy,
   MoveFolderConflictStrategy,
 } from '../../domain/folder';
-import { FolderStorageObjectEntity, FolderAvailabilityStatus } from '../../domain/storage/folder/folder-storage-object.entity';
+import { FolderStorageObjectEntity, FolderAvailabilityStatus } from '../../domain/storage/folder/entity/folder-storage-object.entity';
 import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
 
 describe('FolderCommandService', () => {

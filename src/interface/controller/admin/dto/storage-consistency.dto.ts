@@ -5,7 +5,7 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsOptional, IsEnum, IsInt, Min, Max, IsBoolean } from 'class-validator';
 import { Type } from 'class-transformer';
-import { StorageType } from '../../../../domain/storage/file/file-storage-object.entity';
+import { StorageType } from '../../../../domain/storage/file/entity/file-storage-object.entity';
 
 /**
  * 스토리지 일관성 검증 Query DTO

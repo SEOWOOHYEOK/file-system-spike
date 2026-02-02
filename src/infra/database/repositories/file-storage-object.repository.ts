@@ -11,7 +11,7 @@ import {
   FileStorageObjectEntity,
   StorageType,
   AvailabilityStatus,
-} from '../../../domain/storage/file/file-storage-object.entity';
+} from '../../../domain/storage/file/entity/file-storage-object.entity';
 import type { IFileStorageObjectRepository } from '../../../domain/storage/file/repositories/file-storage-object.repository.interface';
 
 @Injectable()

@@ -4,7 +4,7 @@
 
 // 엔티티
 export * from './entities/file.entity';
-export * from '../storage/file/file-storage-object.entity';
+export * from '../storage/file/entity/file-storage-object.entity';
 
 // DTO
 export * from './dto';

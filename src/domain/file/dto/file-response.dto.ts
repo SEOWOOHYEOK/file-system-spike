@@ -3,7 +3,7 @@
  */
 
 import { FileState } from '../type/file.type';
-import { AvailabilityStatus } from '../../storage/file/file-storage-object.entity';
+import { AvailabilityStatus } from '../../storage/file/entity/file-storage-object.entity';
 
 /**
  * 스토리지 상태 DTO

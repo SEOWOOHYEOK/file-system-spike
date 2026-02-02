@@ -13,7 +13,7 @@ import {
 import {
   FolderStorageObjectEntity,
   FolderAvailabilityStatus,
-} from '../../../domain/storage/folder/folder-storage-object.entity';
+} from '../../../domain/storage/folder/entity/folder-storage-object.entity';
 
 @Injectable()
 export class FolderStorageObjectRepository implements IFolderStorageObjectRepository {

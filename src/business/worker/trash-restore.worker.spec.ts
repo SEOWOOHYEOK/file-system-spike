@@ -10,9 +10,9 @@ import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';
 import { NAS_STORAGE_PORT } from '../../domain/storage/ports/nas-storage.port';
 import {
-  FILE_REPOSITORY,
-  FileState,
+  FILE_REPOSITORY
 } from '../../domain/file';
+import { FileState } from '../../domain/file/type/file.type';
 import { FILE_STORAGE_OBJECT_REPOSITORY } from '../../domain/storage';
 import { FOLDER_REPOSITORY } from '../../domain/folder';
 import { TRASH_REPOSITORY } from '../../domain/trash';
@@ -265,7 +265,7 @@ describe('TrashRestoreWorker', () => {
         '.trash/1769424469467_333.txt',  // 휴지통 경로
         '/1769424469467_333.txt',         // 복원 경로 (타임스탬프 유지!)
       );
-      
+
       // NAS 객체의 objectKey도 올바르게 업데이트되어야 함
       expect(mockNasObject.updateObjectKey).toHaveBeenCalledWith('/1769424469467_333.txt');
     });

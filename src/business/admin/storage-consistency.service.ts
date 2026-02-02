@@ -12,7 +12,7 @@ import {
 import {
   StorageType,
   FileStorageObjectEntity,
-} from '../../domain/storage/file/file-storage-object.entity';
+} from '../../domain/storage/file/entity/file-storage-object.entity';
 import type { ICacheStoragePort } from '../../domain/storage/ports/cache-storage.port';
 import type { INasStoragePort } from '../../domain/storage/ports/nas-storage.port';
 import { FileDomainService } from '../../domain/file';

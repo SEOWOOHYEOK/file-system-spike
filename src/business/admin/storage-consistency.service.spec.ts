@@ -40,7 +40,7 @@ import {
   StorageType,
   FileStorageObjectEntity,
   AvailabilityStatus,
-} from '../../domain/storage/file/file-storage-object.entity';
+} from '../../domain/storage/file/entity/file-storage-object.entity';
 import { FileEntity, FileState } from '../../domain/file/entities/file.entity';
 
 describe('StorageConsistencyService', () => {

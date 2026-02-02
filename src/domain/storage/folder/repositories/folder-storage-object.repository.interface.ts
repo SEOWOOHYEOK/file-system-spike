@@ -4,7 +4,7 @@
  */
 
 import type { QueryRunner } from 'typeorm';
-import { FolderStorageObjectEntity } from '../folder-storage-object.entity';
+import { FolderStorageObjectEntity } from '../entity/folder-storage-object.entity';
 
 /**
  * 트랜잭션 옵션

@@ -27,7 +27,7 @@ import {
 } from '../../domain/sync-event';
 import { FileEntity, StorageType } from '../../domain/file';
 import { FileState } from '../../domain/file/type/file.type';
-import { AvailabilityStatus, FileStorageObjectEntity } from '../../domain/storage/file/file-storage-object.entity';
+import { AvailabilityStatus, FileStorageObjectEntity } from '../../domain/storage/file/entity/file-storage-object.entity';
 
 describe('SyncEventQueryService', () => {
   /**

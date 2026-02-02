@@ -4,7 +4,7 @@
  */
 
 import type { QueryRunner } from 'typeorm';
-import { FileStorageObjectEntity, StorageType } from '../file-storage-object.entity';
+import { FileStorageObjectEntity, StorageType } from '../entity/file-storage-object.entity';
 
 /**
  * 트랜잭션 옵션

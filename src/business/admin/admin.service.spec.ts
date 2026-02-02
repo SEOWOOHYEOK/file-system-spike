@@ -22,7 +22,7 @@ import { CacheHealthCheckService } from '../../infra/storage/cache/cache-health-
 import { NasHealthCheckService } from '../../infra/storage/nas/nas-health-check.service';
 import { StorageConsistencyService } from './storage-consistency.service';
 import { SyncEventStatsService } from './sync-event-stats.service';
-import { StorageType } from '../../domain/storage/file/file-storage-object.entity';
+import { StorageType } from '../../domain/storage/file/entity/file-storage-object.entity';
 import {
   SyncEventStatus,
   SyncEventType,

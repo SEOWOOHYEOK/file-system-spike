@@ -36,7 +36,7 @@ import {
   MoveConflictStrategy,
   StorageType,
 } from '../../domain/file';
-import { FileStorageObjectEntity } from '../../domain/storage/file/file-storage-object.entity';
+import { FileStorageObjectEntity } from '../../domain/storage/file/entity/file-storage-object.entity';
 import { FolderEntity, FolderState } from '../../domain/folder';
 
 describe('FileManageService', () => {
