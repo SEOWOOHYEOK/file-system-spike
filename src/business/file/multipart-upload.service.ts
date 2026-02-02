@@ -68,6 +68,7 @@ import {
 import {
   FOLDER_STORAGE_OBJECT_REPOSITORY,
 } from '../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
+import { normalizeFileName } from '../../common/utils';
 
 
 @Injectable()
@@ -97,7 +98,10 @@ export class MultipartUploadService {
    * 멀티파트 업로드 초기화
    */
   async initiate(request: InitiateMultipartRequest): Promise<InitiateMultipartResponse> {
-    const { fileName, folderId: rawFolderId, totalSize, mimeType, conflictStrategy } = request;
+    const { fileName: rawFileName, folderId: rawFolderId, totalSize, mimeType, conflictStrategy } = request;
+    
+    // 파일명 정규화 (인코딩 문제 해결)
+    const fileName = normalizeFileName(rawFileName);
 
     // 0. 폴더 ID 해석 (root 처리)
     let folderId = rawFolderId;

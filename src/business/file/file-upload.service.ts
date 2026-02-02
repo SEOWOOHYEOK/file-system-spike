@@ -31,6 +31,7 @@ import {
 import { AuditLogHelper } from '../audit/audit-log-helper.service';
 import { UserType } from '../../domain/audit/enums/common.enum';
 import { RequestContext } from '../../common/context/request-context';
+import { normalizeFileName } from '../../common/utils';
 
 import {
   FOLDER_STORAGE_OBJECT_REPOSITORY,
@@ -105,10 +106,13 @@ export class FileUploadService {
     // 2. 업로드 타임스탬프 생성 (중복 체크에 사용)
     const uploadCreatedAt = new Date();
 
+    // 2.5. 파일명 정규화 (Multer Latin-1 인코딩 문제 해결)
+    const normalizedOriginalName = normalizeFileName(file.originalname);
+
     // 3. 동일 파일명 체크 (createdAt 포함)
     const finalFileName = await this.resolveFileName(
       folderId,
-      file.originalname,
+      normalizedOriginalName,
       file.mimetype,
       conflictStrategy,
       uploadCreatedAt,

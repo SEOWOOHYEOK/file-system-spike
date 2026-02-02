@@ -131,7 +131,7 @@ export class FileManageService {
         StorageType.NAS,
         txOptions,
       );
-      
+
       if (nasObject) {
         oldObjectKey = nasObject.objectKey;
         const timestamp = this.extractTimestampFromObjectKey(oldObjectKey);
@@ -291,9 +291,10 @@ export class FileManageService {
         StorageType.NAS,
         txOptions,
       );
+
       if (nasObject) {
         sourcePath = nasObject.objectKey;
-        targetPath = nasObject.objectKey; // objectKey는 유지
+        targetPath = `${targetFolder.path}/ ${this.extractFileNameFromPath(nasObject.objectKey)}`; // objectKey는 유지
         nasObject.updateStatus(AvailabilityStatus.SYNCING);
         await this.fileStorageObjectRepository.save(nasObject, txOptions);
       }

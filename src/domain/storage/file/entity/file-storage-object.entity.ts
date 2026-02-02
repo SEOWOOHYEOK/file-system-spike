@@ -122,6 +122,19 @@ export class FileStorageObjectEntity {
   }
 
   /**
+   * NAS objectKey에서 원본 파일명 추출
+   * @param objectKey NAS objectKey (형식: YYYYMMDDHHmmss__파일명)
+   * @returns 원본 파일명
+   */
+  static extractFileNameFromNasObjectKey(objectKey: string): string {
+    const separatorIndex = objectKey.indexOf('__');
+    if (separatorIndex === -1) {
+      return objectKey;
+    }
+    return objectKey.substring(separatorIndex + 2);
+  }
+
+  /**
    * 캐시 스토리지 객체 생성 팩토리
    */
   static createForCache(params: {
