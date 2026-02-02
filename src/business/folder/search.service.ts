@@ -12,9 +12,9 @@ import {
   SearchFileItem,
   SortBy,
   SortOrder,
-  PaginationInfo,
   FOLDER_REPOSITORY,
 } from '../../domain/folder';
+import { createPaginationInfo } from '../../common/types/pagination';
 import type { IFolderRepository } from '../../domain/folder';
 import { FILE_REPOSITORY } from '../../domain/file';
 import type { IFileRepository } from '../../domain/file';
@@ -86,7 +86,7 @@ export class SearchService {
 
     return {
       results,
-      pagination: this.createPagination(page, pageSize, total),
+      pagination: createPaginationInfo(page, pageSize, total),
       keyword,
     };
   }
@@ -128,7 +128,7 @@ export class SearchService {
 
     return {
       results,
-      pagination: this.createPagination(page, pageSize, total),
+      pagination: createPaginationInfo(page, pageSize, total),
       keyword,
     };
   }
@@ -186,7 +186,7 @@ export class SearchService {
 
     return {
       results,
-      pagination: this.createPagination(page, pageSize, totalItems),
+      pagination: createPaginationInfo(page, pageSize, totalItems),
       keyword,
     };
   }
@@ -224,20 +224,5 @@ export class SearchService {
 
       return sortOrder === SortOrder.DESC ? -comparison : comparison;
     });
-  }
-
-  /**
-   * 페이지네이션 정보 생성
-   */
-  private createPagination(page: number, pageSize: number, totalItems: number): PaginationInfo {
-    const totalPages = Math.ceil(totalItems / pageSize);
-    return {
-      page,
-      pageSize,
-      totalItems,
-      totalPages,
-      hasNext: page < totalPages,
-      hasPrev: page > 1,
-    };
   }
 }

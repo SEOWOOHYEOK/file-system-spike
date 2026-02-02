@@ -2,7 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { ExternalUserOrmEntity } from '../entities/external-user.orm-entity';
-import type { PaginationParams, PaginatedResult } from '../../../common/types/pagination';
+import {
+  type PaginationParams,
+  type PaginatedResult,
+  createPaginatedResult,
+} from '../../../common/types/pagination';
 import { IExternalUserRepository } from '../../../domain/external-share/repositories/external-user.repository.interface';
 import { ExternalUser } from '../../../domain/external-share/entities/external-user.entity';
 import { ExternalUserMapper } from '../mapper/external-user.mapper';
@@ -52,17 +56,12 @@ export class ExternalUserRepository implements IExternalUserRepository {
       order: { [sortBy]: sortOrder.toUpperCase() as 'ASC' | 'DESC' },
     });
 
-    const totalPages = Math.ceil(totalItems / pageSize);
-
-    return {
-      items: entities.map(ExternalUserMapper.toDomain),
+    return createPaginatedResult(
+      entities.map(ExternalUserMapper.toDomain),
       page,
       pageSize,
       totalItems,
-      totalPages,
-      hasNext: page < totalPages,
-      hasPrev: page > 1,
-    };
+    );
   }
 
   async findAllActive(
@@ -78,17 +77,12 @@ export class ExternalUserRepository implements IExternalUserRepository {
       order: { [sortBy]: sortOrder.toUpperCase() as 'ASC' | 'DESC' },
     });
 
-    const totalPages = Math.ceil(totalItems / pageSize);
-
-    return {
-      items: entities.map(ExternalUserMapper.toDomain),
+    return createPaginatedResult(
+      entities.map(ExternalUserMapper.toDomain),
       page,
       pageSize,
       totalItems,
-      totalPages,
-      hasNext: page < totalPages,
-      hasPrev: page > 1,
-    };
+    );
   }
 
   async delete(id: string): Promise<void> {

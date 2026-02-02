@@ -8,11 +8,11 @@ import {
   BreadcrumbItem,
   FolderListItem,
   FileListItemInFolder,
-  PaginationInfo,
   SortBy,
   SortOrder,
   FOLDER_REPOSITORY,
 } from '../../domain/folder';
+import { createPaginationInfo } from '../../common/types/pagination';
 import type { IFolderRepository } from '../../domain/folder';
 import {
   StorageType,
@@ -122,10 +122,10 @@ export class FolderQueryService {
   ): Promise<FolderContentsResponse> {
     // 1. 기본값 설정 (유효성 검증은 DTO에서 처리)
     const {
-      sortBy = SortBy.NAME,
-      sortOrder = SortOrder.ASC,
-      page = 1,
-      pageSize = 50,
+      sortBy = query.sortBy ?? SortBy.NAME,
+      sortOrder = query.sortOrder ?? SortOrder.ASC,
+      page = query.page ?? 1,
+      pageSize = query.pageSize ?? 50,
     } = query;
 
     // 2. 폴더 존재 확인
@@ -154,7 +154,6 @@ export class FolderQueryService {
 
     // 7. 페이지네이션 계산
     const totalItems = sortedFolders.length + sortedFiles.length;
-    const totalPages = Math.ceil(totalItems / pageSize);
     const offset = (page - 1) * pageSize;
 
     // 8. 페이지네이션 적용 (폴더 먼저, 그 다음 파일)
@@ -166,14 +165,7 @@ export class FolderQueryService {
       : [];
 
     // 9. 페이지네이션 정보 생성
-    const pagination: PaginationInfo = {
-      page,
-      pageSize,
-      totalItems,
-      totalPages,
-      hasNext: page < totalPages,
-      hasPrev: page > 1,
-    };
+    const pagination = createPaginationInfo(page, pageSize, totalItems);
 
     return {
       folderId: folder.id,

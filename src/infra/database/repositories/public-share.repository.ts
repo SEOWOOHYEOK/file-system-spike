@@ -6,7 +6,11 @@ import {
   IPublicShareRepository,
   SharedFileStats,
 } from '../../../domain/external-share/repositories/public-share.repository.interface';
-import type { PaginationParams, PaginatedResult } from '../../../common/types/pagination';
+import {
+  type PaginationParams,
+  type PaginatedResult,
+  createPaginatedResult,
+} from '../../../common/types/pagination';
 import { PublicShare } from '../../../domain/external-share/entities/public-share.entity';
 import { PublicShareMapper } from '../mapper/public-share.mapper';
 
@@ -19,17 +23,17 @@ import { PublicShareMapper } from '../mapper/public-share.mapper';
 export class PublicShareRepository implements IPublicShareRepository {
   constructor(
     @InjectRepository(PublicShareOrmEntity)
-    private readonly repo: Repository<PublicShareOrmEntity>,
+    private readonly publicShareRepository: Repository<PublicShareOrmEntity>,
   ) {}
 
   async save(share: PublicShare): Promise<PublicShare> {
     const ormEntity = PublicShareMapper.toOrm(share);
-    const saved = await this.repo.save(ormEntity);
+    const saved = await this.publicShareRepository.save(ormEntity);
     return PublicShareMapper.toDomain(saved);
   }
 
   async findById(id: string): Promise<PublicShare | null> {
-    const found = await this.repo.findOne({ where: { id } });
+    const found = await this.publicShareRepository.findOne({ where: { id } });
     return found ? PublicShareMapper.toDomain(found) : null;
   }
 
@@ -40,24 +44,19 @@ export class PublicShareRepository implements IPublicShareRepository {
     const { page, pageSize, sortBy = 'createdAt', sortOrder = 'desc' } = pagination;
     const skip = (page - 1) * pageSize;
 
-    const [entities, totalItems] = await this.repo.findAndCount({
+    const [entities, totalItems] = await this.publicShareRepository.findAndCount({
       where: { externalUserId },
       skip,
       take: pageSize,
       order: { [sortBy]: sortOrder.toUpperCase() as 'ASC' | 'DESC' },
     });
 
-    const totalPages = Math.ceil(totalItems / pageSize);
-
-    return {
-      items: entities.map(PublicShareMapper.toDomain),
+    return createPaginatedResult(
+      entities.map(PublicShareMapper.toDomain),
       page,
       pageSize,
       totalItems,
-      totalPages,
-      hasNext: page < totalPages,
-      hasPrev: page > 1,
-    };
+    );
   }
 
   async findByOwner(
@@ -67,28 +66,23 @@ export class PublicShareRepository implements IPublicShareRepository {
     const { page, pageSize, sortBy = 'createdAt', sortOrder = 'desc' } = pagination;
     const skip = (page - 1) * pageSize;
 
-    const [entities, totalItems] = await this.repo.findAndCount({
+    const [entities, totalItems] = await this.publicShareRepository.findAndCount({
       where: { ownerId },
       skip,
       take: pageSize,
       order: { [sortBy]: sortOrder.toUpperCase() as 'ASC' | 'DESC' },
     });
 
-    const totalPages = Math.ceil(totalItems / pageSize);
-
-    return {
-      items: entities.map(PublicShareMapper.toDomain),
+    return createPaginatedResult(
+      entities.map(PublicShareMapper.toDomain),
       page,
       pageSize,
       totalItems,
-      totalPages,
-      hasNext: page < totalPages,
-      hasPrev: page > 1,
-    };
+    );
   }
 
   async findByFileId(fileId: string): Promise<PublicShare[]> {
-    const found = await this.repo.find({ where: { fileId } });
+    const found = await this.publicShareRepository.find({ where: { fileId } });
     return found.map(PublicShareMapper.toDomain);
   }
 
@@ -96,7 +90,7 @@ export class PublicShareRepository implements IPublicShareRepository {
     fileId: string,
     externalUserId: string,
   ): Promise<PublicShare | null> {
-    const found = await this.repo.findOne({
+    const found = await this.publicShareRepository.findOne({
       where: { fileId, externalUserId },
     });
     return found ? PublicShareMapper.toDomain(found) : null;
@@ -108,27 +102,22 @@ export class PublicShareRepository implements IPublicShareRepository {
     const { page, pageSize, sortOrder = 'desc' } = pagination;
     const skip = (page - 1) * pageSize;
 
-    const [entities, totalItems] = await this.repo.findAndCount({
+    const [entities, totalItems] = await this.publicShareRepository.findAndCount({
       skip,
       take: pageSize,
       order: { createdAt: sortOrder.toUpperCase() as 'ASC' | 'DESC' },
     });
 
-    const totalPages = Math.ceil(totalItems / pageSize);
-
-    return {
-      items: entities.map(PublicShareMapper.toDomain),
+    return createPaginatedResult(
+      entities.map(PublicShareMapper.toDomain),
       page,
       pageSize,
       totalItems,
-      totalPages,
-      hasNext: page < totalPages,
-      hasPrev: page > 1,
-    };
+    );
   }
 
   async blockAllByFileId(fileId: string, blockedBy: string): Promise<number> {
-    const result = await this.repo.update(
+    const result = await this.publicShareRepository.update(
       { fileId, isBlocked: false },
       {
         isBlocked: true,
@@ -140,7 +129,7 @@ export class PublicShareRepository implements IPublicShareRepository {
   }
 
   async unblockAllByFileId(fileId: string): Promise<number> {
-    const result = await this.repo.update(
+    const result = await this.publicShareRepository.update(
       { fileId, isBlocked: true },
       {
         isBlocked: false,
@@ -155,7 +144,7 @@ export class PublicShareRepository implements IPublicShareRepository {
     externalUserId: string,
     blockedBy: string,
   ): Promise<number> {
-    const result = await this.repo.update(
+    const result = await this.publicShareRepository.update(
       { externalUserId, isBlocked: false },
       {
         isBlocked: true,
@@ -173,7 +162,7 @@ export class PublicShareRepository implements IPublicShareRepository {
     const skip = (page - 1) * pageSize;
 
     // 공유된 파일 통계 쿼리 (파일 정보는 비즈니스 레이어에서 채움)
-    const query = this.repo
+    const query = this.publicShareRepository
       .createQueryBuilder('share')
       .select('share.file_id', 'fileId')
       .addSelect('COUNT(*)', 'shareCount')
@@ -187,7 +176,7 @@ export class PublicShareRepository implements IPublicShareRepository {
       .addSelect('MAX(share.created_at)', 'lastSharedAt')
       .groupBy('share.file_id');
 
-    const countQuery = this.repo
+    const countQuery = this.publicShareRepository
       .createQueryBuilder('share')
       .select('COUNT(DISTINCT share.file_id)', 'count');
 
@@ -197,7 +186,6 @@ export class PublicShareRepository implements IPublicShareRepository {
     ]);
 
     const totalItems = parseInt(countResult?.count || '0', 10);
-    const totalPages = Math.ceil(totalItems / pageSize);
 
     // fileName, mimeType은 빈 문자열로 반환 (비즈니스 레이어에서 채움)
     const items: SharedFileStats[] = statsRaw.map((row) => ({
@@ -212,18 +200,10 @@ export class PublicShareRepository implements IPublicShareRepository {
       lastSharedAt: new Date(row.lastSharedAt),
     }));
 
-    return {
-      items,
-      page,
-      pageSize,
-      totalItems,
-      totalPages,
-      hasNext: page < totalPages,
-      hasPrev: page > 1,
-    };
+    return createPaginatedResult(items, page, pageSize, totalItems);
   }
 
   async delete(id: string): Promise<void> {
-    await this.repo.delete(id);
+    await this.publicShareRepository.delete(id);
   }
 }

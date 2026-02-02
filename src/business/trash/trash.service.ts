@@ -1,5 +1,6 @@
 import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
+import { createPaginationInfo } from '../../common/types/pagination';
 import {
   TrashListResponse,
   TrashItem,
@@ -124,18 +125,18 @@ export class TrashService {
       });
     }
 
-    const totalPages = Math.ceil(result.totalCount / limit);
+    const paginationInfo = createPaginationInfo(page, limit, result.totalCount);
 
     return {
       items,
       totalCount: result.totalCount,
       totalSizeBytes: result.totalSizeBytes,
       pagination: {
-        page,
-        limit,
-        totalPages,
-        hasNext: page < totalPages,
-        hasPrev: page > 1,
+        page: paginationInfo.page,
+        limit: paginationInfo.pageSize,
+        totalPages: paginationInfo.totalPages,
+        hasNext: paginationInfo.hasNext,
+        hasPrev: paginationInfo.hasPrev,
       },
       appliedFilters: {
         search: query.search,

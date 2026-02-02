@@ -6,7 +6,11 @@ import {
   IShareAccessLogRepository,
   AccessLogFilter,
 } from '../../../domain/external-share/repositories/share-access-log.repository.interface';
-import type { PaginationParams, PaginatedResult } from '../../../common/types/pagination';
+import {
+  type PaginationParams,
+  type PaginatedResult,
+  createPaginatedResult,
+} from '../../../common/types/pagination';
 import { ShareAccessLog } from '../../../domain/external-share/entities/share-access-log.entity';
 import { ShareAccessLogMapper } from '../mapper/share-access-log.mapper';
 
@@ -47,17 +51,12 @@ export class ShareAccessLogRepository implements IShareAccessLogRepository {
       order: { [sortBy]: sortOrder.toUpperCase() as 'ASC' | 'DESC' },
     });
 
-    const totalPages = Math.ceil(totalItems / pageSize);
-
-    return {
-      items: entities.map(ShareAccessLogMapper.toDomain),
+    return createPaginatedResult(
+      entities.map(ShareAccessLogMapper.toDomain),
       page,
       pageSize,
       totalItems,
-      totalPages,
-      hasNext: page < totalPages,
-      hasPrev: page > 1,
-    };
+    );
   }
 
   async findByExternalUserId(
@@ -74,17 +73,12 @@ export class ShareAccessLogRepository implements IShareAccessLogRepository {
       order: { [sortBy]: sortOrder.toUpperCase() as 'ASC' | 'DESC' },
     });
 
-    const totalPages = Math.ceil(totalItems / pageSize);
-
-    return {
-      items: entities.map(ShareAccessLogMapper.toDomain),
+    return createPaginatedResult(
+      entities.map(ShareAccessLogMapper.toDomain),
       page,
       pageSize,
       totalItems,
-      totalPages,
-      hasNext: page < totalPages,
-      hasPrev: page > 1,
-    };
+    );
   }
 
   async findAll(
@@ -141,16 +135,11 @@ export class ShareAccessLogRepository implements IShareAccessLogRepository {
       .take(pageSize)
       .getManyAndCount();
 
-    const totalPages = Math.ceil(totalItems / pageSize);
-
-    return {
-      items: entities.map(ShareAccessLogMapper.toDomain),
+    return createPaginatedResult(
+      entities.map(ShareAccessLogMapper.toDomain),
       page,
       pageSize,
       totalItems,
-      totalPages,
-      hasNext: page < totalPages,
-      hasPrev: page > 1,
-    };
+    );
   }
 }
