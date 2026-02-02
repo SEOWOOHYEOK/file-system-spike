@@ -4,7 +4,7 @@
  */
 import { Controller, Get, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiOkResponse } from '@nestjs/swagger';
-import { AdminService } from '../../../business/admin';
+import { AdminService, QueueStatusService } from '../../../business/admin';
 import {
   CacheHealthCheckResponseDto,
   NasHealthCheckResponseDto,
@@ -12,12 +12,16 @@ import {
   StorageConsistencyResponseDto,
   SyncEventsQueryDto,
   SyncEventsResponseDto,
+  QueueStatusResponseDto,
 } from './dto';
 
 @ApiTags('500.관리자')
 @Controller('v1/admin')
 export class AdminController {
-  constructor(private readonly adminService: AdminService) {}
+  constructor(
+    private readonly adminService: AdminService,
+    private readonly queueStatusService: QueueStatusService,
+  ) {}
 
   /**
    * GET /v1/admin/cache/health-check - 캐시 스토리지 연결 상태 확인
@@ -91,5 +95,23 @@ export class AdminController {
       limit: query.limit ?? 100,
       offset: query.offset ?? 0,
     });
+  }
+
+  /**
+   * GET /v1/admin/queue/status - Bull 큐 현황 조회
+   */
+  @Get('queue/status')
+  @ApiOperation({
+    summary: 'Bull 큐 현황 조회',
+    description:
+      'NAS 동기화 관련 Bull 큐의 현황을 조회합니다. ' +
+      '대기 중(waiting), 처리 중(active), 완료(completed), 실패(failed), 지연(delayed) 작업 수를 확인할 수 있습니다.',
+  })
+  @ApiOkResponse({
+    description: '큐 현황 조회 결과',
+    type: QueueStatusResponseDto,
+  })
+  async getQueueStatus(): Promise<QueueStatusResponseDto> {
+    return this.queueStatusService.getQueueStatus();
   }
 }

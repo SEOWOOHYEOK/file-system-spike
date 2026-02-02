@@ -40,6 +40,22 @@ export interface JobOptions {
 export type JobStatus = 'waiting' | 'active' | 'completed' | 'failed' | 'delayed';
 
 /**
+ * 큐 통계 정보
+ */
+export interface QueueStats {
+  /** 대기 중 */
+  waiting: number;
+  /** 처리 중 */
+  active: number;
+  /** 완료 */
+  completed: number;
+  /** 실패 */
+  failed: number;
+  /** 지연됨 */
+  delayed: number;
+}
+
+/**
  * 작업 엔티티
  */
 export interface Job<T = JobData> {
@@ -150,6 +166,19 @@ export interface IJobQueuePort {
    * @param queueName - 큐 이름
    */
   resumeQueue(queueName: string): Promise<void>;
+
+  /**
+   * 큐 통계 조회
+   * @param queueName - 큐 이름
+   * @returns 큐 통계 정보
+   */
+  getQueueStats(queueName: string): Promise<QueueStats>;
+
+  /**
+   * 등록된 모든 큐 이름 조회
+   * @returns 큐 이름 목록
+   */
+  getAllQueueNames(): string[];
 }
 
 /**

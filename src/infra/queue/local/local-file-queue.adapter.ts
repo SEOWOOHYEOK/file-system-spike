@@ -26,6 +26,7 @@ import type {
   JobOptions,
   JobProcessor,
   JobStatus,
+  QueueStats,
 } from '../../../domain/queue/ports/job-queue.port';
 
 /**
@@ -368,5 +369,20 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
   async resumeQueue(queueName: string): Promise<void> {
     this.pausedQueues.delete(queueName);
     this.logger.log(`Queue resumed: ${queueName}`);
+  }
+
+  async getQueueStats(queueName: string): Promise<QueueStats> {
+    const [waiting, active, completed, failed, delayed] = await Promise.all([
+      this.listJobFiles(queueName, 'waiting').then((files) => files.length),
+      this.listJobFiles(queueName, 'active').then((files) => files.length),
+      this.listJobFiles(queueName, 'completed').then((files) => files.length),
+      this.listJobFiles(queueName, 'failed').then((files) => files.length),
+      this.listJobFiles(queueName, 'delayed').then((files) => files.length),
+    ]);
+    return { waiting, active, completed, failed, delayed };
+  }
+
+  getAllQueueNames(): string[] {
+    return Array.from(this.processors.keys());
   }
 }

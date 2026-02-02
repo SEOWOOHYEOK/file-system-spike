@@ -16,6 +16,7 @@ import type {
   JobOptions,
   JobProcessor,
   JobStatus,
+  QueueStats,
 } from '../../../domain/queue/ports/job-queue.port';
 
 @Injectable()
@@ -185,6 +186,22 @@ export class BullQueueAdapter implements IJobQueuePort, OnModuleDestroy {
     const queue = this.getOrCreateQueue(queueName);
     await queue.resume();
     this.logger.log(`Queue resumed: ${queueName}`);
+  }
+
+  async getQueueStats(queueName: string): Promise<QueueStats> {
+    const queue = this.getOrCreateQueue(queueName);
+    const [waiting, active, completed, failed, delayed] = await Promise.all([
+      queue.getWaitingCount(),
+      queue.getActiveCount(),
+      queue.getCompletedCount(),
+      queue.getFailedCount(),
+      queue.getDelayedCount(),
+    ]);
+    return { waiting, active, completed, failed, delayed };
+  }
+
+  getAllQueueNames(): string[] {
+    return Array.from(this.queues.keys());
   }
 
   /**
