@@ -32,38 +32,37 @@ import {
   AvailabilityStatus,
   ConflictStrategy,
   FileEntity,
-  FileState,
   MoveConflictStrategy,
   StorageType,
 } from '../../domain/file';
+import { FileState } from '../../domain/file/type/file.type';
 import { FileStorageObjectEntity } from '../../domain/storage/file/entity/file-storage-object.entity';
 import { FolderEntity, FolderState } from '../../domain/folder';
 
 describe('FileManageService', () => {
   /**
    * 🎭 Mock 설정
-   * 📍 mockFileRepository.existsByNameInFolder:
-   *   - 실제 동작: 동일 파일명 존재 여부 조회
-   *   - Mock 이유: createdAt 포함 여부에 따른 분기만 검증하기 위함
+   * 📍 Domain Services Mock
    */
-  const mockFileRepository = {
-    findByIdForUpdate: jest.fn(),
-    existsByNameInFolder: jest.fn(),
-    save: jest.fn(),
+  const mockFileDomainService = {
+    조회: jest.fn(),
+    잠금조회: jest.fn(),
+    중복확인: jest.fn(),
+    저장: jest.fn(),
   };
-  const mockFileStorageObjectRepository = {
-    findByFileIdAndTypeForUpdate: jest.fn(),
-    findByFileIdAndType: jest.fn(),
-    save: jest.fn(),
+  const mockFolderDomainService = {
+    조회: jest.fn(),
   };
-  const mockFolderRepository = {
-    findById: jest.fn(),
+  const mockTrashDomainService = {
+    파일메타생성: jest.fn(),
   };
-  const mockTrashRepository = {
-    save: jest.fn(),
+  const mockSyncEventDomainService = {
+    저장: jest.fn(),
   };
-  const mockSyncEventRepository = {
-    save: jest.fn(),
+  const mockFileNasStorageDomainService = {
+    조회: jest.fn(),
+    잠금조회: jest.fn(),
+    저장: jest.fn(),
   };
   const mockJobQueue = {
     addJob: jest.fn(),
@@ -85,11 +84,11 @@ describe('FileManageService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     service = new FileManageService(
-      mockFileRepository as any,
-      mockFileStorageObjectRepository as any,
-      mockFolderRepository as any,
-      mockTrashRepository as any,
-      mockSyncEventRepository as any,
+      mockFileDomainService as any,
+      mockFolderDomainService as any,
+      mockTrashDomainService as any,
+      mockSyncEventDomainService as any,
+      mockFileNasStorageDomainService as any,
       mockJobQueue as any,
       mockDataSource as any,
     );
@@ -139,22 +138,21 @@ describe('FileManageService', () => {
       updatedAt: new Date(),
     });
 
-    mockFileRepository.findByIdForUpdate.mockResolvedValue(file);
-    mockFileStorageObjectRepository.findByFileIdAndTypeForUpdate.mockResolvedValue(nasObject);
-    mockFileStorageObjectRepository.findByFileIdAndType.mockResolvedValue(nasObject);
-    mockFolderRepository.findById.mockResolvedValue(folder);
-    mockFileRepository.save.mockResolvedValue(file);
-    mockFileStorageObjectRepository.save.mockResolvedValue(nasObject);
-    mockSyncEventRepository.save.mockResolvedValue(undefined);
+    mockFileDomainService.잠금조회.mockResolvedValue(file);
+    mockFileNasStorageDomainService.잠금조회.mockResolvedValue(nasObject);
+    mockFileNasStorageDomainService.조회.mockResolvedValue(nasObject);
+    mockFolderDomainService.조회.mockResolvedValue(folder);
+    mockFileDomainService.저장.mockResolvedValue(file);
+    mockFileNasStorageDomainService.저장.mockResolvedValue(nasObject);
+    mockSyncEventDomainService.저장.mockResolvedValue(undefined);
     mockJobQueue.addJob.mockResolvedValue(undefined);
 
-    mockFileRepository.existsByNameInFolder.mockImplementation(
+    mockFileDomainService.중복확인.mockImplementation(
       (
         folderId: string,
         name: string,
         mimeType: string,
         excludeFileId?: string,
-        options?: unknown,
         createdAt?: Date,
       ) => {
         if (!createdAt) {
@@ -210,8 +208,8 @@ describe('FileManageService', () => {
       createdAt: new Date(),
     });
 
-    mockFileRepository.findByIdForUpdate.mockResolvedValue(file);
-    mockFileStorageObjectRepository.findByFileIdAndTypeForUpdate.mockResolvedValue(nasObject);
+    mockFileDomainService.잠금조회.mockResolvedValue(file);
+    mockFileNasStorageDomainService.잠금조회.mockResolvedValue(nasObject);
 
     // ═══════════════════════════════════════════════════════
     // 🎬 WHEN + ✅ THEN (실행 및 결과 검증)
@@ -256,8 +254,8 @@ describe('FileManageService', () => {
       createdAt: new Date(),
     });
 
-    mockFileRepository.findByIdForUpdate.mockResolvedValue(file);
-    mockFileStorageObjectRepository.findByFileIdAndTypeForUpdate.mockResolvedValue(nasObject);
+    mockFileDomainService.잠금조회.mockResolvedValue(file);
+    mockFileNasStorageDomainService.잠금조회.mockResolvedValue(nasObject);
 
     // ═══════════════════════════════════════════════════════
     // 🎬 WHEN + ✅ THEN (실행 및 결과 검증)
@@ -311,15 +309,15 @@ describe('FileManageService', () => {
       updatedAt: new Date(),
     });
 
-    mockFileRepository.findByIdForUpdate.mockResolvedValue(file);
-    mockFileStorageObjectRepository.findByFileIdAndTypeForUpdate.mockResolvedValue(nasObject);
-    mockFileStorageObjectRepository.findByFileIdAndType.mockResolvedValue(nasObject);
-    mockFolderRepository.findById.mockResolvedValue(folder);
-    mockFileRepository.save.mockResolvedValue(file);
-    mockFileStorageObjectRepository.save.mockResolvedValue(nasObject);
-    mockSyncEventRepository.save.mockResolvedValue(undefined);
+    mockFileDomainService.잠금조회.mockResolvedValue(file);
+    mockFileNasStorageDomainService.잠금조회.mockResolvedValue(nasObject);
+    mockFileNasStorageDomainService.조회.mockResolvedValue(nasObject);
+    mockFolderDomainService.조회.mockResolvedValue(folder);
+    mockFileDomainService.저장.mockResolvedValue(file);
+    mockFileNasStorageDomainService.저장.mockResolvedValue(nasObject);
+    mockSyncEventDomainService.저장.mockResolvedValue(undefined);
     mockJobQueue.addJob.mockResolvedValue(undefined);
-    mockFileRepository.existsByNameInFolder.mockResolvedValue(false);
+    mockFileDomainService.중복확인.mockResolvedValue(false);
 
     // ═══════════════════════════════════════════════════════
     // 🎬 WHEN (테스트 실행)
@@ -329,7 +327,7 @@ describe('FileManageService', () => {
     // ═══════════════════════════════════════════════════════
     // ✅ THEN (결과 검증)
     // ═══════════════════════════════════════════════════════
-    expect(mockFileStorageObjectRepository.save).toHaveBeenCalledWith(
+    expect(mockFileNasStorageDomainService.저장).toHaveBeenCalledWith(
       expect.objectContaining({
         storageType: StorageType.NAS,
         objectKey: '20240101000000__new.txt',
@@ -382,22 +380,21 @@ describe('FileManageService', () => {
       updatedAt: new Date(),
     });
 
-    mockFolderRepository.findById.mockResolvedValue(targetFolder);
-    mockFileRepository.findByIdForUpdate.mockResolvedValue(file);
-    mockFileStorageObjectRepository.findByFileIdAndTypeForUpdate.mockResolvedValue(nasObject);
-    mockFileStorageObjectRepository.findByFileIdAndType.mockResolvedValue(nasObject);
-    mockFileRepository.save.mockResolvedValue(file);
-    mockFileStorageObjectRepository.save.mockResolvedValue(nasObject);
-    mockSyncEventRepository.save.mockResolvedValue(undefined);
+    mockFolderDomainService.조회.mockResolvedValue(targetFolder);
+    mockFileDomainService.잠금조회.mockResolvedValue(file);
+    mockFileNasStorageDomainService.잠금조회.mockResolvedValue(nasObject);
+    mockFileNasStorageDomainService.조회.mockResolvedValue(nasObject);
+    mockFileDomainService.저장.mockResolvedValue(file);
+    mockFileNasStorageDomainService.저장.mockResolvedValue(nasObject);
+    mockSyncEventDomainService.저장.mockResolvedValue(undefined);
     mockJobQueue.addJob.mockResolvedValue(undefined);
 
-    mockFileRepository.existsByNameInFolder.mockImplementation(
+    mockFileDomainService.중복확인.mockImplementation(
       (
         folderId: string,
         name: string,
         mimeType: string,
         excludeFileId?: string,
-        options?: unknown,
         createdAt?: Date,
       ) => {
         if (!createdAt) {
@@ -466,15 +463,15 @@ describe('FileManageService', () => {
       updatedAt: new Date(),
     });
 
-    mockFolderRepository.findById.mockResolvedValue(targetFolder);
-    mockFileRepository.findByIdForUpdate.mockResolvedValue(file);
-    mockFileStorageObjectRepository.findByFileIdAndTypeForUpdate.mockResolvedValue(nasObject);
-    mockFileStorageObjectRepository.findByFileIdAndType.mockResolvedValue(nasObject);
-    mockFileRepository.save.mockResolvedValue(file);
-    mockFileStorageObjectRepository.save.mockResolvedValue(nasObject);
-    mockSyncEventRepository.save.mockResolvedValue(undefined);
+    mockFolderDomainService.조회.mockResolvedValue(targetFolder);
+    mockFileDomainService.잠금조회.mockResolvedValue(file);
+    mockFileNasStorageDomainService.잠금조회.mockResolvedValue(nasObject);
+    mockFileNasStorageDomainService.조회.mockResolvedValue(nasObject);
+    mockFileDomainService.저장.mockResolvedValue(file);
+    mockFileNasStorageDomainService.저장.mockResolvedValue(nasObject);
+    mockSyncEventDomainService.저장.mockResolvedValue(undefined);
     mockJobQueue.addJob.mockResolvedValue(undefined);
-    mockFileRepository.existsByNameInFolder.mockResolvedValue(false);
+    mockFileDomainService.중복확인.mockResolvedValue(false);
 
     // ═══════════════════════════════════════════════════════
     // 🎬 WHEN (테스트 실행)
@@ -488,7 +485,7 @@ describe('FileManageService', () => {
     // ═══════════════════════════════════════════════════════
     // ✅ THEN (결과 검증)
     // ═══════════════════════════════════════════════════════
-    expect(mockFileStorageObjectRepository.save).toHaveBeenCalledWith(
+    expect(mockFileNasStorageDomainService.저장).toHaveBeenCalledWith(
       expect.objectContaining({
         storageType: StorageType.NAS,
         objectKey: '20240101000000__222.txt',
@@ -550,15 +547,15 @@ describe('FileManageService', () => {
       updatedAt: new Date(),
     });
 
-    mockFileRepository.findByIdForUpdate.mockResolvedValue(file);
-    mockFileStorageObjectRepository.findByFileIdAndTypeForUpdate.mockResolvedValue(nasObject);
-    mockFileStorageObjectRepository.findByFileIdAndType.mockResolvedValue(nasObject);
-    mockFolderRepository.findById.mockResolvedValueOnce(folder).mockResolvedValueOnce(targetFolder);
-    mockFileRepository.save.mockResolvedValue(file);
-    mockFileStorageObjectRepository.save.mockResolvedValue(nasObject);
-    mockSyncEventRepository.save.mockResolvedValue(undefined);
+    mockFileDomainService.잠금조회.mockResolvedValue(file);
+    mockFileNasStorageDomainService.잠금조회.mockResolvedValue(nasObject);
+    mockFileNasStorageDomainService.조회.mockResolvedValue(nasObject);
+    mockFolderDomainService.조회.mockResolvedValueOnce(folder).mockResolvedValueOnce(targetFolder);
+    mockFileDomainService.저장.mockResolvedValue(file);
+    mockFileNasStorageDomainService.저장.mockResolvedValue(nasObject);
+    mockSyncEventDomainService.저장.mockResolvedValue(undefined);
     mockJobQueue.addJob.mockResolvedValue(undefined);
-    mockFileRepository.existsByNameInFolder.mockResolvedValue(false);
+    mockFileDomainService.중복확인.mockResolvedValue(false);
 
     // ═══════════════════════════════════════════════════════
     // 🎬 WHEN (테스트 실행)
@@ -576,12 +573,12 @@ describe('FileManageService', () => {
     // ✅ THEN (결과 검증)
     // ═══════════════════════════════════════════════════════
     expect(mockJobQueue.addJob).toHaveBeenCalledWith(
-      'NAS_SYNC_RENAME',
-      expect.objectContaining({ syncEventId: 'mock-uuid' }),
+      'NAS_FILE_SYNC',
+      expect.objectContaining({ syncEventId: 'mock-uuid', action: 'rename' }),
     );
     expect(mockJobQueue.addJob).toHaveBeenCalledWith(
-      'NAS_SYNC_MOVE',
-      expect.objectContaining({ syncEventId: 'mock-uuid' }),
+      'NAS_FILE_SYNC',
+      expect.objectContaining({ syncEventId: 'mock-uuid', action: 'move' }),
     );
   });
 
@@ -602,7 +599,7 @@ describe('FileManageService', () => {
       // ═══════════════════════════════════════════════════════
       // 📥 GIVEN (사전 조건 설정)
       // ═══════════════════════════════════════════════════════
-      mockFileRepository.findByIdForUpdate.mockResolvedValue(null);
+      mockFileDomainService.잠금조회.mockResolvedValue(null);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN + ✅ THEN (실행 및 결과 검증)
@@ -649,8 +646,8 @@ describe('FileManageService', () => {
         createdAt: new Date(),
       });
 
-      mockFileRepository.findByIdForUpdate.mockResolvedValue(file);
-      mockFileStorageObjectRepository.findByFileIdAndTypeForUpdate.mockResolvedValue(syncingNasObject);
+      mockFileDomainService.잠금조회.mockResolvedValue(file);
+      mockFileNasStorageDomainService.잠금조회.mockResolvedValue(syncingNasObject);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN + ✅ THEN (실행 및 결과 검증)
@@ -690,8 +687,8 @@ describe('FileManageService', () => {
         updatedAt: new Date(),
       });
 
-      mockFolderRepository.findById.mockResolvedValue(targetFolder);
-      mockFileRepository.findByIdForUpdate.mockResolvedValue(null);
+      mockFolderDomainService.조회.mockResolvedValue(targetFolder);
+      mockFileDomainService.잠금조회.mockResolvedValue(null);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN + ✅ THEN (실행 및 결과 검증)
@@ -720,7 +717,7 @@ describe('FileManageService', () => {
       // ═══════════════════════════════════════════════════════
       // 📥 GIVEN (사전 조건 설정)
       // ═══════════════════════════════════════════════════════
-      mockFolderRepository.findById.mockResolvedValue(null);
+      mockFolderDomainService.조회.mockResolvedValue(null);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN + ✅ THEN (실행 및 결과 검증)
@@ -789,11 +786,11 @@ describe('FileManageService', () => {
         updatedAt: new Date(),
       });
 
-      mockFolderRepository.findById
+      mockFolderDomainService.조회
         .mockResolvedValueOnce(targetFolder) // 대상 폴더 조회
         .mockResolvedValueOnce(sourceFolder); // 소스 폴더 조회
-      mockFileRepository.findByIdForUpdate.mockResolvedValue(file);
-      mockFileStorageObjectRepository.findByFileIdAndTypeForUpdate.mockResolvedValue(syncingNasObject);
+      mockFileDomainService.잠금조회.mockResolvedValue(file);
+      mockFileNasStorageDomainService.잠금조회.mockResolvedValue(syncingNasObject);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN + ✅ THEN (실행 및 결과 검증)
@@ -862,13 +859,13 @@ describe('FileManageService', () => {
         updatedAt: new Date(),
       });
 
-      mockFolderRepository.findById
+      mockFolderDomainService.조회
         .mockResolvedValueOnce(targetFolder)
         .mockResolvedValueOnce(sourceFolder);
-      mockFileRepository.findByIdForUpdate.mockResolvedValue(file);
-      mockFileStorageObjectRepository.findByFileIdAndTypeForUpdate.mockResolvedValue(nasObject);
+      mockFileDomainService.잠금조회.mockResolvedValue(file);
+      mockFileNasStorageDomainService.잠금조회.mockResolvedValue(nasObject);
       // 중복 파일 존재
-      mockFileRepository.existsByNameInFolder.mockResolvedValue(true);
+      mockFileDomainService.중복확인.mockResolvedValue(true);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
@@ -937,14 +934,14 @@ describe('FileManageService', () => {
         updatedAt: new Date(),
       });
 
-      mockFileRepository.findByIdForUpdate.mockResolvedValue(file);
-      mockFileStorageObjectRepository.findByFileIdAndTypeForUpdate.mockResolvedValue(nasObject);
-      mockFileStorageObjectRepository.findByFileIdAndType.mockResolvedValue(nasObject);
-      mockFolderRepository.findById.mockResolvedValue(folder);
-      mockFileRepository.save.mockResolvedValue(file);
-      mockTrashRepository.save.mockResolvedValue(undefined);
-      mockFileStorageObjectRepository.save.mockResolvedValue(nasObject);
-      mockSyncEventRepository.save.mockResolvedValue(undefined);
+      mockFileDomainService.잠금조회.mockResolvedValue(file);
+      mockFileNasStorageDomainService.잠금조회.mockResolvedValue(nasObject);
+      mockFileNasStorageDomainService.조회.mockResolvedValue(nasObject);
+      mockFolderDomainService.조회.mockResolvedValue(folder);
+      mockFileDomainService.저장.mockResolvedValue(file);
+      mockTrashDomainService.파일메타생성.mockResolvedValue(undefined);
+      mockFileNasStorageDomainService.저장.mockResolvedValue(nasObject);
+      mockSyncEventDomainService.저장.mockResolvedValue(undefined);
       mockJobQueue.addJob.mockResolvedValue(undefined);
 
       // ═══════════════════════════════════════════════════════
@@ -957,12 +954,13 @@ describe('FileManageService', () => {
       // ═══════════════════════════════════════════════════════
       expect(result.state).toBe(FileState.TRASHED);
       expect(result.syncEventId).toBe('mock-uuid');
-      expect(mockTrashRepository.save).toHaveBeenCalled();
+      expect(mockTrashDomainService.파일메타생성).toHaveBeenCalled();
       expect(mockJobQueue.addJob).toHaveBeenCalledWith(
-        'NAS_MOVE_TO_TRASH',
+        'NAS_FILE_SYNC',
         expect.objectContaining({
           fileId: 'file-1',
           syncEventId: 'mock-uuid',
+          action: 'trash',
         }),
       );
     });
@@ -980,7 +978,7 @@ describe('FileManageService', () => {
       // ═══════════════════════════════════════════════════════
       // 📥 GIVEN (사전 조건 설정)
       // ═══════════════════════════════════════════════════════
-      mockFileRepository.findByIdForUpdate.mockResolvedValue(null);
+      mockFileDomainService.잠금조회.mockResolvedValue(null);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN + ✅ THEN (실행 및 결과 검증)
@@ -1014,7 +1012,7 @@ describe('FileManageService', () => {
         updatedAt: new Date(),
       });
 
-      mockFileRepository.findByIdForUpdate.mockResolvedValue(trashedFile);
+      mockFileDomainService.잠금조회.mockResolvedValue(trashedFile);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN + ✅ THEN (실행 및 결과 검증)
@@ -1058,8 +1056,8 @@ describe('FileManageService', () => {
         createdAt: new Date(),
       });
 
-      mockFileRepository.findByIdForUpdate.mockResolvedValue(file);
-      mockFileStorageObjectRepository.findByFileIdAndTypeForUpdate.mockResolvedValue(syncingNasObject);
+      mockFileDomainService.잠금조회.mockResolvedValue(file);
+      mockFileNasStorageDomainService.잠금조회.mockResolvedValue(syncingNasObject);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN + ✅ THEN (실행 및 결과 검증)
@@ -1109,8 +1107,8 @@ describe('FileManageService', () => {
         createdAt: new Date(),
       });
 
-      mockFileRepository.findByIdForUpdate.mockResolvedValue(file);
-      mockFileStorageObjectRepository.findByFileIdAndTypeForUpdate.mockResolvedValue(nasObjectInUse);
+      mockFileDomainService.잠금조회.mockResolvedValue(file);
+      mockFileNasStorageDomainService.잠금조회.mockResolvedValue(nasObjectInUse);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN + ✅ THEN (실행 및 결과 검증)

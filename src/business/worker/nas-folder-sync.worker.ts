@@ -1,4 +1,5 @@
 import { Injectable, Inject, OnModuleInit, Logger } from '@nestjs/common';
+import { buildPath } from '../../common/utils';
 import {
   JOB_QUEUE_PORT,
   Job,
@@ -278,7 +279,8 @@ export class NasFolderSyncWorker implements OnModuleInit {
         if (folder && originalParentId) {
           const originalParent = await this.folderRepository.findById(originalParentId);
           if (originalParent) {
-            folder.moveTo(originalParentId, `${originalParent.path}/${folder.name}`);
+            const revertPath = buildPath(originalParent.path, folder.name);
+            folder.moveTo(originalParentId, revertPath);
             await this.folderRepository.save(folder);
           }
         }

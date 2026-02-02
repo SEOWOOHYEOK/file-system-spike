@@ -15,5 +15,8 @@ export * from './dto';
 // 리포지토리 인터페이스
 export * from './repositories/upload-session.repository.interface';
 
+// 도메인 서비스
+export * from './service';
+
 // 모듈
 export * from './upload-session.module';

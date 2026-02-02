@@ -15,6 +15,7 @@ import {
 import type {
     IFileRepository,
     FindFileOptions,
+    TransactionOptions,
 } from '../repositories/file.repository.interface';
 
 /**
@@ -26,6 +27,7 @@ export interface CreateFileParams {
     folderId: string;
     sizeBytes: number;
     mimeType: string;
+    createdAt?: Date;
 }
 
 @Injectable()
@@ -42,44 +44,51 @@ export class FileDomainService {
     /**
      * ID로 파일 조회
      */
-    async 조회(fileId: string): Promise<FileEntity | null> {
-        return this.fileRepository.findById(fileId);
+    async 조회(fileId: string, txOptions?: TransactionOptions): Promise<FileEntity | null> {
+        return this.fileRepository.findById(fileId, txOptions);
     }
 
     /**
      * 여러 ID로 파일 조회
      */
-    async 아이디목록조회(fileIds: string[]): Promise<FileEntity[]> {
-        return this.fileRepository.findByIds(fileIds);
+    async 아이디목록조회(fileIds: string[], txOptions?: TransactionOptions): Promise<FileEntity[]> {
+        return this.fileRepository.findByIds(fileIds, txOptions);
     }
 
     /**
      * ID로 파일 조회 (락 획득)
      */
-    async 잠금조회(fileId: string): Promise<FileEntity | null> {
-        return this.fileRepository.findByIdForUpdate(fileId);
+    async 잠금조회(fileId: string, txOptions?: TransactionOptions): Promise<FileEntity | null> {
+        return this.fileRepository.findByIdForUpdate(fileId, txOptions);
     }
 
     /**
      * 조건으로 파일 조회
      */
-    async 조건조회(options: FindFileOptions): Promise<FileEntity | null> {
-        return this.fileRepository.findOne(options);
+    async 조건조회(options: FindFileOptions, txOptions?: TransactionOptions): Promise<FileEntity | null> {
+        return this.fileRepository.findOne(options, txOptions);
     }
 
     /**
      * 폴더 내 파일 목록 조회
      */
-    async 폴더내파일조회(folderId: string, state?: FileState): Promise<FileEntity[]> {
-        return this.fileRepository.findByFolderId(folderId, state);
+    async 폴더내파일조회(folderId: string, state?: FileState, txOptions?: TransactionOptions): Promise<FileEntity[]> {
+        return this.fileRepository.findByFolderId(folderId, state, txOptions);
     }
 
     /**
      * 동일 파일명 존재 확인
      * @param createdAt 동일 createdAt 값도 체크할 경우 전달
      */
-    async 중복확인(folderId: string, name: string, mimeType: string, excludeFileId?: string, createdAt?: Date): Promise<boolean> {
-        return this.fileRepository.existsByNameInFolder(folderId, name, mimeType, excludeFileId, undefined, createdAt);
+    async 중복확인(
+        folderId: string,
+        name: string,
+        mimeType: string,
+        excludeFileId?: string,
+        createdAt?: Date,
+        txOptions?: TransactionOptions,
+    ): Promise<boolean> {
+        return this.fileRepository.existsByNameInFolder(folderId, name, mimeType, excludeFileId, txOptions, createdAt);
     }
 
     // ============================================
@@ -93,9 +102,11 @@ export class FileDomainService {
      * 참고: 중복 확인은 비즈니스 레이어에서 처리할 수 있습니다.
      *
      * @param params - 파일 생성 파라미터
+     * @param txOptions - 트랜잭션 옵션
      * @returns 생성된 파일 엔티티
      */
-    async 생성(params: CreateFileParams): Promise<FileEntity> {
+    async 생성(params: CreateFileParams, txOptions?: TransactionOptions): Promise<FileEntity> {
+        const now = params.createdAt ?? new Date();
         // 새 엔티티 생성
         const file = new FileEntity({
             id: params.id,
@@ -104,12 +115,24 @@ export class FileDomainService {
             sizeBytes: params.sizeBytes,
             mimeType: params.mimeType,
             state: FileState.ACTIVE,
-            createdAt: new Date(),
-            updatedAt: new Date(),
+            createdAt: now,
+            updatedAt: now,
         });
 
         // 영속화
-        return this.fileRepository.save(file);
+        return this.fileRepository.save(file, txOptions);
+    }
+
+    /**
+     * 파일 저장
+     * 기존 파일 엔티티를 영속화합니다.
+     *
+     * @param file - 저장할 파일 엔티티
+     * @param txOptions - 트랜잭션 옵션
+     * @returns 저장된 파일 엔티티
+     */
+    async 저장(file: FileEntity, txOptions?: TransactionOptions): Promise<FileEntity> {
+        return this.fileRepository.save(file, txOptions);
     }
 
     /**
@@ -117,16 +140,17 @@ export class FileDomainService {
      * 엔티티의 delete 행위를 실행하고 변경사항을 영속화합니다.
      *
      * @param fileId - 대상 파일 ID
+     * @param txOptions - 트랜잭션 옵션
      * @returns 업데이트된 파일 엔티티
      * @throws Error - 파일이 존재하지 않거나 활성 상태가 아닌 경우
      */
-    async 삭제(fileId: string): Promise<FileEntity> {
-        const file = await this.fileRepository.findByIdForUpdate(fileId);
+    async 삭제(fileId: string, txOptions?: TransactionOptions): Promise<FileEntity> {
+        const file = await this.fileRepository.findByIdForUpdate(fileId, txOptions);
         if (!file) {
             throw new Error(`파일을 찾을 수 없습니다: ${fileId}`);
         }
 
-        return this.엔티티삭제(file);
+        return this.엔티티삭제(file, txOptions);
     }
 
     /**
@@ -134,14 +158,15 @@ export class FileDomainService {
      * 이미 조회된 엔티티의 delete 행위를 실행하고 영속화합니다.
      *
      * @param file - 삭제할 파일 엔티티
+     * @param txOptions - 트랜잭션 옵션
      * @returns 업데이트된 파일 엔티티
      */
-    async 엔티티삭제(file: FileEntity): Promise<FileEntity> {
+    async 엔티티삭제(file: FileEntity, txOptions?: TransactionOptions): Promise<FileEntity> {
         // 엔티티 행위 실행
         file.delete();
 
         // 영속화
-        return this.fileRepository.save(file);
+        return this.fileRepository.save(file, txOptions);
     }
 
     /**
@@ -150,16 +175,17 @@ export class FileDomainService {
      *
      * @param fileId - 대상 파일 ID
      * @param newName - 새 파일명
+     * @param txOptions - 트랜잭션 옵션
      * @returns 업데이트된 파일 엔티티
      * @throws Error - 파일이 존재하지 않거나 활성 상태가 아닌 경우
      */
-    async 이름변경(fileId: string, newName: string): Promise<FileEntity> {
-        const file = await this.fileRepository.findByIdForUpdate(fileId);
+    async 이름변경(fileId: string, newName: string, txOptions?: TransactionOptions): Promise<FileEntity> {
+        const file = await this.fileRepository.findByIdForUpdate(fileId, txOptions);
         if (!file) {
             throw new Error(`파일을 찾을 수 없습니다: ${fileId}`);
         }
 
-        return this.엔티티이름변경(file, newName);
+        return this.엔티티이름변경(file, newName, txOptions);
     }
 
     /**
@@ -168,14 +194,15 @@ export class FileDomainService {
      *
      * @param file - 이름을 변경할 파일 엔티티
      * @param newName - 새 파일명
+     * @param txOptions - 트랜잭션 옵션
      * @returns 업데이트된 파일 엔티티
      */
-    async 엔티티이름변경(file: FileEntity, newName: string): Promise<FileEntity> {
+    async 엔티티이름변경(file: FileEntity, newName: string, txOptions?: TransactionOptions): Promise<FileEntity> {
         // 엔티티 행위 실행
         file.rename(newName);
 
         // 영속화
-        return this.fileRepository.save(file);
+        return this.fileRepository.save(file, txOptions);
     }
 
     /**
@@ -184,16 +211,17 @@ export class FileDomainService {
      *
      * @param fileId - 대상 파일 ID
      * @param targetFolderId - 이동할 대상 폴더 ID
+     * @param txOptions - 트랜잭션 옵션
      * @returns 업데이트된 파일 엔티티
      * @throws Error - 파일이 존재하지 않거나 활성 상태가 아닌 경우
      */
-    async 이동(fileId: string, targetFolderId: string): Promise<FileEntity> {
-        const file = await this.fileRepository.findByIdForUpdate(fileId);
+    async 이동(fileId: string, targetFolderId: string, txOptions?: TransactionOptions): Promise<FileEntity> {
+        const file = await this.fileRepository.findByIdForUpdate(fileId, txOptions);
         if (!file) {
             throw new Error(`파일을 찾을 수 없습니다: ${fileId}`);
         }
 
-        return this.엔티티이동(file, targetFolderId);
+        return this.엔티티이동(file, targetFolderId, txOptions);
     }
 
     /**
@@ -202,9 +230,10 @@ export class FileDomainService {
      *
      * @param file - 이동할 파일 엔티티
      * @param targetFolderId - 이동할 대상 폴더 ID
+     * @param txOptions - 트랜잭션 옵션
      * @returns 업데이트된 파일 엔티티
      */
-    async 엔티티이동(file: FileEntity, targetFolderId: string): Promise<FileEntity> {
+    async 엔티티이동(file: FileEntity, targetFolderId: string, txOptions?: TransactionOptions): Promise<FileEntity> {
         // 동일 폴더로의 이동 방지
         if (file.folderId === targetFolderId) {
             throw new Error('파일이 이미 해당 폴더에 있습니다.');
@@ -214,7 +243,7 @@ export class FileDomainService {
         file.moveTo(targetFolderId);
 
         // 영속화
-        return this.fileRepository.save(file);
+        return this.fileRepository.save(file, txOptions);
     }
 
     /**
@@ -222,16 +251,17 @@ export class FileDomainService {
      * 엔티티의 permanentDelete 행위를 실행하고 변경사항을 영속화합니다.
      *
      * @param fileId - 대상 파일 ID
+     * @param txOptions - 트랜잭션 옵션
      * @returns 업데이트된 파일 엔티티
      * @throws Error - 파일이 존재하지 않거나 휴지통 상태가 아닌 경우
      */
-    async 영구삭제(fileId: string): Promise<FileEntity> {
-        const file = await this.fileRepository.findByIdForUpdate(fileId);
+    async 영구삭제(fileId: string, txOptions?: TransactionOptions): Promise<FileEntity> {
+        const file = await this.fileRepository.findByIdForUpdate(fileId, txOptions);
         if (!file) {
             throw new Error(`파일을 찾을 수 없습니다: ${fileId}`);
         }
 
-        return this.엔티티영구삭제(file);
+        return this.엔티티영구삭제(file, txOptions);
     }
 
     /**
@@ -239,14 +269,15 @@ export class FileDomainService {
      * 이미 조회된 엔티티의 permanentDelete 행위를 실행하고 영속화합니다.
      *
      * @param file - 영구 삭제할 파일 엔티티
+     * @param txOptions - 트랜잭션 옵션
      * @returns 업데이트된 파일 엔티티
      */
-    async 엔티티영구삭제(file: FileEntity): Promise<FileEntity> {
+    async 엔티티영구삭제(file: FileEntity, txOptions?: TransactionOptions): Promise<FileEntity> {
         // 엔티티 행위 실행
         file.permanentDelete();
 
         // 영속화
-        return this.fileRepository.save(file);
+        return this.fileRepository.save(file, txOptions);
     }
 
     // ============================================
@@ -259,12 +290,13 @@ export class FileDomainService {
      *
      * @param folderIds - 대상 폴더 ID 목록
      * @param state - 변경할 상태
+     * @param txOptions - 트랜잭션 옵션
      * @returns 영향받은 파일 수
      */
-    async 폴더별상태일괄변경(folderIds: string[], state: FileState): Promise<number> {
+    async 폴더별상태일괄변경(folderIds: string[], state: FileState, txOptions?: TransactionOptions): Promise<number> {
         if (folderIds.length === 0) {
             return 0;
         }
-        return this.fileRepository.updateStateByFolderIds(folderIds, state);
+        return this.fileRepository.updateStateByFolderIds(folderIds, state, txOptions);
     }
 }

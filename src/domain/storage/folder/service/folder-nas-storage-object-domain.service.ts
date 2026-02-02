@@ -13,6 +13,7 @@ import {
 } from '../repositories/folder-storage-object.repository.interface';
 import type {
   IFolderStorageObjectRepository,
+  TransactionOptions,
 } from '../repositories/folder-storage-object.repository.interface';
 
 /**
@@ -39,15 +40,15 @@ export class FolderNasStorageObjectDomainService {
   /**
    * 폴더 ID로 조회
    */
-  async 조회(folderId: string): Promise<FolderStorageObjectEntity | null> {
-    return this.repository.findByFolderId(folderId);
+  async 조회(folderId: string, txOptions?: TransactionOptions): Promise<FolderStorageObjectEntity | null> {
+    return this.repository.findByFolderId(folderId, txOptions);
   }
 
   /**
    * 폴더 ID로 조회 (락 획득)
    */
-  async 잠금조회(folderId: string): Promise<FolderStorageObjectEntity | null> {
-    return this.repository.findByFolderIdForUpdate(folderId);
+  async 잠금조회(folderId: string, txOptions?: TransactionOptions): Promise<FolderStorageObjectEntity | null> {
+    return this.repository.findByFolderIdForUpdate(folderId, txOptions);
   }
 
   // ============================================
@@ -59,9 +60,10 @@ export class FolderNasStorageObjectDomainService {
    * 새 스토리지 객체 엔티티를 생성하고 영속화합니다.
    *
    * @param params - 생성 파라미터
+   * @param txOptions - 트랜잭션 옵션
    * @returns 생성된 스토리지 객체 엔티티
    */
-  async 생성(params: CreateFolderStorageObjectParams): Promise<FolderStorageObjectEntity> {
+  async 생성(params: CreateFolderStorageObjectParams, txOptions?: TransactionOptions): Promise<FolderStorageObjectEntity> {
     const storageObject = new FolderStorageObjectEntity({
       id: params.id,
       folderId: params.folderId,
@@ -71,7 +73,14 @@ export class FolderNasStorageObjectDomainService {
       createdAt: new Date(),
     });
 
-    return this.repository.save(storageObject);
+    return this.repository.save(storageObject, txOptions);
+  }
+
+  /**
+   * 엔티티 저장
+   */
+  async 저장(storageObject: FolderStorageObjectEntity, txOptions?: TransactionOptions): Promise<FolderStorageObjectEntity> {
+    return this.repository.save(storageObject, txOptions);
   }
 
   /**
@@ -80,19 +89,21 @@ export class FolderNasStorageObjectDomainService {
    *
    * @param folderId - 폴더 ID
    * @param status - 새 상태
+   * @param txOptions - 트랜잭션 옵션
    * @returns 업데이트된 스토리지 객체 엔티티
    */
   async 상태변경(
     folderId: string,
     status: FolderAvailabilityStatus,
+    txOptions?: TransactionOptions,
   ): Promise<FolderStorageObjectEntity> {
-    const storageObject = await this.repository.findByFolderIdForUpdate(folderId);
+    const storageObject = await this.repository.findByFolderIdForUpdate(folderId, txOptions);
     if (!storageObject) {
       throw new Error(`스토리지 객체를 찾을 수 없습니다: folderId=${folderId}`);
     }
 
     storageObject.updateStatus(status);
-    return this.repository.save(storageObject);
+    return this.repository.save(storageObject, txOptions);
   }
 
   /**
@@ -101,16 +112,17 @@ export class FolderNasStorageObjectDomainService {
    *
    * @param folderId - 폴더 ID
    * @param newKey - 새 경로
+   * @param txOptions - 트랜잭션 옵션
    * @returns 업데이트된 스토리지 객체 엔티티
    */
-  async 경로변경(folderId: string, newKey: string): Promise<FolderStorageObjectEntity> {
-    const storageObject = await this.repository.findByFolderIdForUpdate(folderId);
+  async 경로변경(folderId: string, newKey: string, txOptions?: TransactionOptions): Promise<FolderStorageObjectEntity> {
+    const storageObject = await this.repository.findByFolderIdForUpdate(folderId, txOptions);
     if (!storageObject) {
       throw new Error(`스토리지 객체를 찾을 수 없습니다: folderId=${folderId}`);
     }
 
     storageObject.updateObjectKey(newKey);
-    return this.repository.save(storageObject);
+    return this.repository.save(storageObject, txOptions);
   }
 
   /**
@@ -119,21 +131,23 @@ export class FolderNasStorageObjectDomainService {
    * @param folderId - 폴더 ID
    * @param status - 새 상태
    * @param newKey - 새 경로
+   * @param txOptions - 트랜잭션 옵션
    * @returns 업데이트된 스토리지 객체 엔티티
    */
   async 상태및경로변경(
     folderId: string,
     status: FolderAvailabilityStatus,
     newKey: string,
+    txOptions?: TransactionOptions,
   ): Promise<FolderStorageObjectEntity> {
-    const storageObject = await this.repository.findByFolderIdForUpdate(folderId);
+    const storageObject = await this.repository.findByFolderIdForUpdate(folderId, txOptions);
     if (!storageObject) {
       throw new Error(`스토리지 객체를 찾을 수 없습니다: folderId=${folderId}`);
     }
 
     storageObject.updateStatus(status);
     storageObject.updateObjectKey(newKey);
-    return this.repository.save(storageObject);
+    return this.repository.save(storageObject, txOptions);
   }
 
   /**

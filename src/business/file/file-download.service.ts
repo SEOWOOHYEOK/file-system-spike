@@ -1,20 +1,19 @@
 import { Injectable, Inject, NotFoundException, BadRequestException, Logger, InternalServerErrorException, ConflictException } from '@nestjs/common';
+import { buildPath } from '../../common/utils';
 import {
   StorageType,
   AvailabilityStatus,
-  FILE_REPOSITORY,
 } from '../../domain/file';
 
 import type {
   FileEntity,
   FileStorageObjectEntity,
   FileInfoResponse,
-  IFileRepository,
 } from '../../domain/file';
-import { FILE_STORAGE_OBJECT_REPOSITORY } from '../../domain/storage';
-import type { IFileStorageObjectRepository } from '../../domain/storage';
-import { FOLDER_REPOSITORY } from '../../domain/folder';
-import type { IFolderRepository } from '../../domain/folder';
+import { FileDomainService } from '../../domain/file/service/file-domain.service';
+import { FolderDomainService } from '../../domain/folder/service/folder-domain.service';
+import { FileCacheStorageDomainService } from '../../domain/storage/file/service/file-cache-storage-domain.service';
+import { FileNasStorageDomainService } from '../../domain/storage/file/service/file-nas-storage-domain.service';
 import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';
 import { NAS_STORAGE_PORT } from '../../domain/storage/ports/nas-storage.port';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
@@ -31,12 +30,10 @@ export class FileDownloadService {
   private readonly logger = new Logger(FileDownloadService.name);
 
   constructor(
-    @Inject(FILE_REPOSITORY)
-    private readonly fileRepository: IFileRepository,
-    @Inject(FILE_STORAGE_OBJECT_REPOSITORY)
-    private readonly fileStorageObjectRepository: IFileStorageObjectRepository,
-    @Inject(FOLDER_REPOSITORY)
-    private readonly folderRepository: IFolderRepository,
+    private readonly fileDomainService: FileDomainService,
+    private readonly folderDomainService: FolderDomainService,
+    private readonly fileCacheStorageDomainService: FileCacheStorageDomainService,
+    private readonly fileNasStorageDomainService: FileNasStorageDomainService,
     @Inject(CACHE_STORAGE_PORT)
     private readonly cacheStorage: ICacheStoragePort,
     @Inject(NAS_STORAGE_PORT)
@@ -49,7 +46,7 @@ export class FileDownloadService {
    * 파일 정보 조회
    */
   async getFileInfo(fileId: string): Promise<FileInfoResponse> {
-    const file = await this.fileRepository.findById(fileId);
+    const file = await this.fileDomainService.조회(fileId);
     if (!file) {
       throw new NotFoundException({
         code: 'FILE_NOT_FOUND',
@@ -57,14 +54,12 @@ export class FileDownloadService {
       });
     }
 
-    const storageObjects = await this.fileStorageObjectRepository.findByFileId(fileId);
-    const cacheStatus = storageObjects.find(s => s.storageType === StorageType.CACHE);
-    const nasStatus = storageObjects.find(s => s.storageType === StorageType.NAS);
+    const cacheStatus = await this.fileCacheStorageDomainService.조회(fileId);
+    const nasStatus = await this.fileNasStorageDomainService.조회(fileId);
+    const folder = await this.folderDomainService.조회(file.folderId);
 
-    const folder = await this.folderRepository.findById(file.folderId);
-
-    // folder.path /  인경우는 제외 루트여서 제외
-    const filePath = folder && folder.path !== '/' ? `${folder.path}/${file.name}` : `/${file.name}`;
+    // folder.path '/'인 경우(루트) 처리 포함
+    const filePath = buildPath(folder?.path || '/', file.name);
 
     return {
       id: file.id,
@@ -100,7 +95,7 @@ export class FileDownloadService {
     stream: NodeJS.ReadableStream | null;
   }> {
     // 1. 파일 조회 및 상태 점검
-    const file = await this.fileRepository.findById(fileId);
+    const file = await this.fileDomainService.조회(fileId);
     if (!file) {
       throw new NotFoundException({
         code: 'FILE_NOT_FOUND',
@@ -123,10 +118,7 @@ export class FileDownloadService {
     }
 
     // 3-B. 캐시 미스 - NAS에서 조회
-    const nasObject = await this.fileStorageObjectRepository.findByFileIdAndType(
-      fileId,
-      StorageType.NAS,
-    );
+    const nasObject = await this.fileNasStorageDomainService.조회(fileId);
 
     // 3-B-1. NAS 동기화 중인 경우 - 사용자에게 재시도 안내
     if (nasObject && nasObject.isSyncing()) {
@@ -139,10 +131,7 @@ export class FileDownloadService {
 
 
     // 2. 캐시 상태 확인
-    const cacheObject = await this.fileStorageObjectRepository.findByFileIdAndType(
-      fileId,
-      StorageType.CACHE,
-    );
+    const cacheObject = await this.fileCacheStorageDomainService.조회(fileId);
 
     // 3-A. 캐시 히트
     if (cacheObject && cacheObject.isAvailable()) {
@@ -195,7 +184,7 @@ export class FileDownloadService {
   }> {
     // 1. lease 획득 (accessCount, lastAccessed도 함께 업데이트됨)
     cacheObject.acquireLease();
-    await this.fileStorageObjectRepository.save(cacheObject);
+    await this.fileCacheStorageDomainService.저장(cacheObject);
 
     this.logger.debug(`Cache hit for file: ${file.id}, objectKey: ${cacheObject.objectKey}`);
 
@@ -211,7 +200,7 @@ export class FileDownloadService {
     } catch (error) {
       // 스트림 획득 실패 시 lease 해제
       cacheObject.releaseLease();
-      await this.fileStorageObjectRepository.save(cacheObject);
+      await this.fileCacheStorageDomainService.저장(cacheObject);
 
       this.logger.error(`Failed to read from cache: ${file.id}`, error);
       throw new InternalServerErrorException({
@@ -240,7 +229,7 @@ export class FileDownloadService {
   }> {
     // 1. lease 획득 (accessCount, lastAccessed도 함께 업데이트됨)
     nasObject.acquireLease();
-    await this.fileStorageObjectRepository.save(nasObject);
+    await this.fileNasStorageDomainService.저장(nasObject);
 
     this.logger.debug(`Cache miss, downloading from NAS for file: ${file.id}, objectKey: ${nasObject.objectKey}`);
 
@@ -250,10 +239,7 @@ export class FileDownloadService {
 
       // 3. 백그라운드로 캐시 복원 작업 등록
       // 캐시 객체가 없거나 MISSING 상태인 경우에만 복원 작업 등록
-      const cacheObject = await this.fileStorageObjectRepository.findByFileIdAndType(
-        file.id,
-        StorageType.CACHE,
-      );
+      const cacheObject = await this.fileCacheStorageDomainService.조회(file.id);
 
       if (!cacheObject || cacheObject.availabilityStatus === AvailabilityStatus.MISSING) {
         await this.jobQueue.addJob('CACHE_RESTORE', {
@@ -271,7 +257,7 @@ export class FileDownloadService {
     } catch (error) {
       // 스트림 획득 실패 시 lease 해제
       nasObject.releaseLease();
-      await this.fileStorageObjectRepository.save(nasObject);
+      await this.fileNasStorageDomainService.저장(nasObject);
 
       this.logger.error(`Failed to read from NAS: ${file.id}`, error);
       throw new InternalServerErrorException({
@@ -294,41 +280,41 @@ export class FileDownloadService {
   async releaseLease(fileId: string, storageType?: StorageType): Promise<void> {
     try {
       // 특정 스토리지 타입이 지정된 경우
-      if (storageType) {
-        const storageObject = await this.fileStorageObjectRepository.findByFileIdAndType(
-          fileId,
-          storageType,
-        );
-
+      if (storageType === StorageType.CACHE) {
+        const storageObject = await this.fileCacheStorageDomainService.조회(fileId);
         if (storageObject && storageObject.leaseCount > 0) {
           storageObject.releaseLease();
-          await this.fileStorageObjectRepository.save(storageObject);
-          this.logger.debug(`Lease released for file: ${fileId}, storage: ${storageType}`);
+          await this.fileCacheStorageDomainService.저장(storageObject);
+          this.logger.debug(`Lease released for file: ${fileId}, storage: CACHE`);
+        }
+        return;
+      }
+
+      if (storageType === StorageType.NAS) {
+        const storageObject = await this.fileNasStorageDomainService.조회(fileId);
+        if (storageObject && storageObject.leaseCount > 0) {
+          storageObject.releaseLease();
+          await this.fileNasStorageDomainService.저장(storageObject);
+          this.logger.debug(`Lease released for file: ${fileId}, storage: NAS`);
         }
         return;
       }
 
       // 스토리지 타입이 지정되지 않은 경우 - leaseCount가 있는 스토리지에서 해제
-      const cacheObject = await this.fileStorageObjectRepository.findByFileIdAndType(
-        fileId,
-        StorageType.CACHE,
-      );
+      const cacheObject = await this.fileCacheStorageDomainService.조회(fileId);
 
       if (cacheObject && cacheObject.leaseCount > 0) {
         cacheObject.releaseLease();
-        await this.fileStorageObjectRepository.save(cacheObject);
+        await this.fileCacheStorageDomainService.저장(cacheObject);
         this.logger.debug(`Lease released for file: ${fileId}, storage: CACHE`);
         return;
       }
 
-      const nasObject = await this.fileStorageObjectRepository.findByFileIdAndType(
-        fileId,
-        StorageType.NAS,
-      );
+      const nasObject = await this.fileNasStorageDomainService.조회(fileId);
 
       if (nasObject && nasObject.leaseCount > 0) {
         nasObject.releaseLease();
-        await this.fileStorageObjectRepository.save(nasObject);
+        await this.fileNasStorageDomainService.저장(nasObject);
         this.logger.debug(`Lease released for file: ${fileId}, storage: NAS`);
       }
     } catch (error) {

@@ -35,4 +35,19 @@ export class SyncEventDomainService {
   async 상태별조회(status: SyncEventStatus): Promise<SyncEventEntity[]> {
     return this.repository.findByStatus(status);
   }
+
+  // ============================================
+  // 명령 메서드 (Command Methods)
+  // ============================================
+
+  /**
+   * 동기화 이벤트 저장
+   * 새 이벤트를 생성하거나 기존 이벤트를 업데이트합니다.
+   *
+   * @param syncEvent - 저장할 동기화 이벤트 엔티티
+   * @returns 저장된 동기화 이벤트 엔티티
+   */
+  async 저장(syncEvent: SyncEventEntity): Promise<SyncEventEntity> {
+    return this.repository.save(syncEvent);
+  }
 }

@@ -7,22 +7,11 @@ import {
   UploadFilesRequest,
   UploadFileResponse,
   ConflictStrategy,
-  FILE_REPOSITORY,
 } from '../../domain/file';
 import { FileState } from '../../domain/file/type/file.type';
-import {
-  FOLDER_REPOSITORY,
-  FolderAvailabilityStatus,
-} from '../../domain/folder';
-import {
-  SyncEventFactory,
-  SYNC_EVENT_REPOSITORY,
-} from '../../domain/sync-event';
+import { FolderAvailabilityStatus } from '../../domain/folder';
+import { SyncEventFactory } from '../../domain/sync-event';
 import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';
-import {
-  FILE_STORAGE_OBJECT_REPOSITORY,
-
-} from '../../domain/storage';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 import {
   NAS_FILE_SYNC_QUEUE_PREFIX,
@@ -33,18 +22,14 @@ import { UserType } from '../../domain/audit/enums/common.enum';
 import { RequestContext } from '../../common/context/request-context';
 import { normalizeFileName } from '../../common/utils';
 
-import {
-  FOLDER_STORAGE_OBJECT_REPOSITORY,
-} from '../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
+// Domain Services
+import { FileDomainService } from '../../domain/file/service/file-domain.service';
+import { FolderDomainService } from '../../domain/folder/service/folder-domain.service';
+import { SyncEventDomainService } from '../../domain/sync-event/service/sync-event-domain.service';
+import { FileCacheStorageDomainService } from '../../domain/storage/file/service/file-cache-storage-domain.service';
+import { FileNasStorageDomainService } from '../../domain/storage/file/service/file-nas-storage-domain.service';
+import { FolderNasStorageObjectDomainService } from '../../domain/storage/folder/service/folder-nas-storage-object-domain.service';
 
-import {
-  type IFolderStorageObjectRepository,
-} from '../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
-
-import type { IFileRepository } from '../../domain/file';
-import type { IFolderRepository } from '../../domain/folder';
-import type { IFileStorageObjectRepository, } from '../../domain/storage';
-import type { ISyncEventRepository } from '../../domain/sync-event';
 import type { ICacheStoragePort } from '../../domain/storage/ports/cache-storage.port';
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 
@@ -55,16 +40,14 @@ import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 @Injectable()
 export class FileUploadService {
   constructor(
-    @Inject(FILE_REPOSITORY)
-    private readonly fileRepository: IFileRepository,
-    @Inject(FILE_STORAGE_OBJECT_REPOSITORY)
-    private readonly fileStorageObjectRepository: IFileStorageObjectRepository,
-    @Inject(FOLDER_REPOSITORY)
-    private readonly folderRepository: IFolderRepository,
-    @Inject(FOLDER_STORAGE_OBJECT_REPOSITORY)
-    private readonly folderStorageObjectRepository: IFolderStorageObjectRepository,
-    @Inject(SYNC_EVENT_REPOSITORY)
-    private readonly syncEventRepository: ISyncEventRepository,
+    // Domain Services
+    private readonly fileDomainService: FileDomainService,
+    private readonly folderDomainService: FolderDomainService,
+    private readonly syncEventDomainService: SyncEventDomainService,
+    private readonly fileCacheStorageDomainService: FileCacheStorageDomainService,
+    private readonly fileNasStorageDomainService: FileNasStorageDomainService,
+    private readonly folderNasStorageObjectDomainService: FolderNasStorageObjectDomainService,
+    // External Ports (Infra)
     @Inject(CACHE_STORAGE_PORT)
     private readonly cacheStorage: ICacheStoragePort,
     @Inject(JOB_QUEUE_PORT)
@@ -90,7 +73,7 @@ export class FileUploadService {
     // 0. 폴더 ID 해석 (root 처리)
     let folderId = rawFolderId;
     if (!folderId || folderId === 'root' || folderId === '/') {
-      const rootFolder = await this.folderRepository.findOne({ parentId: null });
+      const rootFolder = await this.folderDomainService.루트폴더조회();
       if (!rootFolder) {
         throw new NotFoundException({
           code: 'ROOT_FOLDER_NOT_FOUND',
@@ -124,12 +107,12 @@ export class FileUploadService {
     // 5. SeaweedFS 저장 (infra 레이어에서 구현)
     await this.cacheStorage.파일쓰기(fileId, file.buffer);
 
-    // 6. DB 저장
+    // 6. DB 저장 (Domain Service 사용)
     const fileEntity = await this.createFileEntity(fileId, finalFileName, folderId, file, uploadCreatedAt);
     await this.createStorageObjects(fileId, uploadCreatedAt, finalFileName);
 
     // 7. 폴더 경로 조회
-    const folder = await this.folderRepository.findById(folderId);
+    const folder = await this.folderDomainService.조회(folderId);
     const folderPath = folder ? folder.path : '';
     const filePath = folderPath === '/' ? `/${finalFileName}` : `${folderPath}/${finalFileName}`;
     const nasObjectKey = FileStorageObjectEntity.buildNasObjectKey(uploadCreatedAt, finalFileName);
@@ -146,7 +129,7 @@ export class FileUploadService {
       fileName: finalFileName,
       folderId,
     });
-    await this.syncEventRepository.save(syncEvent);
+    await this.syncEventDomainService.저장(syncEvent);
 
     // 9. Bull 큐 등록 (NAS 동기화) - 파일 기반 통합 큐 사용
     await this.jobQueue.addJob<NasFileSyncJobData>(
@@ -229,8 +212,8 @@ export class FileUploadService {
       });
     }
 
-    // 폴더 존재 확인
-    const folder = await this.folderRepository.findById(folderId);
+    // 폴더 존재 확인 (Domain Service 사용)
+    const folder = await this.folderDomainService.조회(folderId);
     if (!folder || !folder.isActive()) {
       throw new NotFoundException({
         code: 'FOLDER_NOT_FOUND',
@@ -238,8 +221,8 @@ export class FileUploadService {
       });
     }
 
-    // 폴더 NAS 상태 확인
-    const folderStorage = await this.folderStorageObjectRepository.findByFolderId(folderId);
+    // 폴더 NAS 상태 확인 (Domain Service 사용)
+    const folderStorage = await this.folderNasStorageObjectDomainService.조회(folderId);
     if (folderStorage) {
       if (
         folderStorage.availabilityStatus === FolderAvailabilityStatus.SYNCING ||
@@ -269,11 +252,11 @@ export class FileUploadService {
     conflictStrategy: ConflictStrategy,
     createdAt?: Date,
   ): Promise<string> {
-    const exists = await this.fileRepository.existsByNameInFolder(
+    // Domain Service 사용
+    const exists = await this.fileDomainService.중복확인(
       folderId,
       originalName,
       mimeType,
-      undefined,
       undefined,
       createdAt,
     );
@@ -309,12 +292,12 @@ export class FileUploadService {
     let counter = 1;
     let newName = `${nameWithoutExt} (${counter})${ext}`;
 
+    // Domain Service 사용
     while (
-      await this.fileRepository.existsByNameInFolder(
+      await this.fileDomainService.중복확인(
         folderId,
         newName,
         mimeType,
-        undefined,
         undefined,
         createdAt,
       )
@@ -336,18 +319,15 @@ export class FileUploadService {
     file: Express.Multer.File,
     createdAt: Date,
   ): Promise<FileEntity> {
-    const fileEntity = new FileEntity({
+    // Domain Service 사용
+    return this.fileDomainService.생성({
       id: fileId,
       name: fileName,
       folderId,
       sizeBytes: file.size,
       mimeType: file.mimetype,
-      state: FileState.ACTIVE,
       createdAt,
-      updatedAt: createdAt,
     });
-
-    return this.fileRepository.save(fileEntity);
   }
 
   /**
@@ -358,21 +338,18 @@ export class FileUploadService {
     createdAt: Date,
     fileName: string,
   ): Promise<void> {
-    const cacheObject = FileStorageObjectEntity.createForCache({
-      id: uuidv4(),
-      fileId,
-    });
-
-    const nasObject = FileStorageObjectEntity.createForNas({
-      id: uuidv4(),
-      fileId,
-      createdAt,
-      fileName,
-    });
-
+    // Domain Service 사용
     await Promise.all([
-      this.fileStorageObjectRepository.save(cacheObject),
-      this.fileStorageObjectRepository.save(nasObject),
+      this.fileCacheStorageDomainService.생성({
+        id: uuidv4(),
+        fileId,
+      }),
+      this.fileNasStorageDomainService.생성({
+        id: uuidv4(),
+        fileId,
+        createdAt,
+        fileName,
+      }),
     ]);
   }
 }

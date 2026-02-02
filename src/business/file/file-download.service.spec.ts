@@ -16,25 +16,29 @@
  */
 
 import { FileDownloadService } from './file-download.service';
-import { FileEntity, StorageType, AvailabilityStatus } from '../../domain/file';
+import { FileEntity } from '../../domain/file';
 import { FileState } from '../../domain/file/type/file.type';
 
 describe('FileDownloadService', () => {
   /**
    * 🎭 Mock 설정
-   * 📍 mockFileRepository.findById:
-   *   - 실제 동작: 파일 메타데이터 조회
+   * 📍 Domain Services Mock:
    *   - Mock 이유: DB 없이 파일 상태 분기 로직만 검증
    */
-  const mockFileRepository = {
-    findById: jest.fn(),
+  const mockFileDomainService = {
+    조회: jest.fn(),
+    잠금조회: jest.fn(),
   };
-  const mockFileStorageObjectRepository = {
-    findByFileIdAndType: jest.fn(),
-    save: jest.fn(),
+  const mockFolderDomainService = {
+    조회: jest.fn(),
   };
-  const mockFolderRepository = {
-    findById: jest.fn(),
+  const mockFileCacheStorageDomainService = {
+    조회: jest.fn(),
+    저장: jest.fn(),
+  };
+  const mockFileNasStorageDomainService = {
+    조회: jest.fn(),
+    저장: jest.fn(),
   };
   const mockCacheStorage = {
     파일스트림읽기: jest.fn(),
@@ -51,9 +55,10 @@ describe('FileDownloadService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     service = new FileDownloadService(
-      mockFileRepository as any,
-      mockFileStorageObjectRepository as any,
-      mockFolderRepository as any,
+      mockFileDomainService as any,
+      mockFolderDomainService as any,
+      mockFileCacheStorageDomainService as any,
+      mockFileNasStorageDomainService as any,
       mockCacheStorage as any,
       mockNasStorage as any,
       mockJobQueue as any,
@@ -83,7 +88,7 @@ describe('FileDownloadService', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    mockFileRepository.findById.mockResolvedValue(file);
+    mockFileDomainService.조회.mockResolvedValue(file);
 
     // ═══════════════════════════════════════════════════════
     // 🎬 WHEN + ✅ THEN (실행 및 결과 검증)
@@ -116,8 +121,9 @@ describe('FileDownloadService', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    mockFileRepository.findById.mockResolvedValue(file);
-    mockFileStorageObjectRepository.findByFileIdAndType.mockResolvedValue(null);
+    mockFileDomainService.조회.mockResolvedValue(file);
+    mockFileNasStorageDomainService.조회.mockResolvedValue(null);
+    mockFileCacheStorageDomainService.조회.mockResolvedValue(null);
 
     // ═══════════════════════════════════════════════════════
     // 🎬 WHEN + ✅ THEN (실행 및 결과 검증)

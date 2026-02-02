@@ -32,26 +32,29 @@ import { NotFoundException } from '@nestjs/common';
 describe('FileUploadService', () => {
   /**
    * 🎭 Mock 설정
-   * 📍 mockFileRepository.existsByNameInFolder:
-   *   - 실제 동작: 폴더 내 동일 파일명 존재 여부 조회
-   *   - Mock 이유: DB 연결 없이 중복 로직만 검증하기 위함
+   * 📍 Domain Services Mock
    */
-  const mockFileRepository = {
-    existsByNameInFolder: jest.fn(),
-    save: jest.fn(),
+  const mockFileDomainService = {
+    조회: jest.fn(),
+    중복확인: jest.fn(),
+    생성: jest.fn(),
+    저장: jest.fn(),
   };
-  const mockFileStorageObjectRepository = {
-    save: jest.fn(),
+  const mockFolderDomainService = {
+    조회: jest.fn(),
+    루트폴더조회: jest.fn(),
   };
-  const mockFolderRepository = {
-    findOne: jest.fn(),
-    findById: jest.fn(),
+  const mockSyncEventDomainService = {
+    저장: jest.fn(),
   };
-  const mockFolderStorageObjectRepository = {
-    findByFolderId: jest.fn(),
+  const mockFileCacheStorageDomainService = {
+    생성: jest.fn(),
   };
-  const mockSyncEventRepository = {
-    save: jest.fn(),
+  const mockFileNasStorageDomainService = {
+    생성: jest.fn(),
+  };
+  const mockFolderNasStorageObjectDomainService = {
+    조회: jest.fn(),
   };
   const mockCacheStorage = {
     파일쓰기: jest.fn(),
@@ -59,19 +62,24 @@ describe('FileUploadService', () => {
   const mockJobQueue = {
     addJob: jest.fn(),
   };
+  const mockAuditLogHelper = {
+    logFileUpload: jest.fn(),
+  };
 
   let service: FileUploadService;
 
   beforeEach(() => {
     jest.clearAllMocks();
     service = new FileUploadService(
-      mockFileRepository as any,
-      mockFileStorageObjectRepository as any,
-      mockFolderRepository as any,
-      mockFolderStorageObjectRepository as any,
-      mockSyncEventRepository as any,
+      mockFileDomainService as any,
+      mockFolderDomainService as any,
+      mockSyncEventDomainService as any,
+      mockFileCacheStorageDomainService as any,
+      mockFileNasStorageDomainService as any,
+      mockFolderNasStorageObjectDomainService as any,
       mockCacheStorage as any,
       mockJobQueue as any,
+      mockAuditLogHelper as any,
     );
   });
 
@@ -97,13 +105,12 @@ describe('FileUploadService', () => {
     const uploadCreatedAt = new Date('2024-01-02T00:00:00Z');
     jest.useFakeTimers().setSystemTime(uploadCreatedAt);
 
-    mockFileRepository.existsByNameInFolder.mockImplementation(
+    mockFileDomainService.중복확인.mockImplementation(
       (
         folderId: string,
         name: string,
         mimeType: string,
         excludeFileId?: string,
-        options?: unknown,
         createdAt?: Date,
       ) => {
         if (!createdAt) {
@@ -113,9 +120,9 @@ describe('FileUploadService', () => {
       },
     );
 
-    mockFileRepository.save.mockImplementation((file: FileEntity) => file);
-    mockFileStorageObjectRepository.save.mockResolvedValue(undefined);
-    mockSyncEventRepository.save.mockResolvedValue(undefined);
+    mockFileDomainService.생성.mockImplementation((file: FileEntity) => file);
+    mockFileNasStorageDomainService.생성.mockResolvedValue(undefined);
+    mockSyncEventDomainService.저장.mockResolvedValue(undefined);
     mockCacheStorage.파일쓰기.mockResolvedValue(undefined);
     mockJobQueue.addJob.mockResolvedValue(undefined);
 
@@ -128,7 +135,7 @@ describe('FileUploadService', () => {
       createdAt: uploadCreatedAt,
       updatedAt: uploadCreatedAt,
     });
-    mockFolderRepository.findById.mockResolvedValue(folder);
+    mockFolderDomainService.조회.mockResolvedValue(folder);
 
     const file = {
       originalname: '111.txt',
@@ -170,10 +177,10 @@ describe('FileUploadService', () => {
     const uploadCreatedAt = new Date('2024-01-02T12:34:56Z');
     jest.useFakeTimers().setSystemTime(uploadCreatedAt);
 
-    mockFileRepository.existsByNameInFolder.mockResolvedValue(false);
-    mockFileRepository.save.mockImplementation((file: FileEntity) => file);
-    mockFileStorageObjectRepository.save.mockResolvedValue(undefined);
-    mockSyncEventRepository.save.mockResolvedValue(undefined);
+    mockFileDomainService.중복확인.mockResolvedValue(false);
+    mockFileDomainService.생성.mockImplementation((file: FileEntity) => file);
+    mockFileNasStorageDomainService.생성.mockResolvedValue(undefined);
+    mockSyncEventDomainService.저장.mockResolvedValue(undefined);
     mockCacheStorage.파일쓰기.mockResolvedValue(undefined);
     mockJobQueue.addJob.mockResolvedValue(undefined);
 
@@ -186,7 +193,7 @@ describe('FileUploadService', () => {
       createdAt: uploadCreatedAt,
       updatedAt: uploadCreatedAt,
     });
-    mockFolderRepository.findById.mockResolvedValue(folder);
+    mockFolderDomainService.조회.mockResolvedValue(folder);
 
     const file = {
       originalname: '111.txt',
@@ -207,11 +214,14 @@ describe('FileUploadService', () => {
     // ═══════════════════════════════════════════════════════
     // ✅ THEN (결과 검증)
     // ═══════════════════════════════════════════════════════
-    const saveCalls = mockFileStorageObjectRepository.save.mock.calls;
-    const hasNasObjectKey = saveCalls.some(
-      ([arg]) => arg?.storageType === StorageType.NAS && arg?.objectKey === '20240102123456__111.txt',
+    // Domain Service는 createdAt과 fileName을 받아 내부에서 objectKey를 생성함
+    expect(mockFileNasStorageDomainService.생성).toHaveBeenCalledWith(
+      expect.objectContaining({
+        fileId: 'mock-uuid',
+        createdAt: uploadCreatedAt,
+        fileName: '111.txt',
+      }),
     );
-    expect(hasNasObjectKey).toBe(true);
   });
 
   /**
@@ -230,10 +240,10 @@ describe('FileUploadService', () => {
     const uploadCreatedAt = new Date('2024-01-02T12:34:56Z');
     jest.useFakeTimers().setSystemTime(uploadCreatedAt);
 
-    mockFileRepository.existsByNameInFolder.mockResolvedValue(false);
-    mockFileRepository.save.mockImplementation((file: FileEntity) => file);
-    mockFileStorageObjectRepository.save.mockResolvedValue(undefined);
-    mockSyncEventRepository.save.mockResolvedValue(undefined);
+    mockFileDomainService.중복확인.mockResolvedValue(false);
+    mockFileDomainService.생성.mockImplementation((file: FileEntity) => file);
+    mockFileNasStorageDomainService.생성.mockResolvedValue(undefined);
+    mockSyncEventDomainService.저장.mockResolvedValue(undefined);
     mockCacheStorage.파일쓰기.mockResolvedValue(undefined);
     mockJobQueue.addJob.mockResolvedValue(undefined);
 
@@ -246,7 +256,7 @@ describe('FileUploadService', () => {
       createdAt: uploadCreatedAt,
       updatedAt: uploadCreatedAt,
     });
-    mockFolderRepository.findById.mockResolvedValue(folder);
+    mockFolderDomainService.조회.mockResolvedValue(folder);
 
     const file = {
       originalname: '111.txt',
@@ -265,11 +275,11 @@ describe('FileUploadService', () => {
     });
 
     // ═══════════════════════════════════════════════════════
-    // ✅ THEN (결 결과 검증)
+    // ✅ THEN (결과 검증)
     // ═══════════════════════════════════════════════════════
     expect(mockJobQueue.addJob).toHaveBeenCalledWith(
-      'NAS_SYNC_UPLOAD',
-      expect.objectContaining({ syncEventId: 'mock-uuid' }),
+      'NAS_FILE_SYNC',
+      expect.objectContaining({ syncEventId: 'mock-uuid', action: 'upload' }),
     );
   });
 
@@ -298,7 +308,7 @@ describe('FileUploadService', () => {
       createdAt: uploadCreatedAt,
       updatedAt: uploadCreatedAt,
     });
-    mockFolderRepository.findById.mockResolvedValue(folder);
+    mockFolderDomainService.조회.mockResolvedValue(folder);
 
     const folderStorage = new FolderStorageObjectEntity({
       id: 'fso-1',
@@ -308,7 +318,7 @@ describe('FileUploadService', () => {
       availabilityStatus: FolderAvailabilityStatus.SYNCING,
       createdAt: uploadCreatedAt,
     });
-    mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(folderStorage);
+    mockFolderNasStorageObjectDomainService.조회.mockResolvedValue(folderStorage);
 
     const file = {
       originalname: '111.txt',
@@ -344,7 +354,7 @@ describe('FileUploadService', () => {
     // ═══════════════════════════════════════════════════════
     // 📥 GIVEN (사전 조건 설정)
     // ═══════════════════════════════════════════════════════
-    mockFolderRepository.findById.mockResolvedValue(null);
+    mockFolderDomainService.조회.mockResolvedValue(null);
 
     const file = {
       originalname: 'test.txt',
@@ -389,7 +399,7 @@ describe('FileUploadService', () => {
       createdAt: new Date(),
       updatedAt: new Date(),
     });
-    mockFolderRepository.findById.mockResolvedValue(trashedFolder);
+    mockFolderDomainService.조회.mockResolvedValue(trashedFolder);
 
     const file = {
       originalname: 'test.txt',
@@ -437,7 +447,7 @@ describe('FileUploadService', () => {
       createdAt: uploadCreatedAt,
       updatedAt: uploadCreatedAt,
     });
-    mockFolderRepository.findById.mockResolvedValue(folder);
+    mockFolderDomainService.조회.mockResolvedValue(folder);
 
     const folderStorage = new FolderStorageObjectEntity({
       id: 'fso-1',
@@ -447,7 +457,7 @@ describe('FileUploadService', () => {
       availabilityStatus: FolderAvailabilityStatus.ERROR,
       createdAt: uploadCreatedAt,
     });
-    mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(folderStorage);
+    mockFolderNasStorageObjectDomainService.조회.mockResolvedValue(folderStorage);
 
     const file = {
       originalname: '111.txt',
@@ -487,10 +497,10 @@ describe('FileUploadService', () => {
     const uploadCreatedAt = new Date('2024-01-02T12:34:56Z');
     jest.useFakeTimers().setSystemTime(uploadCreatedAt);
 
-    mockFileRepository.existsByNameInFolder.mockResolvedValue(false);
-    mockFileRepository.save.mockImplementation((file: FileEntity) => file);
-    mockFileStorageObjectRepository.save.mockResolvedValue(undefined);
-    mockSyncEventRepository.save.mockResolvedValue(undefined);
+    mockFileDomainService.중복확인.mockResolvedValue(false);
+    mockFileDomainService.생성.mockImplementation((file: FileEntity) => file);
+    mockFileNasStorageDomainService.생성.mockResolvedValue(undefined);
+    mockSyncEventDomainService.저장.mockResolvedValue(undefined);
     mockCacheStorage.파일쓰기.mockResolvedValue(undefined);
     mockJobQueue.addJob.mockResolvedValue(undefined);
 
@@ -503,8 +513,8 @@ describe('FileUploadService', () => {
       createdAt: uploadCreatedAt,
       updatedAt: uploadCreatedAt,
     });
-    mockFolderRepository.findById.mockResolvedValue(folder);
-    mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(null);
+    mockFolderDomainService.조회.mockResolvedValue(folder);
+    mockFolderNasStorageObjectDomainService.조회.mockResolvedValue(null);
 
     const files = [
       {
@@ -536,7 +546,7 @@ describe('FileUploadService', () => {
     expect(results).toHaveLength(2);
     expect(results[0].name).toBe('file1.txt');
     expect(results[1].name).toBe('file2.txt');
-    expect(mockFileRepository.save).toHaveBeenCalledTimes(2);
+    expect(mockFileDomainService.생성).toHaveBeenCalledTimes(2);
     expect(mockJobQueue.addJob).toHaveBeenCalledTimes(2);
   });
 });

@@ -1,8 +1,8 @@
 import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
-import { DataSource, QueryRunner } from 'typeorm';
+import { DataSource } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
+import { buildPath } from '../../common/utils';
 import {
-  StorageType,
   AvailabilityStatus,
   RenameFileRequest,
   RenameFileResponse,
@@ -11,32 +11,23 @@ import {
   DeleteFileResponse,
   MoveConflictStrategy,
   ConflictStrategy,
-  FILE_REPOSITORY,
   TransactionOptions,
 } from '../../domain/file';
-import { FILE_STORAGE_OBJECT_REPOSITORY } from '../../domain/storage';
-import {
-  FOLDER_REPOSITORY,
-} from '../../domain/folder';
-import {
-  TrashMetadataFactory,
-  TRASH_REPOSITORY,
-} from '../../domain/trash';
 import {
   SyncEventFactory,
-  SYNC_EVENT_REPOSITORY,
 } from '../../domain/sync-event';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 import {
   NAS_FILE_SYNC_QUEUE_PREFIX,
   type NasFileSyncJobData,
 } from '../worker/nas-file-sync.worker';
-import type { IFileRepository } from '../../domain/file';
-import type { IFileStorageObjectRepository } from '../../domain/storage';
-import type { IFolderRepository } from '../../domain/folder';
-import type { ITrashRepository } from '../../domain/trash';
-import type { ISyncEventRepository } from '../../domain/sync-event';
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
+import { FileDomainService } from '../../domain/file/service/file-domain.service';
+import { FolderDomainService } from '../../domain/folder/service/folder-domain.service';
+import { TrashDomainService } from '../../domain/trash/service/trash-domain.service';
+import { SyncEventDomainService } from '../../domain/sync-event/service/sync-event-domain.service';
+import { FileNasStorageDomainService } from '../../domain/storage/file/service/file-nas-storage-domain.service';
+
 
 /**
  * 파일 관리 비즈니스 서비스
@@ -47,16 +38,11 @@ export class FileManageService {
   private readonly logger = new Logger(FileManageService.name);
 
   constructor(
-    @Inject(FILE_REPOSITORY)
-    private readonly fileRepository: IFileRepository,
-    @Inject(FILE_STORAGE_OBJECT_REPOSITORY)
-    private readonly fileStorageObjectRepository: IFileStorageObjectRepository,
-    @Inject(FOLDER_REPOSITORY)
-    private readonly folderRepository: IFolderRepository,
-    @Inject(TRASH_REPOSITORY)
-    private readonly trashRepository: ITrashRepository,
-    @Inject(SYNC_EVENT_REPOSITORY)
-    private readonly syncEventRepository: ISyncEventRepository,
+    private readonly fileDomainService: FileDomainService,
+    private readonly folderDomainService: FolderDomainService,
+    private readonly trashDomainService: TrashDomainService,
+    private readonly syncEventDomainService: SyncEventDomainService,
+    private readonly fileNasStorageDomainService: FileNasStorageDomainService,
     @Inject(JOB_QUEUE_PORT)
     private readonly jobQueue: IJobQueuePort,
     private readonly dataSource: DataSource,
@@ -89,7 +75,7 @@ export class FileManageService {
       const txOptions: TransactionOptions = { queryRunner };
 
       // 1. 파일 조회 (락)
-      const file = await this.fileRepository.findByIdForUpdate(fileId, txOptions);
+      const file = await this.fileDomainService.잠금조회(fileId, txOptions);
       if (!file) {
         throw new NotFoundException({
           code: 'FILE_NOT_FOUND',
@@ -123,14 +109,10 @@ export class FileManageService {
 
       // 5. 파일명 업데이트
       file.rename(finalName);
-      await this.fileRepository.save(file, txOptions);
+      await this.fileDomainService.저장(file, txOptions);
 
       // 6. NAS 상태 업데이트
-      const nasObject = await this.fileStorageObjectRepository.findByFileIdAndType(
-        fileId,
-        StorageType.NAS,
-        txOptions,
-      );
+      const nasObject = await this.fileNasStorageDomainService.조회(fileId, txOptions);
 
       if (nasObject) {
         oldObjectKey = nasObject.objectKey;
@@ -138,12 +120,12 @@ export class FileManageService {
         newObjectKey = `${timestamp}__${finalName}`;
         nasObject.updateObjectKey(newObjectKey);
         nasObject.updateStatus(AvailabilityStatus.SYNCING);
-        await this.fileStorageObjectRepository.save(nasObject, txOptions);
+        await this.fileNasStorageDomainService.저장(nasObject, txOptions);
       }
 
       // 7. sync_events 생성 (문서 요구사항)
-      const folder = await this.folderRepository.findById(file.folderId);
-      const filePath = folder && folder.path !== '/' ? `${folder.path}/${finalName}` : `/${finalName}`;
+      const folder = await this.folderDomainService.조회(file.folderId);
+      const filePath = buildPath(folder?.path || '/', finalName);
 
       const syncEventId = uuidv4();
       const syncEvent = SyncEventFactory.createFileRenameEvent({
@@ -154,7 +136,7 @@ export class FileManageService {
         oldName: oldObjectKey || '',
         newName: finalName,
       });
-      await this.syncEventRepository.save(syncEvent);
+      await this.syncEventDomainService.저장(syncEvent);
 
       await queryRunner.commitTransaction();
       this.logger.debug(`File renamed: ${fileId} -> ${finalName}`);
@@ -211,7 +193,7 @@ export class FileManageService {
     const { targetFolderId, conflictStrategy = MoveConflictStrategy.ERROR } = request;
 
     // 1. 대상 폴더 존재 확인 (트랜잭션 밖에서 확인)
-    const targetFolder = await this.folderRepository.findById(targetFolderId);
+    const targetFolder = await this.folderDomainService.조회(targetFolderId);
     if (!targetFolder || !targetFolder.isActive()) {
       throw new NotFoundException({
         code: 'TARGET_FOLDER_NOT_FOUND',
@@ -231,7 +213,7 @@ export class FileManageService {
       const txOptions: TransactionOptions = { queryRunner };
 
       // 2. 파일 조회 (락)
-      const file = await this.fileRepository.findByIdForUpdate(fileId, txOptions);
+      const file = await this.fileDomainService.잠금조회(fileId, txOptions);
       if (!file) {
         throw new NotFoundException({
           code: 'FILE_NOT_FOUND',
@@ -248,7 +230,7 @@ export class FileManageService {
 
       // 원래 폴더 ID/경로 저장 (원복용)
       originalFolderId = file.folderId;
-      const sourceFolder = await this.folderRepository.findById(file.folderId);
+      const sourceFolder = await this.folderDomainService.조회(file.folderId);
       const sourceFolderPath = sourceFolder ? sourceFolder.path : '';
 
       // 3. NAS 동기화 상태 체크
@@ -283,26 +265,23 @@ export class FileManageService {
       if (finalName !== file.name) {
         file.rename(finalName);
       }
-      await this.fileRepository.save(file, txOptions);
+      await this.fileDomainService.저장(file, txOptions);
 
       // 6. NAS 상태 업데이트
-      const nasObject = await this.fileStorageObjectRepository.findByFileIdAndType(
-        fileId,
-        StorageType.NAS,
-        txOptions,
-      );
+      const nasObject = await this.fileNasStorageDomainService.조회(fileId, txOptions);
 
       if (nasObject) {
         sourcePath = nasObject.objectKey;
-        targetPath = `${targetFolder.path}/ ${this.extractFileNameFromPath(nasObject.objectKey)}`; // objectKey는 유지
+        const objectKeyFileName = this.extractFileNameFromPath(nasObject.objectKey);
+        targetPath = buildPath(targetFolder.path, objectKeyFileName); // objectKey는 유지
         nasObject.updateStatus(AvailabilityStatus.SYNCING);
-        await this.fileStorageObjectRepository.save(nasObject, txOptions);
+        await this.fileNasStorageDomainService.저장(nasObject, txOptions);
       }
 
       // 7. sync_events 생성 (문서 요구사항)
-      const filePath = `${targetFolder.path}/${finalName}`;
-      const sourcePathWithFolder = sourceFolderPath ? `${sourceFolderPath}/${targetPath ?? ''}` : targetPath ?? '';
-      const targetPathWithFolder = `${targetFolder.path}/${targetPath ?? ''}`;
+      const filePath = buildPath(targetFolder.path, finalName);
+      const sourcePathWithFolder = sourceFolderPath ? buildPath(sourceFolderPath, targetPath ?? '') : targetPath ?? '';
+      const targetPathWithFolder = buildPath(targetFolder.path, targetPath ?? '');
 
       const syncEventId = uuidv4();
       const syncEvent = SyncEventFactory.createFileMoveEvent({
@@ -313,7 +292,7 @@ export class FileManageService {
         originalFolderId: originalFolderId || '',
         targetFolderId,
       });
-      await this.syncEventRepository.save(syncEvent);
+      await this.syncEventDomainService.저장(syncEvent);
 
       await queryRunner.commitTransaction();
       this.logger.debug(`File moved: ${fileId} -> folder ${targetFolderId}`);
@@ -384,7 +363,7 @@ export class FileManageService {
       const txOptions: TransactionOptions = { queryRunner };
 
       // 1. 파일 조회 (락)
-      const file = await this.fileRepository.findByIdForUpdate(fileId, txOptions);
+      const file = await this.fileDomainService.잠금조회(fileId, txOptions);
       if (!file) {
         throw new NotFoundException({
           code: 'FILE_NOT_FOUND',
@@ -419,22 +398,21 @@ export class FileManageService {
       }
 
       // 4. 원래 경로 저장
-      const folder = await this.folderRepository.findById(file.folderId);
-      const originalPath = folder && folder.path !== '/' ? `${folder.path}/${file.name}` : `/${file.name}`;
+      const folder = await this.folderDomainService.조회(file.folderId);
+      const originalPath = buildPath(folder?.path || '/', file.name);
 
       // 5. 파일 상태 변경
       file.delete();
-      await this.fileRepository.save(file, txOptions);
+      await this.fileDomainService.저장(file, txOptions);
 
       // 6. trash_metadata 생성
-      const trashMetadata = TrashMetadataFactory.createForFile({
+      await this.trashDomainService.파일메타생성({
         id: uuidv4(),
         fileId: file.id,
         originalPath,
         originalFolderId: file.folderId,
         deletedBy: userId,
       });
-      await this.trashRepository.save(trashMetadata);
 
       // 7. NAS 상태 업데이트 (nasObject는 checkNasSyncStatus에서 이미 조회됨)
       if (nasObject) {
@@ -442,7 +420,7 @@ export class FileManageService {
         // 휴지통 경로: .trash/{fileId}_{fileName}
         trashPath = `.trash/${this.extractFileNameFromPath(nasObject.objectKey)}`; // 1769417075898_222.txt
         nasObject.updateStatus(AvailabilityStatus.SYNCING);
-        await this.fileStorageObjectRepository.save(nasObject, txOptions);
+        await this.fileNasStorageDomainService.저장(nasObject, txOptions);
       }
 
       // 7. sync_events 생성 (문서 요구사항)
@@ -455,7 +433,7 @@ export class FileManageService {
         originalPath,
         originalFolderId: file.folderId,
       });
-      await this.syncEventRepository.save(syncEvent);
+      await this.syncEventDomainService.저장(syncEvent);
 
       await queryRunner.commitTransaction();
       this.logger.debug(`File deleted (moved to trash): ${fileId}`);
@@ -466,7 +444,7 @@ export class FileManageService {
           NAS_FILE_SYNC_QUEUE_PREFIX,
           {
             fileId,
-            action: 'trash',
+            action:'trash',
             syncEventId,
             currentObjectKey,
             trashPath,
@@ -496,11 +474,7 @@ export class FileManageService {
    * @returns NAS storage object (lease_count 체크 등에 사용)
    */
   private async checkNasSyncStatus(fileId: string, txOptions?: TransactionOptions) {
-    const nasObject = await this.fileStorageObjectRepository.findByFileIdAndTypeForUpdate(
-      fileId,
-      StorageType.NAS,
-      txOptions,
-    );
+    const nasObject = await this.fileNasStorageDomainService.잠금조회(fileId, txOptions);
 
     if (nasObject && nasObject.isSyncing()) {
       throw new ConflictException({
@@ -524,13 +498,13 @@ export class FileManageService {
     txOptions?: TransactionOptions,
     createdAt?: Date,
   ): Promise<string> {
-    const exists = await this.fileRepository.existsByNameInFolder(
+    const exists = await this.fileDomainService.중복확인(
       folderId,
       newName,
       mimeType,
       excludeFileId,
-      txOptions,
       createdAt,
+      txOptions,
     );
 
     if (!exists) {
@@ -559,13 +533,13 @@ export class FileManageService {
     txOptions?: TransactionOptions,
     createdAt?: Date,
   ): Promise<{ finalName: string; skipped: boolean }> {
-    const exists = await this.fileRepository.existsByNameInFolder(
+    const exists = await this.fileDomainService.중복확인(
       targetFolderId,
       fileName,
       mimeType,
       undefined,
-      txOptions,
       createdAt,
+      txOptions,
     );
 
     if (!exists) {
@@ -621,13 +595,13 @@ export class FileManageService {
     let newName = `${nameWithoutExt} (${counter})${ext}`;
 
     while (
-      await this.fileRepository.existsByNameInFolder(
+      await this.fileDomainService.중복확인(
         folderId,
         newName,
         mimeType,
         excludeFileId,
-        txOptions,
         createdAt,
+        txOptions,
       )
     ) {
       counter++;

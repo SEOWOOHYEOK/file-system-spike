@@ -1,6 +1,7 @@
 import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException, OnModuleInit, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
+import { buildPath } from '../../common/utils';
 import {
   FolderEntity,
   FolderStorageObjectEntity,
@@ -150,7 +151,7 @@ export class FolderCommandService implements OnModuleInit {
 
     // 4. 폴더 생성
     const folderId = uuidv4();
-    const folderPath = parentPath && parentPath !== '/' ? `${parentPath}/${finalName}` : `/${finalName}`;
+    const folderPath = buildPath(parentPath, finalName);
 
     const folder = new FolderEntity({
       id: folderId,
@@ -390,7 +391,7 @@ export class FolderCommandService implements OnModuleInit {
 
       // 6. 새 경로 계산
       const oldPath = folder.path;
-      const newPath = `${targetParent.path}/${finalName}`;
+      const newPath = buildPath(targetParent.path, finalName);
 
       // 7. 폴더 이동
       folder.moveTo(targetParentId, newPath);
