@@ -18,6 +18,7 @@ import { LocalCacheAdapter } from './cache/local/local-cache.adapter';
 import { SeaweedFSCacheAdapter } from './cache/seaweedfs/seaweedfs-cache.adapter';
 import { NfsNasAdapter } from './nas/nfs-nas.adapter';
 import { NasClientProvider } from './nas/nas-client.provider';
+import { FileLockManager } from './file-lock.manager';
 
 /**
  * 캐시 스토리지 타입
@@ -28,25 +29,30 @@ export type CacheStorageType = 'local' | 'seaweedfs';
   imports: [ConfigModule],
   providers: [
     // ============================================
+    // 공통 Lock 관리자 (캐시 + NAS 공유)
+    // ============================================
+    FileLockManager,
+
+    // ============================================
     // 캐시 스토리지 Provider (조건부)
     // ============================================
     {
       provide: CACHE_STORAGE_PORT,
-      useFactory: (configService: ConfigService) => {
+      useFactory: (configService: ConfigService, lockManager: FileLockManager) => {
         const logger = new Logger('StorageInfraModule');
         const cacheType = configService.get<CacheStorageType>('CACHE_STORAGE_TYPE', 'local');
 
-        logger.log(`Initializing cache storage adapter: ${cacheType}`);
+        logger.log(`Initializing cache storage adapter: ${cacheType} with FileLockManager`);
 
         switch (cacheType) {
           case 'seaweedfs':
             return new SeaweedFSCacheAdapter(configService);
           case 'local':
           default:
-            return new LocalCacheAdapter(configService);
+            return new LocalCacheAdapter(configService, lockManager);
         }
       },
-      inject: [ConfigService],
+      inject: [ConfigService, FileLockManager],
     },
 
     // ============================================
@@ -55,15 +61,15 @@ export type CacheStorageType = 'local' | 'seaweedfs';
     NasClientProvider, // Provider로 등록해야 OnModuleInit이 호출됨
     {
       provide: NAS_STORAGE_PORT,
-      useFactory: (nasClientProvider: NasClientProvider) => {
+      useFactory: (nasClientProvider: NasClientProvider, lockManager: FileLockManager) => {
         const logger = new Logger('StorageInfraModule');
-        logger.log('Initializing NAS storage adapter: NFS');
-        return new NfsNasAdapter(nasClientProvider);
+        logger.log('Initializing NAS storage adapter: NFS with FileLockManager');
+        return new NfsNasAdapter(nasClientProvider, lockManager);
       },
-      inject: [NasClientProvider],
+      inject: [NasClientProvider, FileLockManager],
     },
   ],
-  exports: [CACHE_STORAGE_PORT, NAS_STORAGE_PORT],
+  exports: [CACHE_STORAGE_PORT, NAS_STORAGE_PORT, FileLockManager],
 })
 export class StorageInfraModule {}
 

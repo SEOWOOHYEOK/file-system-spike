@@ -14,6 +14,7 @@ import { Readable } from 'stream';
 import { pipeline } from 'stream/promises';
 import type { INasStoragePort } from '../../../domain/storage/ports/nas-storage.port';
 import { NasClientProvider } from './nas-client.provider';
+import { FileLockManager } from '../file-lock.manager';
 import { InternalServerErrorException } from '@nestjs/common/exceptions/internal-server-error.exception'
 import { NotFoundException } from '@nestjs/common/exceptions/not-found.exception';
 
@@ -41,7 +42,10 @@ export interface FileDownloadResult {
 export class NfsNasAdapter implements INasStoragePort {
   private readonly logger = new Logger(NfsNasAdapter.name);
 
-  constructor(private readonly clientProvider: NasClientProvider) {
+  constructor(
+    private readonly clientProvider: NasClientProvider,
+    private readonly lockManager: FileLockManager,
+  ) {
     this.logger.log(`NfsNasAdapter initialized with basePath: ${this.clientProvider.getRootPath()}`);
   }
 
@@ -108,136 +112,170 @@ export class NfsNasAdapter implements INasStoragePort {
   // ============================================
 
   async 파일쓰기(objectKey: string, data: Buffer): Promise<void> {
-    const filePath = this.clientProvider.validateAndCreatePath(objectKey);
-    await this.ensureDirectory(filePath);
-    
+    const release = await this.lockManager.acquireWrite(objectKey);
     try {
+      const filePath = this.clientProvider.validateAndCreatePath(objectKey);
+      await this.ensureDirectory(filePath);
+
       await fs.writeFile(filePath, data);
-      
+
       // 파일 저장 검증
       const stats = await fs.stat(filePath);
       if (stats.size === 0 && data.length > 0) {
-         throw new Error('파일이 생성되었으나 내용이 비어있습니다.');
+        throw new Error('파일이 생성되었으나 내용이 비어있습니다.');
       }
 
       this.logger.debug(`📝 파일 저장 완료: ${objectKey} (${data.length} bytes)`);
     } catch (error: any) {
+      if (error instanceof InternalServerErrorException) throw error;
       throw new InternalServerErrorException(`파일 저장 실패: ${error.message}`);
+    } finally {
+      release();
     }
   }
 
   async 파일스트림쓰기(objectKey: string, stream: Readable): Promise<void> {
-    const filePath = this.clientProvider.validateAndCreatePath(objectKey);
-    await this.ensureDirectory(filePath);
-
+    const release = await this.lockManager.acquireWrite(objectKey);
     try {
-      const writeStream = fsSync.createWriteStream(filePath);
+      const filePath = this.clientProvider.validateAndCreatePath(objectKey);
+      await this.ensureDirectory(filePath);
+
+      // 성능 최적화: highWaterMark 4MB (기본 64KB → 64배 증가)
+      const writeStream = fsSync.createWriteStream(filePath, {
+        highWaterMark: 4 * 1024 * 1024,
+      });
       await pipeline(stream, writeStream);
 
-      
       // 파일 저장 검증
       const stats = await fs.stat(filePath);
       if (stats.size === 0) {
-         // 스트림의 경우 원본 크기를 모를 수 있으나, 0바이트 파일은 의심스러움 (빈 파일 업로드가 아니라면)
-         // 여기서는 경고만 하거나, 비즈니스 로직에 따라 에러 처리
-         this.logger.warn(`⚠️ 0바이트 파일이 저장되었습니다: ${objectKey}`);
-         throw new Error('파일이 생성되었으나 내용이 비어있습니다.');
+        this.logger.warn(`⚠️ 0바이트 파일이 저장되었습니다: ${objectKey}`);
+        throw new Error('파일이 생성되었으나 내용이 비어있습니다.');
       }
 
       this.logger.debug(`📝 파일 스트림 저장 완료: ${objectKey}`);
     } catch (error: any) {
+      if (error instanceof InternalServerErrorException) throw error;
       throw new InternalServerErrorException(`파일 스트림 저장 실패: ${error.message}`);
+    } finally {
+      release();
     }
   }
 
   async 파일읽기(objectKey: string): Promise<Buffer> {
-    const filePath = this.clientProvider.validateAndCreatePath(objectKey);
-    
+    const release = await this.lockManager.acquireRead(objectKey);
     try {
+      const filePath = this.clientProvider.validateAndCreatePath(objectKey);
       return await fs.readFile(filePath);
     } catch (error: any) {
       if (error.code === 'ENOENT') {
         throw new NotFoundException(`파일을 찾을 수 없습니다: ${objectKey}`);
       }
       throw new InternalServerErrorException(`파일 읽기 실패: ${error.message}`);
+    } finally {
+      release();
     }
   }
 
   async 파일스트림읽기(objectKey: string): Promise<Readable> {
+    const release = await this.lockManager.acquireRead(objectKey);
     const filePath = this.clientProvider.validateAndCreatePath(objectKey);
-    
+
     if (!fsSync.existsSync(filePath)) {
+      release();
       throw new NotFoundException(`파일을 찾을 수 없습니다: ${objectKey}`);
     }
 
-    return fsSync.createReadStream(filePath);
+    const stream = fsSync.createReadStream(filePath);
+    // 스트림 종료 시 lock 해제
+    stream.on('close', release);
+    stream.on('error', release);
+    return stream;
   }
 
   async 파일삭제(objectKey: string): Promise<void> {
-    const filePath = this.clientProvider.validateAndCreatePath(objectKey);
-    
+    const release = await this.lockManager.acquireWrite(objectKey);
     try {
-      await fs.access(filePath);
-    } catch {
-      throw new NotFoundException(`파일을 찾을 수 없습니다: ${objectKey}`);
-    }
+      const filePath = this.clientProvider.validateAndCreatePath(objectKey);
 
-    try {
+      try {
+        await fs.access(filePath);
+      } catch {
+        throw new NotFoundException(`파일을 찾을 수 없습니다: ${objectKey}`);
+      }
+
       await fs.unlink(filePath);
       this.logger.log(`🗑️ 파일 삭제 완료: ${filePath}`);
     } catch (error: any) {
+      if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(`삭제 실패: ${error.message}`);
+    } finally {
+      release();
     }
   }
 
   async 파일이동(oldKey: string, newKey: string): Promise<void> {
-    const oldPath = this.clientProvider.validateAndCreatePath(oldKey);
-    const newPath = this.clientProvider.validateAndCreatePath(newKey);
-
-    // 원본 파일 존재 확인
+    // 두 파일 모두 Write Lock 필요 (Deadlock 방지를 위해 키 정렬)
+    const release = await this.lockManager.acquireWriteMultiple([oldKey, newKey]);
     try {
-      await fs.access(oldPath);
-    } catch {
-      throw new NotFoundException(`원본 파일을 찾을 수 없습니다: ${oldKey}`);
-    }
+      const oldPath = this.clientProvider.validateAndCreatePath(oldKey);
+      const newPath = this.clientProvider.validateAndCreatePath(newKey);
 
-    // 대상 디렉토리 생성
-    const destDir = path.dirname(newPath);
-    await fs.mkdir(destDir, { recursive: true });
-
-    try {
-      await fs.rename(oldPath, newPath);
-      this.logger.log(`📁 Moved: ${oldKey} → ${newKey}`);
-    } catch (error: any) {
-      if (error.code === 'EXDEV') {
-        // 다른 드라이브 간 이동
-        await fs.copyFile(oldPath, newPath);
-        await fs.unlink(oldPath);
-        this.logger.log(`📁 Moved (cross-device): ${oldKey} → ${newKey}`);
-      } else {
-        throw new InternalServerErrorException(`이동 실패: ${error.message}`);
+      // 원본 파일 존재 확인
+      try {
+        await fs.access(oldPath);
+      } catch {
+        throw new NotFoundException(`원본 파일을 찾을 수 없습니다: ${oldKey}`);
       }
+
+      // 대상 디렉토리 생성
+      const destDir = path.dirname(newPath);
+      await fs.mkdir(destDir, { recursive: true });
+
+      try {
+        await fs.rename(oldPath, newPath);
+        this.logger.log(`📁 Moved: ${oldKey} → ${newKey}`);
+      } catch (error: any) {
+        if (error.code === 'EXDEV') {
+          // 다른 드라이브 간 이동
+          await fs.copyFile(oldPath, newPath);
+          await fs.unlink(oldPath);
+          this.logger.log(`📁 Moved (cross-device): ${oldKey} → ${newKey}`);
+        } else {
+          throw new InternalServerErrorException(`이동 실패: ${error.message}`);
+        }
+      }
+    } catch (error: any) {
+      if (error instanceof NotFoundException || error instanceof InternalServerErrorException) throw error;
+      throw new InternalServerErrorException(`이동 실패: ${error.message}`);
+    } finally {
+      release();
     }
   }
 
   async 파일복사(sourceKey: string, destKey: string): Promise<void> {
-    const sourcePath = this.clientProvider.validateAndCreatePath(sourceKey);
-    const destPath = this.clientProvider.validateAndCreatePath(destKey);
-
-    // 원본 파일 존재 확인
+    // 원본은 Read Lock, 대상은 Write Lock
+    const release = await this.lockManager.acquireReadWrite(sourceKey, destKey);
     try {
-      await fs.access(sourcePath);
-    } catch {
-      throw new NotFoundException(`원본 파일을 찾을 수 없습니다: ${sourceKey}`);
-    }
+      const sourcePath = this.clientProvider.validateAndCreatePath(sourceKey);
+      const destPath = this.clientProvider.validateAndCreatePath(destKey);
 
-    await this.ensureDirectory(destPath);
-    
-    try {
+      // 원본 파일 존재 확인
+      try {
+        await fs.access(sourcePath);
+      } catch {
+        throw new NotFoundException(`원본 파일을 찾을 수 없습니다: ${sourceKey}`);
+      }
+
+      await this.ensureDirectory(destPath);
+
       await fs.copyFile(sourcePath, destPath);
       this.logger.debug(`📋 파일 복사 완료: ${sourceKey} → ${destKey}`);
     } catch (error: any) {
+      if (error instanceof NotFoundException) throw error;
       throw new InternalServerErrorException(`복사 실패: ${error.message}`);
+    } finally {
+      release();
     }
   }
 
@@ -442,15 +480,20 @@ export class NfsNasAdapter implements INasStoragePort {
    * 파일 스트리밍 다운로드 (메모리 효율적 - 전체 파일을 메모리에 로드하지 않음)
    */
   async downloadStream(key: string): Promise<FileDownloadResult> {
-    const fullPath = this.clientProvider.validateAndCreatePath(key);
+    const release = await this.lockManager.acquireRead(key);
 
     try {
+      const fullPath = this.clientProvider.validateAndCreatePath(key);
       const stats = await fs.stat(fullPath);
-      
+
       // fs.createReadStream으로 진짜 스트리밍 (메모리에 전체 로드 안함)
       const stream = fsSync.createReadStream(fullPath, {
         highWaterMark: 64 * 1024, // 64KB 청크
       });
+
+      // 스트림 종료 시 lock 해제
+      stream.on('close', release);
+      stream.on('error', release);
 
       const ext = path.extname(key).toLowerCase();
 
@@ -461,6 +504,7 @@ export class NfsNasAdapter implements INasStoragePort {
         filename: path.basename(key),
       };
     } catch (error: any) {
+      release();
       if (error.code === 'ENOENT') {
         throw new NotFoundException(`파일을 찾을 수 없습니다: ${key}`);
       }
@@ -475,15 +519,20 @@ export class NfsNasAdapter implements INasStoragePort {
    * @param end 끝 바이트 위치 (포함)
    */
   async downloadRange(key: string, start: number, end: number): Promise<Buffer> {
+    const release = await this.lockManager.acquireRead(key);
     const fullPath = this.clientProvider.validateAndCreatePath(key);
 
     return new Promise((resolve, reject) => {
       const chunks: Buffer[] = [];
       const stream = fsSync.createReadStream(fullPath, { start, end });
-      
+
       stream.on('data', (chunk) => chunks.push(chunk as Buffer));
-      stream.on('end', () => resolve(Buffer.concat(chunks)));
+      stream.on('end', () => {
+        release();
+        resolve(Buffer.concat(chunks));
+      });
       stream.on('error', (error: NodeJS.ErrnoException) => {
+        release();
         if (error.code === 'ENOENT') {
           reject(new NotFoundException(`파일을 찾을 수 없습니다: ${key}`));
         } else {
@@ -497,9 +546,9 @@ export class NfsNasAdapter implements INasStoragePort {
    * 파일 해시 계산 (SHA-256)
    */
   async calculateHash(key: string): Promise<string> {
-    const fullPath = this.clientProvider.validateAndCreatePath(key);
-
+    const release = await this.lockManager.acquireRead(key);
     try {
+      const fullPath = this.clientProvider.validateAndCreatePath(key);
       const content = await fs.readFile(fullPath);
       return crypto.createHash('sha256').update(content).digest('hex');
     } catch (error: any) {
@@ -507,6 +556,8 @@ export class NfsNasAdapter implements INasStoragePort {
         throw new NotFoundException(`파일을 찾을 수 없습니다: ${key}`);
       }
       throw new InternalServerErrorException(`해시 계산 실패: ${error.message}`);
+    } finally {
+      release();
     }
   }
 
@@ -556,39 +607,45 @@ export class NfsNasAdapter implements INasStoragePort {
    * 파일 이름 변경
    */
   async rename(key: string, newName: string): Promise<string> {
-    const sourceFullPath = this.clientProvider.validateAndCreatePath(key);
-
-    try {
-      await fs.access(sourceFullPath);
-    } catch {
-      throw new NotFoundException(`파일을 찾을 수 없습니다: ${key}`);
-    }
-
-    // 새 경로 생성 (같은 디렉토리 내에서 이름만 변경)
+    // 새 경로 계산 (락 획득 전에 필요)
     const parentDir = path.dirname(key);
     const newKey = parentDir ? `${parentDir}/${newName}` : newName;
-    const destFullPath = this.clientProvider.validateAndCreatePath(newKey);
 
-    // 대상 파일이 이미 존재하는지 확인
+    // 두 경로 모두 Write Lock 필요 (Deadlock 방지를 위해 키 정렬)
+    const release = await this.lockManager.acquireWriteMultiple([key, newKey]);
     try {
-      await fs.access(destFullPath);
-      throw new InternalServerErrorException(`동일한 이름의 파일이 이미 존재합니다: ${newName}`);
-    } catch (error: any) {
-      if (error.code !== 'ENOENT' && !(error instanceof InternalServerErrorException)) {
-        throw error;
-      }
-      if (error instanceof InternalServerErrorException) {
-        throw error;
-      }
-      // ENOENT는 파일이 없다는 뜻이므로 정상 진행
-    }
+      const sourceFullPath = this.clientProvider.validateAndCreatePath(key);
 
-    try {
+      try {
+        await fs.access(sourceFullPath);
+      } catch {
+        throw new NotFoundException(`파일을 찾을 수 없습니다: ${key}`);
+      }
+
+      const destFullPath = this.clientProvider.validateAndCreatePath(newKey);
+
+      // 대상 파일이 이미 존재하는지 확인
+      try {
+        await fs.access(destFullPath);
+        throw new InternalServerErrorException(`동일한 이름의 파일이 이미 존재합니다: ${newName}`);
+      } catch (error: any) {
+        if (error.code !== 'ENOENT' && !(error instanceof InternalServerErrorException)) {
+          throw error;
+        }
+        if (error instanceof InternalServerErrorException) {
+          throw error;
+        }
+        // ENOENT는 파일이 없다는 뜻이므로 정상 진행
+      }
+
       await fs.rename(sourceFullPath, destFullPath);
       this.logger.log(`✏️ Renamed: ${key} → ${newKey}`);
       return newKey;
     } catch (error: any) {
+      if (error instanceof NotFoundException || error instanceof InternalServerErrorException) throw error;
       throw new InternalServerErrorException(`이름 변경 실패: ${error.message}`);
+    } finally {
+      release();
     }
   }
 }

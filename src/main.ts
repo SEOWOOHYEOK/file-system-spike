@@ -1,3 +1,10 @@
+/**
+ * Node.js libuv 스레드 풀 크기 설정 (기본값 4 → 16)
+ * 병렬 파일 I/O 성능 향상을 위해 스레드 풀 확장
+ * 주의: 반드시 다른 import 전에 설정해야 함
+ */
+process.env.UV_THREADPOOL_SIZE = '16';
+
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';

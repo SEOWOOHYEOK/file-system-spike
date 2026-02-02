@@ -16,7 +16,8 @@
  */
 
 import { FileDownloadService } from './file-download.service';
-import { FileEntity, FileState, StorageType, AvailabilityStatus } from '../../domain/file';
+import { FileEntity, StorageType, AvailabilityStatus } from '../../domain/file';
+import { FileState } from '../../domain/file/type/file.type';
 
 describe('FileDownloadService', () => {
   /**
