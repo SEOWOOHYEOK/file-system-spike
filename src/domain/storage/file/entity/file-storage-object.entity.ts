@@ -91,6 +91,18 @@ export class FileStorageObjectEntity {
   }
 
   /**
+   * Eviction 가능 여부 확인
+   * 조건: CACHE 타입, AVAILABLE 상태, leaseCount=0
+   */
+  isEvictable(): boolean {
+    return (
+      this.storageType === StorageType.CACHE &&
+      this.availabilityStatus === AvailabilityStatus.AVAILABLE &&
+      this.leaseCount === 0
+    );
+  }
+
+  /**
    * 상태 변경
    */
   

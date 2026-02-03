@@ -91,6 +91,66 @@ export interface IFileStorageObjectRepository {
     storageType: StorageType,
     options?: TransactionOptions,
   ): Promise<number>;
+
+  /**
+   * Eviction 대상 조회 (LRU 기준)
+   * 조건: CACHE 타입, AVAILABLE 상태, leaseCount=0, NAS에 동기화 완료된 파일
+   * @param limit 조회할 최대 개수
+   * @param options 트랜잭션 옵션
+   * @returns LRU 기준으로 정렬된 Eviction 대상 목록
+   */
+  findEvictionCandidatesLRU(
+    limit: number,
+    options?: TransactionOptions,
+  ): Promise<FileStorageObjectEntity[]>;
+
+  /**
+   * Atomic 상태 전환 (AVAILABLE -> EVICTING)
+   * Race Condition 방지를 위해 leaseCount=0 조건 포함
+   * @param fileId 파일 ID
+   * @param options 트랜잭션 옵션
+   * @returns 영향받은 row 수 (0: 이미 lease 중이거나 상태 변경됨, 1: 성공)
+   */
+  tryMarkEvicting(
+    fileId: string,
+    options?: TransactionOptions,
+  ): Promise<number>;
+
+  /**
+   * Eviction 완료 후 캐시 레코드 삭제
+   * @param fileId 파일 ID
+   * @param options 트랜잭션 옵션
+   */
+  deleteCacheRecord(
+    fileId: string,
+    options?: TransactionOptions,
+  ): Promise<void>;
+
+  /**
+   * 캐시 상세 통계 조회
+   * - 상태별 파일 수
+   * - lease 중인 파일 수
+   * - NAS 미동기화 파일 수
+   */
+  getCacheDetailedStats(
+    options?: TransactionOptions,
+  ): Promise<CacheDetailedStats>;
+}
+
+/**
+ * 캐시 상세 통계 타입
+ */
+export interface CacheDetailedStats {
+  /** 전체 캐시 파일 수 */
+  totalCount: number;
+  /** 상태별 파일 수 */
+  byStatus: Record<string, number>;
+  /** lease 중인 파일 수 (leaseCount > 0) */
+  leasedCount: number;
+  /** NAS에 동기화되지 않은 파일 수 (NAS 객체가 없거나 NAS가 AVAILABLE이 아닌 파일) */
+  unsyncedToNasCount: number;
+  /** Eviction 가능한 파일 수 (AVAILABLE, leaseCount=0, NAS 동기화 완료) */
+  evictableCount: number;
 }
 
 /**

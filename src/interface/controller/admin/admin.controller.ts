@@ -2,7 +2,7 @@
  * Admin 컨트롤러
  * 스토리지 및 동기화 이벤트 문제 확인 API
  */
-import { Controller, Get, Query } from '@nestjs/common';
+import { Controller, Get, Post, Query } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiOkResponse } from '@nestjs/swagger';
 import { AdminService, QueueStatusService } from '../../../business/admin';
 import {
@@ -13,6 +13,8 @@ import {
   SyncEventsQueryDto,
   SyncEventsResponseDto,
   QueueStatusResponseDto,
+  CacheUsageResponseDto,
+  CacheEvictionResponseDto,
 } from './dto';
 
 @ApiTags('500.관리자')
@@ -104,8 +106,16 @@ export class AdminController {
   @ApiOperation({
     summary: 'Bull 큐 현황 조회',
     description:
-      'NAS 동기화 관련 Bull 큐의 현황을 조회합니다. ' +
-      '대기 중(waiting), 처리 중(active), 완료(completed), 실패(failed), 지연(delayed) 작업 수를 확인할 수 있습니다.',
+      'NAS 동기화 관련 Bull 큐의 현황을 조회합니다.\n\n' +
+      '**큐 목록:**\n' +
+      '- `NAS_FILE_SYNC`: 파일 동기화 (upload, rename, move, trash, restore, purge)\n' +
+      '- `NAS_FOLDER_SYNC`: 폴더 동기화 (mkdir, rename, move, trash, restore, purge)\n\n' +
+      '**상태 정보:**\n' +
+      '- waiting: 대기 중인 작업 수\n' +
+      '- active: 처리 중인 작업 수\n' +
+      '- completed: 완료된 작업 수\n' +
+      '- failed: 실패한 작업 수\n' +
+      '- delayed: 지연된 작업 수',
   })
   @ApiOkResponse({
     description: '큐 현황 조회 결과',
@@ -113,5 +123,42 @@ export class AdminController {
   })
   async getQueueStatus(): Promise<QueueStatusResponseDto> {
     return this.queueStatusService.getQueueStatus();
+  }
+
+  /**
+   * GET /v1/admin/cache/usage - 캐시 사용 현황 조회
+   */
+  @Get('cache/usage')
+  @ApiOperation({
+    summary: '캐시 사용 현황 조회',
+    description:
+      '캐시 스토리지의 사용량, 파일 수, 임계값 설정 등을 조회합니다. ' +
+      '사용률이 thresholdPercent를 초과하면 자동 Eviction이 시작됩니다.',
+  })
+  @ApiOkResponse({
+    description: '캐시 사용 현황',
+    type: CacheUsageResponseDto,
+  })
+  async getCacheUsage(): Promise<CacheUsageResponseDto> {
+    return this.adminService.getCacheUsage();
+  }
+
+  /**
+   * POST /v1/admin/cache/evict - 수동 캐시 정리
+   */
+  @Post('cache/evict')
+  @ApiOperation({
+    summary: '수동 캐시 정리',
+    description:
+      'LRU 정책에 따라 캐시를 수동으로 정리합니다. ' +
+      '임계값과 관계없이 목표 사용률(targetPercent)까지 정리합니다. ' +
+      '다운로드 중인 파일(leaseCount > 0)과 NAS 미동기화 파일은 보호됩니다.',
+  })
+  @ApiOkResponse({
+    description: '캐시 정리 결과',
+    type: CacheEvictionResponseDto,
+  })
+  async runCacheEviction(): Promise<CacheEvictionResponseDto> {
+    return this.adminService.runCacheEviction();
   }
 }

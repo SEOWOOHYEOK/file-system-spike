@@ -14,7 +14,12 @@ import {
   SyncEventStatsService,
   FindSyncEventsParams,
 } from './sync-event-stats.service';
-import { SyncEventsResponseDto } from '../../interface/controller/admin/dto';
+import { CacheEvictionWorker } from '../worker/cache-eviction.worker';
+import {
+  SyncEventsResponseDto,
+  CacheUsageResponseDto,
+  CacheEvictionResponseDto,
+} from '../../interface/controller/admin/dto';
 
 @Injectable()
 export class AdminService {
@@ -23,6 +28,7 @@ export class AdminService {
     private readonly nasHealthCheckService: NasHealthCheckService,
     private readonly storageConsistencyService: StorageConsistencyService,
     private readonly syncEventStatsService: SyncEventStatsService,
+    private readonly cacheEvictionWorker: CacheEvictionWorker,
   ) {}
 
   /**
@@ -91,5 +97,67 @@ export class AdminService {
       },
       checkedAt: new Date(),
     };
+  }
+
+  /**
+   * 캐시 사용 현황 조회
+   * DB 통계 + 디스크 실제 통계 + 미동기화 현황 포함
+   * @returns 캐시 사용 현황
+   */
+  async getCacheUsage(): Promise<CacheUsageResponseDto> {
+    const status = await this.cacheEvictionWorker.getCacheStatus();
+
+    return {
+      currentBytes: status.currentBytes,
+      maxBytes: status.maxBytes,
+      usagePercent: Math.round(status.usagePercent * 100) / 100,
+      thresholdPercent: status.thresholdPercent,
+      targetPercent: status.targetPercent,
+      currentBytesFormatted: this.formatBytes(status.currentBytes),
+      maxBytesFormatted: this.formatBytes(status.maxBytes),
+      db: {
+        totalCount: status.db.totalCount,
+        byStatus: status.db.byStatus,
+        leasedCount: status.db.leasedCount,
+        unsyncedToNasCount: status.db.unsyncedToNasCount,
+        evictableCount: status.db.evictableCount,
+      },
+      disk: {
+        fileCount: status.disk.fileCount,
+        totalBytes: status.disk.totalBytes,
+        totalBytesFormatted: this.formatBytes(status.disk.totalBytes),
+      },
+      checkedAt: new Date(),
+    };
+  }
+
+  /**
+   * 수동 캐시 Eviction 실행
+   * @returns Eviction 결과
+   */
+  async runCacheEviction(): Promise<CacheEvictionResponseDto> {
+    const result = await this.cacheEvictionWorker.runEviction();
+
+    return {
+      evictedCount: result.evictedCount,
+      freedBytes: result.freedBytes,
+      freedBytesFormatted: this.formatBytes(result.freedBytes),
+      skippedCount: result.skippedCount,
+      errorCount: result.errorCount,
+      executedAt: new Date(),
+    };
+  }
+
+  /**
+   * 바이트를 읽기 쉬운 형식으로 변환
+   */
+  private formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 B';
+
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const k = 1024;
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+    return `${(bytes / Math.pow(k, i)).toFixed(2)} ${units[i]}`;
   }
 }

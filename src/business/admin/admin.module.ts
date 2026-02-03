@@ -11,6 +11,7 @@ import { QueueStatusService } from './queue-status.service';
 import { FileDomainModule } from '../../domain/file/file.module';
 import { StorageDomainModule } from '../../domain/storage/storage.module';
 import { SyncEventDomainModule } from '../../domain/sync-event/sync-event.module';
+import { WorkerModule } from '../worker/worker.module';
 
 /**
  * Admin 비즈니스 모듈
@@ -24,6 +25,7 @@ import { SyncEventDomainModule } from '../../domain/sync-event/sync-event.module
     FileDomainModule,
     StorageDomainModule,
     SyncEventDomainModule,
+    WorkerModule,
   ],
   providers: [
     AdminService,

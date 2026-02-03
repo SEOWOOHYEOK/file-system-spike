@@ -11,16 +11,12 @@ import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 
 /**
  * NAS 동기화 관련 큐 이름 목록
- * - NAS_FILE_SYNC: 파일 동기화 통합 큐 (upload, rename, move, trash)
- * - NAS_SYNC_MKDIR: 폴더 생성
- * - NAS_SYNC_RENAME_DIR: 폴더 이름 변경
- * - NAS_SYNC_MOVE_DIR: 폴더 이동
+ * - NAS_FILE_SYNC: 파일 동기화 통합 큐 (upload, rename, move, trash, restore, purge)
+ * - NAS_FOLDER_SYNC: 폴더 동기화 통합 큐 (mkdir, rename, move, trash, restore, purge)
  */
 const NAS_SYNC_QUEUE_NAMES = [
   'NAS_FILE_SYNC',
-  'NAS_SYNC_MKDIR',
-  'NAS_SYNC_RENAME_DIR',
-  'NAS_SYNC_MOVE_DIR',
+  'NAS_FOLDER_SYNC',
 ] as const;
 
 /**

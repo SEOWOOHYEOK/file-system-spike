@@ -9,7 +9,7 @@ import { ApiProperty } from '@nestjs/swagger';
 export class QueueInfoDto {
   @ApiProperty({
     description: '큐 이름',
-    example: 'NAS_SYNC_UPLOAD',
+    example: 'NAS_FILE_SYNC',
   })
   name: string;
 

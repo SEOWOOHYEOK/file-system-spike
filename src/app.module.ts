@@ -1,5 +1,6 @@
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DomainModule } from './domain/domain.module';
@@ -26,6 +27,8 @@ import { RequestContextMiddleware } from './common/middleware/request-context.mi
       isGlobal: true,
       envFilePath: '.env',
     }),
+    // 스케줄링 모듈 (Cron 작업용)
+    ScheduleModule.forRoot(),
     // SSO 통합 모듈
     SSOModule,
     // 조직 마이그레이션 모듈
