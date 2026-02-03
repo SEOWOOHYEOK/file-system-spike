@@ -22,7 +22,7 @@ import { SyncEventDomainService } from '../../domain/sync-event/service/sync-eve
 import { TrashDomainService } from '../../domain/trash/service/trash-domain.service';
 import { FolderNasStorageObjectDomainService } from '../../domain/storage/folder/service/folder-nas-storage-object-domain.service';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
-import { NAS_FOLDER_SYNC_QUEUE_PREFIX } from '../worker/nas-folder-sync.worker';
+import { NAS_FOLDER_SYNC_QUEUE_PREFIX, NAS_FOLDER_SYNC_MAX_ATTEMPTS, NAS_FOLDER_SYNC_BACKOFF_MS } from '../worker/nas-folder-sync.worker';
 
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 
@@ -90,7 +90,7 @@ export class FolderCommandService implements OnModuleInit {
   /**
    * 폴더 생성
    */
-  async 생성(request: CreateFolderRequest, userId: string): Promise<CreateFolderResponse> {
+  async 생성(request: CreateFolderRequest): Promise<CreateFolderResponse> {
     const { name, parentId, conflictStrategy = FolderConflictStrategy.ERROR } = request;
 
     // 1. 폴더명 유효성 검사
@@ -140,6 +140,7 @@ export class FolderCommandService implements OnModuleInit {
       folderName: finalName,
       parentId,
     });
+
     await this.syncEventDomainService.저장(syncEvent);
 
     // 7. Bull 큐 등록 (NAS_FOLDER_SYNC - mkdir)
@@ -148,7 +149,12 @@ export class FolderCommandService implements OnModuleInit {
       action: 'mkdir',
       path: folderPath,
       syncEventId,
+    }, {
+      attempts: NAS_FOLDER_SYNC_MAX_ATTEMPTS,
+      backoff: NAS_FOLDER_SYNC_BACKOFF_MS,
     });
+
+    
     this.logger.debug(`NAS_FOLDER_SYNC (mkdir) job added for folder: ${folderId}`);
 
     return {
@@ -166,7 +172,7 @@ export class FolderCommandService implements OnModuleInit {
   /**
    * 폴더명 변경
    */
-  async 이름변경(folderId: string, request: RenameFolderRequest, userId: string): Promise<RenameFolderResponse> {
+  async 이름변경(folderId: string, request: RenameFolderRequest): Promise<RenameFolderResponse> {
     const { newName, conflictStrategy = FolderConflictStrategy.ERROR } = request;
 
     // 1. 폴더명 유효성 검사
@@ -229,8 +235,7 @@ export class FolderCommandService implements OnModuleInit {
         await this.folderStorageService.저장(storageObject, txOptions);
       }
 
-      // 트랜잭션 커밋
-      await queryRunner.commitTransaction();
+
 
       // 9. sync_events 생성
       const syncEventId = uuidv4();
@@ -251,7 +256,14 @@ export class FolderCommandService implements OnModuleInit {
         oldPath,
         newPath,
         syncEventId,
+      }, {
+        attempts: NAS_FOLDER_SYNC_MAX_ATTEMPTS,
+        backoff: NAS_FOLDER_SYNC_BACKOFF_MS,
       });
+
+      // 트랜잭션 커밋
+      await queryRunner.commitTransaction();
+
       this.logger.debug(`NAS_FOLDER_SYNC (rename) job added for folder: ${folderId}`);
 
       return {
@@ -274,7 +286,7 @@ export class FolderCommandService implements OnModuleInit {
   /**
    * 폴더 이동
    */
-  async 이동(folderId: string, request: MoveFolderRequest, userId: string): Promise<MoveFolderResponse> {
+  async 이동(folderId: string, request: MoveFolderRequest): Promise<MoveFolderResponse> {
     const { targetParentId, conflictStrategy = MoveFolderConflictStrategy.ERROR } = request;
 
     // 1. 대상 상위 폴더 존재 확인
@@ -367,9 +379,6 @@ export class FolderCommandService implements OnModuleInit {
         await this.folderStorageService.저장(storageObject, txOptions);
       }
 
-      // 트랜잭션 커밋
-      await queryRunner.commitTransaction();
-
       // 10. sync_events 생성
       const syncEventId = uuidv4();
       const syncEvent = SyncEventFactory.createFolderMoveEvent({
@@ -391,7 +400,13 @@ export class FolderCommandService implements OnModuleInit {
         originalParentId,
         targetParentId,
         syncEventId,
+      }, {
+        attempts: NAS_FOLDER_SYNC_MAX_ATTEMPTS,
+        backoff: NAS_FOLDER_SYNC_BACKOFF_MS,
       });
+
+      await queryRunner.commitTransaction();
+
       this.logger.debug(`NAS_FOLDER_SYNC (move) job added for folder: ${folderId}`);
 
       return {
@@ -496,9 +511,6 @@ export class FolderCommandService implements OnModuleInit {
         await this.folderStorageService.저장(storageObject, txOptions);
       }
 
-      // 트랜잭션 커밋
-      await queryRunner.commitTransaction();
-
       // 7. sync_events 생성
       const syncEventId = uuidv4();
       const syncEvent = SyncEventFactory.createFolderTrashEvent({
@@ -509,17 +521,24 @@ export class FolderCommandService implements OnModuleInit {
         originalPath: currentPath,
         originalParentId: folder.parentId,
       });
+
       await this.syncEventDomainService.저장(syncEvent);
 
-      // 8. Bull 큐 등록 (NAS_FOLDER_SYNC - trash) - 커밋 후 등록
+      // 8. Bull 큐 등록 (NAS_FOLDER_SYNC - trash) 
       await this.jobQueue.addJob(NAS_FOLDER_SYNC_QUEUE_PREFIX, {
         folderId,
         action: 'trash',
         currentPath,
         trashPath,
         syncEventId,
+      }, {
+        attempts: NAS_FOLDER_SYNC_MAX_ATTEMPTS,
+        backoff: NAS_FOLDER_SYNC_BACKOFF_MS,
       });
       this.logger.debug(`NAS_FOLDER_SYNC (trash) job added for folder: ${folderId}`);
+
+      // 트랜잭션 커밋
+      await queryRunner.commitTransaction();
 
       return {
         id: folder.id,

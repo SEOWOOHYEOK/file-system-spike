@@ -9,6 +9,7 @@ import { ExternalShareDomainModule } from './external-share/external-share.modul
 import { UserDomainModule } from './user/user.module';
 import { RoleDomainModule } from './role/role.module';
 import { UploadSessionDomainModule } from './upload-session/upload-session.module';
+import { FavoriteDomainModule } from './favorite/favorite.module';
 
 /**
  * 도메인 레이어 통합 모듈
@@ -26,6 +27,7 @@ import { UploadSessionDomainModule } from './upload-session/upload-session.modul
     UserDomainModule,
     RoleDomainModule,
     UploadSessionDomainModule,
+    FavoriteDomainModule,
   ],
   exports: [
     FileDomainModule,
@@ -38,6 +40,7 @@ import { UploadSessionDomainModule } from './upload-session/upload-session.modul
     UserDomainModule,
     RoleDomainModule,
     UploadSessionDomainModule,
+    FavoriteDomainModule,
   ],
 })
 export class DomainModule {}

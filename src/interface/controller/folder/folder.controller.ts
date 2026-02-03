@@ -7,6 +7,7 @@ import {
   Param,
   Body,
   Query,
+  UseGuards,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -26,6 +27,7 @@ import {
   SearchQuery,
   SearchResponse,
 } from '../../../domain/folder';
+import { RequestContext } from '../../../common/context/request-context';
 import {
   ApiFolderCreate,
   ApiFolderInfo,
@@ -38,12 +40,13 @@ import {
 import { AuditAction } from '../../../common/decorators';
 import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
 import { TargetType } from '../../../domain/audit/enums/common.enum';
-
+import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 /**
  * 폴더 컨트롤러
  * 폴더 생성, 조회, 관리 API
  */
 @ApiTags('210.폴더')
+@UseGuards(JwtAuthGuard)
 @Controller('v1/folders')
 export class FolderController {
   constructor(
@@ -65,9 +68,7 @@ export class FolderController {
     targetNameParam: 'name',
   })
   async create(@Body() request: CreateFolderRequest): Promise<CreateFolderResponse> {
-    // TODO: 실제 구현 시 인증된 사용자 ID 사용
-    const userId = 'system';
-    return this.folderCommandService.생성(request, userId);
+    return this.folderCommandService.생성(request);
   }
 
   /**
@@ -75,11 +76,11 @@ export class FolderController {
    */
   @Get('root')
   @ApiFolderInfo()
-  @AuditAction({
-    action: AuditActionEnum.FOLDER_VIEW,
-    targetType: TargetType.FOLDER,
-    targetIdParam: 'id',
-  })
+  // @AuditAction({
+  //   action: AuditActionEnum.FOLDER_VIEW,
+  //   targetType: TargetType.FOLDER,
+  //   targetIdParam: 'id',
+  // })
   async getRootFolderInfo(): Promise<FolderInfoResponse> {
     return this.folderQueryService.getRootFolderInfo();
   }
@@ -98,11 +99,11 @@ export class FolderController {
    */
   @Get(':folderId')
   @ApiFolderInfo()
-  @AuditAction({
-    action: AuditActionEnum.FOLDER_VIEW,
-    targetType: TargetType.FOLDER,
-    targetIdParam: 'folderId',
-  })
+  // @AuditAction({
+  //   action: AuditActionEnum.FOLDER_VIEW,
+  //   targetType: TargetType.FOLDER,
+  //   targetIdParam: 'folderId',
+  // })
   async getFolderInfo(@Param('folderId') folderId: string): Promise<FolderInfoResponse> {
     return this.folderQueryService.getFolderInfo(folderId);
   }
@@ -112,11 +113,11 @@ export class FolderController {
    */
   @Get(':folderId/contents')
   @ApiFolderContents()
-  @AuditAction({
-    action: AuditActionEnum.FOLDER_VIEW,
-    targetType: TargetType.FOLDER,
-    targetIdParam: 'folderId',
-  })
+  // @AuditAction({
+  //   action: AuditActionEnum.FOLDER_VIEW,
+  //   targetType: TargetType.FOLDER,
+  //   targetIdParam: 'folderId',
+  // })
   async getFolderContents(
     @Param('folderId') folderId: string,
     @Query() query: GetFolderContentsQuery,
@@ -139,9 +140,7 @@ export class FolderController {
     @Param('folderId') folderId: string,
     @Body() request: RenameFolderRequest,
   ): Promise<RenameFolderResponse> {
-    // TODO: 실제 구현 시 인증된 사용자 ID 사용
-    const userId = 'system';
-    return this.folderCommandService.이름변경(folderId, request, userId);
+    return this.folderCommandService.이름변경(folderId, request);
   }
 
   /**
@@ -158,9 +157,8 @@ export class FolderController {
     @Param('folderId') folderId: string,
     @Body() request: MoveFolderRequest,
   ): Promise<MoveFolderResponse> {
-    // TODO: 실제 구현 시 인증된 사용자 ID 사용
-    const userId = 'system';
-    return this.folderCommandService.이동(folderId, request, userId);
+
+    return this.folderCommandService.이동(folderId, request);
   }
 
   /**
@@ -179,8 +177,7 @@ export class FolderController {
     state: FolderState;
     trashedAt: string;
   }> {
-    // TODO: 실제 구현 시 인증된 사용자 ID 사용
-    const userId = 'system';
+    const userId = RequestContext.getUserId() || 'unknown';
     return this.folderCommandService.delete(folderId, userId);
   }
 }

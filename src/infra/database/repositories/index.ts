@@ -13,3 +13,4 @@ export * from './audit-log.repository';
 export * from './security-log.repository';
 export * from './file-history.repository';
 export * from './user.repository';
+export * from './favorite.repository';

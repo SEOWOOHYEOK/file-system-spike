@@ -2,10 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 
 
-import type { UserFilterQueryDto } from '../../interface/controller/user/dto/user-filter-query.dto';
-import type { UserWithEmployeeResponseDto } from '../../interface/controller/user/dto/user-with-employee-response.dto';
+import type { UserFilterQueryDto } from '../../interface/controller/admin/user/dto/user-admin-query.dto';
+import type { UserWithEmployeeResponseDto } from '../../interface/controller/admin/user/dto/user-admin-response.dto';
 import type { DepartmentPositionResponseDto } from '../../interface/controller/user/dto/user-with-employee-response.dto';
-
 /**
  * User Query 서비스
  *

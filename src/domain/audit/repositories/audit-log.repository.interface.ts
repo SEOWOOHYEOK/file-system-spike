@@ -14,7 +14,6 @@ export interface AuditLogFilterOptions {
   targetId?: string;
   result?: LogResult;
   ipAddress?: string;
-  deviceFingerprint?: string;
   sessionId?: string;
   sensitivity?: string;
   startDate?: Date;

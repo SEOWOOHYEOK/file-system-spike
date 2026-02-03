@@ -1,2 +1,3 @@
-export * from './user-filter-query.dto';
+export * from './favorite.dto';
+export * from './recent-activity.dto';
 

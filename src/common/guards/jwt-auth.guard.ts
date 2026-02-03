@@ -8,6 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { RequestContext } from '../context/request-context';
+import { UserType } from '../../domain/audit/enums/common.enum';
 
 /**
  * JWT 인증 가드
@@ -48,7 +49,7 @@ export class JwtAuthGuard implements CanActivate {
       // auth.controller.ts의 JWT payload 구조: { id, employeeNumber, name, email }
       RequestContext.setUser({
         userId: payload.id,
-        userType: 'INTERNAL',
+        userType: UserType.INTERNAL,
         userName: payload.name,
         userEmail: payload.email,
       });

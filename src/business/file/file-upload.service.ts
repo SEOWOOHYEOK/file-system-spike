@@ -8,18 +8,17 @@ import {
   UploadFileResponse,
   ConflictStrategy,
 } from '../../domain/file';
-import { FileState } from '../../domain/file/type/file.type';
+
 import { FolderAvailabilityStatus } from '../../domain/folder';
 import { SyncEventFactory } from '../../domain/sync-event';
 import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 import {
   NAS_FILE_SYNC_QUEUE_PREFIX,
+  NAS_SYNC_MAX_ATTEMPTS,
+  NAS_SYNC_BACKOFF_MS,
   type NasFileSyncJobData,
 } from '../worker/nas-file-sync.worker';
-import { AuditLogHelper } from '../audit/audit-log-helper.service';
-import { UserType } from '../../domain/audit/enums/common.enum';
-import { RequestContext } from '../../common/context/request-context';
 import { normalizeFileName } from '../../common/utils';
 
 // Domain Services
@@ -52,7 +51,6 @@ export class FileUploadService {
     private readonly cacheStorage: ICacheStoragePort,
     @Inject(JOB_QUEUE_PORT)
     private readonly jobQueue: IJobQueuePort,
-    private readonly auditLogHelper: AuditLogHelper,
   ) { }
 
   /**
@@ -139,23 +137,11 @@ export class FileUploadService {
         action: 'upload',
         syncEventId,
       },
+      {
+        attempts: NAS_SYNC_MAX_ATTEMPTS,
+        backoff: NAS_SYNC_BACKOFF_MS,
+      },
     );
-
-    // 10. 감사 로그 및 파일 이력 기록
-    const ctx = RequestContext.get();
-    if (ctx?.userId) {
-      await this.auditLogHelper.logFileUpload({
-        userId: ctx.userId,
-        userType: (ctx.userType as UserType) || UserType.INTERNAL,
-        userName: ctx.userName,
-        userEmail: ctx.userEmail,
-        fileId,
-        fileName: finalFileName,
-        filePath,
-        fileSize: file.size,
-        mimeType: file.mimetype,
-      });
-    }
 
     return {
       id: fileEntity.id,

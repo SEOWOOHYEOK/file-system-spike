@@ -12,7 +12,6 @@ export interface SecurityLogFilterOptions {
   ipAddress?: string;
   severity?: Severity;
   severities?: Severity[];
-  deviceFingerprint?: string;
   startDate?: Date;
   endDate?: Date;
 }

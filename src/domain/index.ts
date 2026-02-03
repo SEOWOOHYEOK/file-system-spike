@@ -14,8 +14,6 @@ export * from './trash';
 // 동기화 이벤트 도메인
 export * from './sync-event';
 
-// 감사 로그 도메인
-export * from './audit';
 
 // 도메인 모듈
 export * from './domain.module';

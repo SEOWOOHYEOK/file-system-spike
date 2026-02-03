@@ -19,6 +19,8 @@ import {
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 import {
   NAS_FILE_SYNC_QUEUE_PREFIX,
+  NAS_SYNC_MAX_ATTEMPTS,
+  NAS_SYNC_BACKOFF_MS,
   type NasFileSyncJobData,
 } from '../worker/nas-file-sync.worker';
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
@@ -151,6 +153,10 @@ export class FileManageService {
             syncEventId,
             oldObjectKey,
             newObjectKey,
+          },
+          {
+            attempts: NAS_SYNC_MAX_ATTEMPTS,
+            backoff: NAS_SYNC_BACKOFF_MS,
           },
         );
         this.logger.debug(`NAS_FILE_SYNC rename job added for file: ${fileId}`);
@@ -310,6 +316,10 @@ export class FileManageService {
             originalFolderId,
             targetFolderId,
           },
+          {
+            attempts: NAS_SYNC_MAX_ATTEMPTS,
+            backoff: NAS_SYNC_BACKOFF_MS,
+          },
         );
         this.logger.debug(`NAS_FILE_SYNC move job added for file: ${fileId}`);
       }
@@ -451,6 +461,10 @@ export class FileManageService {
             syncEventId,
             currentObjectKey,
             trashPath,
+          },
+          {
+            attempts: NAS_SYNC_MAX_ATTEMPTS,
+            backoff: NAS_SYNC_BACKOFF_MS,
           },
         );
         this.logger.debug(`NAS_FILE_SYNC trash job added for file: ${fileId}`);

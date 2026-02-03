@@ -96,8 +96,7 @@ export interface CreateAuditLogParams {
   ipAddress: string;
   /** HTTP User-Agent 헤더 전체 */
   userAgent: string;
-  /** 디바이스 핑거프린트 (IP + User-Agent 해시) - 새 디바이스 감지용 */
-  deviceFingerprint?: string;
+  
   /** 클라이언트 타입 - web / mobile / api / unknown */
   clientType?: ClientType;
 
@@ -267,7 +266,7 @@ export class AuditLog {
    * - IP + User-Agent 기반 SHA-256 해시
    * - 새 디바이스 감지, 이상 접근 탐지에 활용
    */
-  deviceFingerprint?: string;
+  
 
   /**
    * 클라이언트 타입
@@ -359,7 +358,7 @@ export class AuditLog {
       ownerId: params.ownerId,
       ipAddress: params.ipAddress,
       userAgent: params.userAgent,
-      deviceFingerprint: params.deviceFingerprint,
+      
       clientType: params.clientType || ClientType.UNKNOWN,
       result: params.result,
       resultCode: params.resultCode,

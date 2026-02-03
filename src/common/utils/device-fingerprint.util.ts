@@ -97,57 +97,7 @@ function parseUserAgent(userAgent: string): ParsedUserAgent {
   return result;
 }
 
-/**
- * 디바이스 핑거프린트 생성
- *
- * IP 주소와 User-Agent를 조합하여 디바이스 식별자 생성
- * - 동일 디바이스 추적에 사용
- * - 새 디바이스 감지에 사용
- *
- * @param ipAddress 클라이언트 IP 주소
- * @param userAgent User-Agent 문자열
- * @returns SHA-256 해시 (64자)
- */
-export function generateDeviceFingerprint(
-  ipAddress: string,
-  userAgent: string,
-): string {
-  const parsed = parseUserAgent(userAgent);
 
-  // 핑거프린트 구성 요소 (버전 제외하여 마이너 업데이트에도 동일 디바이스로 인식)
-  const components = [
-    ipAddress,
-    parsed.browser,
-    parsed.os,
-    parsed.device,
-  ].join('|');
-
-  return crypto.createHash('sha256').update(components).digest('hex');
-}
-
-/**
- * 디바이스 핑거프린트 생성 (세부 버전 포함)
- *
- * 더 정밀한 디바이스 식별이 필요한 경우 사용
- * - 브라우저/OS 버전 변경 시 다른 핑거프린트 생성
- */
-export function generateDetailedDeviceFingerprint(
-  ipAddress: string,
-  userAgent: string,
-): string {
-  const parsed = parseUserAgent(userAgent);
-
-  const components = [
-    ipAddress,
-    parsed.browser,
-    parsed.browserVersion,
-    parsed.os,
-    parsed.osVersion,
-    parsed.device,
-  ].join('|');
-
-  return crypto.createHash('sha256').update(components).digest('hex');
-}
 
 /**
  * 클라이언트 타입 감지

@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import {
   FolderEntity,
   FolderState,
@@ -13,16 +13,18 @@ import {
   FolderDomainService,
 } from '../../domain/folder';
 import { createPaginationInfo } from '../../common/types/pagination';
-import { StorageType } from '../../domain/file';
 import { FileDomainService } from '../../domain/file/service/file-domain.service';
 import { FolderNasStorageObjectDomainService } from '../../domain/storage/folder/service/folder-nas-storage-object-domain.service';
-import { FILE_STORAGE_OBJECT_REPOSITORY } from '../../domain/storage';
-import type { IFileStorageObjectRepository } from '../../domain/storage';
+import { FileCacheStorageDomainService } from '../../domain/storage/file/service/file-cache-storage-domain.service';
+import { FileNasStorageDomainService } from '../../domain/storage/file/service/file-nas-storage-domain.service';
 import { FileState } from '../../domain/file/type/file.type';
 
 /**
  * 폴더 조회 비즈니스 서비스
  * 폴더 정보 조회, 폴더 내용 조회, 브레드크럼 조회
+ * 
+ * DDD 규칙: Business Layer는 Repository를 직접 주입받지 않고
+ * Domain Service를 통해 도메인 로직을 실행합니다.
  */
 @Injectable()
 export class FolderQueryService {
@@ -30,8 +32,8 @@ export class FolderQueryService {
     private readonly folderDomainService: FolderDomainService,
     private readonly folderStorageService: FolderNasStorageObjectDomainService,
     private readonly fileDomainService: FileDomainService,
-    @Inject(FILE_STORAGE_OBJECT_REPOSITORY)
-    private readonly fileStorageObjectRepository: IFileStorageObjectRepository,
+    private readonly fileCacheStorageService: FileCacheStorageDomainService,
+    private readonly fileNasStorageService: FileNasStorageDomainService,
   ) {}
 
   /**
@@ -206,9 +208,11 @@ export class FolderQueryService {
     const items: FileListItemInFolder[] = [];
 
     for (const file of files) {
-      const storageObjects = await this.fileStorageObjectRepository.findByFileId(file.id);
-      const cacheStatus = storageObjects.find(s => s.storageType === StorageType.CACHE);
-      const nasStatus = storageObjects.find(s => s.storageType === StorageType.NAS);
+      // Domain Service를 통해 스토리지 상태 조회
+      const [cacheStorage, nasStorage] = await Promise.all([
+        this.fileCacheStorageService.조회(file.id),
+        this.fileNasStorageService.조회(file.id),
+      ]);
 
       items.push({
         id: file.id,
@@ -216,8 +220,8 @@ export class FolderQueryService {
         size: file.sizeBytes,
         mimeType: file.mimeType,
         storageStatus: {
-          cache: cacheStatus?.availabilityStatus ?? null,
-          nas: nasStatus?.availabilityStatus ?? null,
+          cache: cacheStorage?.availabilityStatus ?? null,
+          nas: nasStorage?.availabilityStatus ?? null,
         },
         updatedAt: file.updatedAt.toISOString(),
       });

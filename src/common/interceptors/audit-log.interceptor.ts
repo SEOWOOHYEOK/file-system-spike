@@ -21,10 +21,11 @@ import { ClientType, UserType } from '../../domain/audit/enums/common.enum';
  * 사용자 정보 인터페이스 (JWT 페이로드에서 추출)
  */
 interface UserPayload {
-  sub: string;
+  sub?: string;  // JWT 표준 subject 클레임
+  id?: string;   // 커스텀 id 필드 (auth.controller에서 사용)
   email?: string;
   name?: string;
-  type?: 'internal' | 'external';
+  type?: 'INTERNAL' | 'EXTERNAL';
 }
 
 /**
@@ -104,7 +105,22 @@ export class AuditLogInterceptor implements NestInterceptor {
 
     const context = RequestContext.get();
     const user = this.extractUser(request);
+    const userId = this.extractUserId(user);
+
+    // 인증되지 않은 사용자는 감사 로그 스킵 (userId가 UUID 타입이므로)
+    if (!userId) {
+      this.logger.debug('Skipping audit log for unauthenticated request');
+      return;
+    }
+
     const targetId = this.extractTargetId(request, responseData, targetIdParam);
+
+    // targetId가 없거나 유효한 UUID가 아니면 감사 로그 스킵
+    if (!this.isValidUuid(targetId)) {
+      this.logger.warn(`Skipping audit log: invalid targetId "${targetId}" for action ${action}`);
+      return;
+    }
+
     const targetName = this.extractTargetName(
       request,
       responseData,
@@ -113,19 +129,18 @@ export class AuditLogInterceptor implements NestInterceptor {
 
     await this.auditLogService.logSuccess({
       requestId: context?.requestId || 'unknown',
-      sessionId: context?.sessionId,
-      traceId: context?.traceId,
-      userId: user?.sub || 'anonymous',
+      sessionId: context?.sessionId || 'unknown',
+      traceId: context?.traceId || 'unknown',
+      userId,
       userType: this.mapUserType(user?.type),
-      userName: user?.name,
-      userEmail: user?.email,
+      userName: user?.name || 'unknown',
+      userEmail: user?.email || 'unknown',
       action,
       targetType,
-      targetId: targetId || 'unknown',
+      targetId,
       targetName,
       ipAddress: context?.ipAddress || 'unknown',
       userAgent: context?.userAgent || 'unknown',
-      deviceFingerprint: context?.deviceFingerprint,
       clientType: this.mapClientType(context?.userAgent),
       durationMs,
       metadata: extractMetadata
@@ -147,22 +162,35 @@ export class AuditLogInterceptor implements NestInterceptor {
 
     const context = RequestContext.get();
     const user = this.extractUser(request);
+    const userId = this.extractUserId(user);
+
+    // 인증되지 않은 사용자는 감사 로그 스킵 (userId가 UUID 타입이므로)
+    if (!userId) {
+      this.logger.debug('Skipping audit log for unauthenticated request');
+      return;
+    }
+
     const targetId = this.extractTargetId(request, null, targetIdParam);
+
+    // targetId가 없거나 유효한 UUID가 아니면 감사 로그 스킵
+    if (!this.isValidUuid(targetId)) {
+      this.logger.warn(`Skipping audit log: invalid targetId "${targetId}" for action ${action}`);
+      return;
+    }
 
     await this.auditLogService.logFailure({
       requestId: context?.requestId || 'unknown',
       sessionId: context?.sessionId,
       traceId: context?.traceId,
-      userId: user?.sub || 'anonymous',
+      userId,
       userType: this.mapUserType(user?.type),
       userName: user?.name,
       userEmail: user?.email,
       action,
       targetType,
-      targetId: targetId || 'unknown',
+      targetId,
       ipAddress: context?.ipAddress || 'unknown',
       userAgent: context?.userAgent || 'unknown',
-      deviceFingerprint: context?.deviceFingerprint,
       clientType: this.mapClientType(context?.userAgent),
       durationMs,
       failReason: error.message || 'Unknown error',
@@ -175,6 +203,13 @@ export class AuditLogInterceptor implements NestInterceptor {
    */
   private extractUser(request: Request): UserPayload | null {
     return (request as any).user || null;
+  }
+
+  /**
+   * 사용자 ID 추출 (sub 또는 id 필드)
+   */
+  private extractUserId(user: UserPayload | null): string | undefined {
+    return user?.sub || user?.id;
   }
 
   /**
@@ -256,7 +291,7 @@ export class AuditLogInterceptor implements NestInterceptor {
    * 사용자 타입 매핑
    */
   private mapUserType(type?: string): UserType {
-    if (type === 'external') {
+    if (type === UserType.EXTERNAL) {
       return UserType.EXTERNAL;
     }
     return UserType.INTERNAL;
@@ -280,5 +315,16 @@ export class AuditLogInterceptor implements NestInterceptor {
       default:
         return ClientType.UNKNOWN;
     }
+  }
+
+  /**
+   * UUID 유효성 검증 (타입 가드)
+   */
+  private isValidUuid(value: string | undefined): value is string {
+    if (!value) {
+      return false;
+    }
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(value);
   }
 }

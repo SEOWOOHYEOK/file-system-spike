@@ -3,7 +3,6 @@ import { Request, Response, NextFunction } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import * as crypto from 'crypto';
 import { RequestContext } from '../context/request-context';
-import { generateDeviceFingerprint } from '../utils/device-fingerprint.util';
 
 
 /**
@@ -107,7 +106,7 @@ export class RequestContextMiddleware implements NestMiddleware {
     const userAgent = req.headers['user-agent'] || 'unknown';
     const sessionId = extractSessionId(req);
     const traceId = extractTraceId(req);
-    const deviceFingerprint = generateDeviceFingerprint(ipAddress, userAgent);
+    
 
     // 응답 헤더에 요청 ID 추가 (디버깅용)
     res.setHeader('X-Request-Id', requestId);
@@ -121,7 +120,6 @@ export class RequestContextMiddleware implements NestMiddleware {
         traceId,
         ipAddress,
         userAgent,
-        deviceFingerprint,
         startTime: Date.now(),
       },
       () => next(),

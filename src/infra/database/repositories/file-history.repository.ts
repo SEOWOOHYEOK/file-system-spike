@@ -20,22 +20,22 @@ import { FileHistoryMapper } from '../mapper/file-history.mapper';
 export class FileHistoryRepository implements IFileHistoryRepository {
   constructor(
     @InjectRepository(FileHistoryOrmEntity)
-    private readonly fileHisotoryRepository: Repository<FileHistoryOrmEntity>,
+    private readonly fileHistoryRepository: Repository<FileHistoryOrmEntity>,
   ) {}
 
   async save(history: FileHistory): Promise<FileHistory> {
     const ormEntity = FileHistoryMapper.toOrm(history);
-    const saved = await this.fileHisotoryRepository.save(ormEntity);
+    const saved = await this.fileHistoryRepository.save(ormEntity);
     return FileHistoryMapper.toDomain(saved as FileHistoryOrmEntity);
   }
 
   async saveMany(histories: FileHistory[]): Promise<void> {
     const ormEntities = histories.map((h) => FileHistoryMapper.toOrm(h));
-    await this.fileHisotoryRepository.save(ormEntities);
+    await this.fileHistoryRepository.save(ormEntities);
   }
 
   async findById(id: string): Promise<FileHistory | null> {
-    const orm = await this.fileHisotoryRepository.findOne({ where: { id } });
+    const orm = await this.fileHistoryRepository.findOne({ where: { id } });
     return orm ? FileHistoryMapper.toDomain(orm) : null;
   }
 
@@ -43,7 +43,7 @@ export class FileHistoryRepository implements IFileHistoryRepository {
     filter: FileHistoryFilterOptions,
     pagination: PaginationOptions,
   ): Promise<PaginatedResult<FileHistory>> {
-    const queryBuilder = this.fileHisotoryRepository.createQueryBuilder('history');
+    const queryBuilder = this.fileHistoryRepository.createQueryBuilder('history');
 
     if (filter.fileId) {
       queryBuilder.andWhere('history.fileId = :fileId', {
@@ -93,7 +93,7 @@ export class FileHistoryRepository implements IFileHistoryRepository {
   }
 
   async findByFileId(fileId: string, limit: number = 100): Promise<FileHistory[]> {
-    const orms = await this.fileHisotoryRepository.find({
+    const orms = await this.fileHistoryRepository.find({
       where: { fileId },
       order: { version: 'DESC' },
       take: limit,
@@ -105,14 +105,14 @@ export class FileHistoryRepository implements IFileHistoryRepository {
     fileId: string,
     version: number,
   ): Promise<FileHistory | null> {
-    const orm = await this.fileHisotoryRepository.findOne({
+    const orm = await this.fileHistoryRepository.findOne({
       where: { fileId, version },
     });
     return orm ? FileHistoryMapper.toDomain(orm) : null;
   }
 
   async getLatestVersion(fileId: string): Promise<number> {
-    const result = await this.fileHisotoryRepository
+    const result = await this.fileHistoryRepository
       .createQueryBuilder('history')
       .select('MAX(history.version)', 'maxVersion')
       .where('history.fileId = :fileId', { fileId })
@@ -125,7 +125,7 @@ export class FileHistoryRepository implements IFileHistoryRepository {
     changedBy: string,
     limit: number = 100,
   ): Promise<FileHistory[]> {
-    const orms = await this.fileHisotoryRepository.find({
+    const orms = await this.fileHistoryRepository.find({
       where: { changedBy },
       order: { createdAt: 'DESC' },
       take: limit,

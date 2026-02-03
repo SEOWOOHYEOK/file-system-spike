@@ -9,7 +9,6 @@ import { MultipartController } from './controller/file/multipart.controller';
 import { FolderController } from './controller/folder/folder.controller';
 import { AuthController } from './controller/auth/auth.controller';
 import { TrashController } from './controller/trash/trash.controller';
-import { UserController } from './controller/user/user.controller';
 import { PublicShareController } from './controller/share/share.controller';
 import { ExternalUsersController } from './controller/share/share.controller';
 
@@ -19,6 +18,9 @@ import { ExternalShareController } from './controller/external-auth/external-sha
 
 // 동기화 컨트롤러
 import { SyncEventController } from './controller/sync-event/sync-event.controller';
+
+// 내 정보 컨트롤러 (user 폴더에 위치)
+import { UserFavoriteController } from './controller/user/userFavorite.controller';
 
 // 모듈
 import { AdminModule } from './controller/admin/admin.module';
@@ -64,7 +66,6 @@ import { DomainModule } from '../domain/domain.module';
     FolderController,
     TrashController,
     AuthController,
-    UserController,
     // 외부 사용자 컨트롤러
     ExternalAuthController,
     ExternalShareController,
@@ -72,6 +73,8 @@ import { DomainModule } from '../domain/domain.module';
     ExternalUsersController,
     // 동기화 컨트롤러
     SyncEventController,
+    // 내 정보 컨트롤러
+    UserFavoriteController,
   ],
   providers: [
     // 글로벌 인터셉터: 감사 로그 자동 기록

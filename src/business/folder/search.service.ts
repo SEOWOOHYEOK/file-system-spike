@@ -1,8 +1,11 @@
 /**
  * 검색 비즈니스 서비스
  * 파일/폴더 통합 검색 기능 제공
+ * 
+ * DDD 규칙: Business Layer는 Repository를 직접 주입받지 않고
+ * Domain Service를 통해 도메인 로직을 실행합니다.
  */
-import { Injectable, Inject } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
   SearchQuery,
   SearchResponse,
@@ -12,20 +15,16 @@ import {
   SearchFileItem,
   SortBy,
   SortOrder,
-  FOLDER_REPOSITORY,
+  FolderDomainService,
 } from '../../domain/folder';
 import { createPaginationInfo } from '../../common/types/pagination';
-import type { IFolderRepository } from '../../domain/folder';
-import { FILE_REPOSITORY } from '../../domain/file';
-import type { IFileRepository } from '../../domain/file';
+import { FileDomainService } from '../../domain/file/service/file-domain.service';
 
 @Injectable()
 export class SearchService {
   constructor(
-    @Inject(FOLDER_REPOSITORY)
-    private readonly folderRepository: IFolderRepository,
-    @Inject(FILE_REPOSITORY)
-    private readonly fileRepository: IFileRepository,
+    private readonly folderDomainService: FolderDomainService,
+    private readonly fileDomainService: FileDomainService,
   ) {}
 
   /**
@@ -67,7 +66,7 @@ export class SearchService {
     pageSize: number,
     offset: number,
   ): Promise<SearchResponse> {
-    const { items, total } = await this.folderRepository.searchByNamePattern(
+    const { items, total } = await this.folderDomainService.이름검색(
       keyword,
       pageSize,
       offset,
@@ -102,7 +101,7 @@ export class SearchService {
     pageSize: number,
     offset: number,
   ): Promise<SearchResponse> {
-    const { items, total } = await this.fileRepository.searchByNamePattern(
+    const { items, total } = await this.fileDomainService.이름검색(
       keyword,
       pageSize,
       offset,
@@ -111,7 +110,7 @@ export class SearchService {
     // 파일의 경우 부모 폴더 경로 조회가 필요
     let results: SearchResultItem[] = [];
     for (const file of items) {
-      const folder = await this.folderRepository.findById(file.folderId);
+      const folder = await this.folderDomainService.조회(file.folderId);
       results.push({
         id: file.id,
         name: file.name,
@@ -146,8 +145,8 @@ export class SearchService {
   ): Promise<SearchResponse> {
     // 폴더와 파일 동시 검색 (각각 충분한 수량 조회)
     const [folderResult, fileResult] = await Promise.all([
-      this.folderRepository.searchByNamePattern(keyword, pageSize * 2, 0),
-      this.fileRepository.searchByNamePattern(keyword, pageSize * 2, 0),
+      this.folderDomainService.이름검색(keyword, pageSize * 2, 0),
+      this.fileDomainService.이름검색(keyword, pageSize * 2, 0),
     ]);
 
     // 폴더 결과 변환
@@ -163,7 +162,7 @@ export class SearchService {
     // 파일 결과 변환 (부모 폴더 경로 조회)
     const fileItems: SearchFileItem[] = [];
     for (const file of fileResult.items) {
-      const folder = await this.folderRepository.findById(file.folderId);
+      const folder = await this.folderDomainService.조회(file.folderId);
       fileItems.push({
         id: file.id,
         name: file.name,

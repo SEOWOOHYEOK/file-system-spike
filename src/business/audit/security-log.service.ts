@@ -63,7 +63,6 @@ export class SecurityLogService implements OnModuleDestroy {
     userType: UserType;
     ipAddress: string;
     userAgent: string;
-    deviceFingerprint?: string;
   }): Promise<void> {
     const log = SecurityLog.createLoginSuccess(params);
     this.buffer.push(log);
@@ -81,7 +80,6 @@ export class SecurityLogService implements OnModuleDestroy {
     usernameAttempted: string;
     ipAddress: string;
     userAgent: string;
-    deviceFingerprint?: string;
     attemptCount: number;
     reason: string;
   }): Promise<void> {

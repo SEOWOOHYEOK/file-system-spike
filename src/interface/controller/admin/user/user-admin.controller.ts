@@ -7,40 +7,27 @@ import {
   Param,
   Body,
   Query,
+  UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
-import { UserService } from '../../../business/user/user.service';
-import { UserSyncService, SyncResult } from '../../../business/user/user-sync.service';
-import { UserQueryService } from '../../../business/user/user-query.service';
-import { User } from '../../../domain/user/entities/user.entity';
-import { AssignRoleDto } from '../../../domain/user/dto/assign-role.dto';
-import type { UserFilterQueryDto } from './dto/user-filter-query.dto';
-import type { UserWithEmployeeResponseDto } from './dto/user-with-employee-response.dto';
-import { EmployeeStatus } from '../../../integrations/migration/organization/entities/employee.entity';
+import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
+import { UserService } from '../../../../business/user/user.service';
+import { UserSyncService, SyncResult } from '../../../../business/user/user-sync.service';
+import { UserQueryService } from '../../../../business/user/user-query.service';
+import { User } from '../../../../domain/user/entities/user.entity';
+import { AssignRoleDto } from '../../../../domain/user/dto/assign-role.dto';
+import { UserFilterQueryDto } from './dto/user-admin-query.dto';
+import { UserWithEmployeeResponseDto, UserWithRoleResponseDto } from './dto/user-admin-response.dto';
+import { EmployeeStatus } from '../../../../integrations/migration/organization/entities/employee.entity';
 
 /**
- * User 응답 타입
- */
-interface UserWithRoleResponse {
-  id: string;
-  isActive: boolean;
-  role: {
-    id: string;
-    name: string;
-    permissions: string[];
-  } | null;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-/**
- * User API 컨트롤러
+ * User 관리 Admin API 컨트롤러
  *
- * User CRUD 및 Role 부여/제거 API 제공
+ * 관리자 전용: User 목록 조회, Role 부여/제거, Employee 동기화
  */
-@ApiTags('300.사용자')
-@Controller('v1/users')
-export class UserController {
+@ApiTags('100.Admin - User 관리')
+@ApiBearerAuth()
+@Controller('v1/admin/users')
+export class UserAdminController {
   constructor(
     private readonly userService: UserService,
     private readonly userSyncService: UserSyncService,
@@ -49,7 +36,7 @@ export class UserController {
 
   /**
    * 전체 User 목록 조회 (Employee 정보 포함 + 필터링)
-   * GET /users?name=홍길동&employeeNumber=EMP001&status=재직중
+   * GET /admin/users?employeeName=홍길동&employeeNumber=EMP001&status=재직중
    */
   @Get()
   @ApiOperation({ summary: '전체 User 목록 조회 (Employee 정보 포함)' })
@@ -70,13 +57,13 @@ export class UserController {
 
   /**
    * 특정 User 조회 (Role 포함)
-   * GET /users/:id
+   * GET /admin/users/:id
    */
   @Get(':id')
   @ApiOperation({ summary: '특정 User 조회 (Role 포함)' })
   @ApiResponse({ status: 200, description: 'User 정보 반환' })
   @ApiResponse({ status: 404, description: 'User를 찾을 수 없음' })
-  async findById(@Param('id') id: string): Promise<UserWithRoleResponse> {
+  async findById(@Param('id') id: string): Promise<UserWithRoleResponseDto> {
     const { user, role } = await this.userService.findByIdWithRole(id);
 
     return {
@@ -96,7 +83,7 @@ export class UserController {
 
   /**
    * User에게 Role 부여
-   * PATCH /users/:id/role
+   * PATCH /admin/users/:id/role
    */
   @Patch(':id/role')
   @ApiOperation({ summary: 'User에게 Role 부여' })
@@ -112,7 +99,7 @@ export class UserController {
 
   /**
    * User의 Role 제거
-   * DELETE /users/:id/role
+   * DELETE /admin/users/:id/role
    */
   @Delete(':id/role')
   @ApiOperation({ summary: 'User의 Role 제거' })
@@ -124,9 +111,9 @@ export class UserController {
 
   /**
    * Employee → User 동기화
-   * POST /users/sync
+   * POST /admin/users/sync
    *
-   * Admin 권한 필요 (Guard에서 검사)
+   * Admin 권한 필요
    */
   @Post('sync')
   @ApiOperation({ summary: 'Employee → User 동기화 실행' })

@@ -101,6 +101,21 @@ export class FolderDomainService {
     return this.folderRepository.getStatistics(folderId);
   }
 
+  /**
+   * 이름 패턴으로 폴더 검색 (ACTIVE 상태만)
+   * @param namePattern 검색할 이름 패턴 (LIKE 검색)
+   * @param limit 최대 결과 수
+   * @param offset 오프셋
+   * @returns 검색된 폴더 목록과 총 개수
+   */
+  async 이름검색(
+    namePattern: string,
+    limit: number,
+    offset: number,
+  ): Promise<{ items: FolderEntity[]; total: number }> {
+    return this.folderRepository.searchByNamePattern(namePattern, limit, offset);
+  }
+
   // ============================================
   // 명령 메서드 (Command Methods)
   // ============================================

@@ -22,6 +22,8 @@ export enum TargetType {
   FOLDER = 'folder',
   SHARE = 'share',
   USER = 'user',
+  FAVORITE = 'favorite',
+  ACTIVITY = 'activity',
 }
 
 /**
@@ -32,6 +34,8 @@ export const TargetTypeDescription: Record<TargetType, string> = {
   [TargetType.FOLDER]: '폴더',
   [TargetType.SHARE]: '공유',
   [TargetType.USER]: '사용자',
+  [TargetType.FAVORITE]: '즐겨찾기',
+  [TargetType.ACTIVITY]: '활동',
 };
 
 /**

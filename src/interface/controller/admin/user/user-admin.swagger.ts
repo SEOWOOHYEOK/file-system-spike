@@ -2,7 +2,7 @@ import { applyDecorators } from '@nestjs/common';
 import { ApiOperation, ApiResponse, ApiParam, ApiBody } from '@nestjs/swagger';
 
 /**
- * User API Swagger 데코레이터
+ * User Admin API Swagger 데코레이터
  */
 
 export const FindAllUsersSwagger = () =>

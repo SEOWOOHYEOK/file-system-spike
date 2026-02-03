@@ -71,6 +71,11 @@ import {
 import {
   USER_REPOSITORY,
 } from '../../domain/user/repositories/user.repository.interface';
+import {
+  FAVORITE_REPOSITORY,
+} from '../../domain/favorite/repositories/favorite.repository.interface';
+import { FavoriteOrmEntity } from './entities/favorite.orm-entity';
+import { FavoriteRepository } from './repositories/favorite.repository';
 
 /**
  * TypeORM forFeature에 등록할 엔티티 목록
@@ -89,6 +94,7 @@ const entities = [
   SecurityLogOrmEntity,
   FileHistoryOrmEntity,
   UserOrmEntity,
+  FavoriteOrmEntity,
 ];
 
 @Module({
@@ -162,6 +168,11 @@ const entities = [
       provide: USER_REPOSITORY,
       useClass: UserRepository,
     },
+    // Favorite Repository
+    {
+      provide: FAVORITE_REPOSITORY,
+      useClass: FavoriteRepository,
+    },
   ],
   exports: [
     FILE_REPOSITORY,
@@ -177,6 +188,7 @@ const entities = [
     SECURITY_LOG_REPOSITORY,
     FILE_HISTORY_REPOSITORY,
     USER_REPOSITORY,
+    FAVORITE_REPOSITORY,
   ],
 })
-export class RepositoryModule {}
+export class RepositoryModule { }

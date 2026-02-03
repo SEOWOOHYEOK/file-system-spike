@@ -334,7 +334,6 @@ export class AuditLogHelper {
       targetName: 'Trash',
       ipAddress: ctx?.ipAddress || 'unknown',
       userAgent: ctx?.userAgent || 'unknown',
-      deviceFingerprint: ctx?.deviceFingerprint,
       result: LogResult.SUCCESS,
       metadata: { deletedCount: params.deletedCount },
     });
@@ -359,7 +358,6 @@ export class AuditLogHelper {
       targetName: 'Trash',
       ipAddress: ctx?.ipAddress || 'unknown',
       userAgent: ctx?.userAgent || 'unknown',
-      deviceFingerprint: ctx?.deviceFingerprint,
       result: LogResult.SUCCESS,
     });
   }
@@ -396,7 +394,6 @@ export class AuditLogHelper {
       targetName: params.targetName,
       ipAddress: ctx?.ipAddress || 'unknown',
       userAgent: ctx?.userAgent || 'unknown',
-      deviceFingerprint: ctx?.deviceFingerprint,
       failReason: params.failReason,
       resultCode: params.resultCode,
     });
@@ -427,7 +424,6 @@ export class AuditLogHelper {
       ownerId: params.ownerId,
       ipAddress: ctx?.ipAddress || 'unknown',
       userAgent: ctx?.userAgent || 'unknown',
-      deviceFingerprint: ctx?.deviceFingerprint,
       result: LogResult.SUCCESS,
       metadata,
     });
@@ -455,7 +451,6 @@ export class AuditLogHelper {
       ownerId: params.ownerId,
       ipAddress: ctx?.ipAddress || 'unknown',
       userAgent: ctx?.userAgent || 'unknown',
-      deviceFingerprint: ctx?.deviceFingerprint,
       result: LogResult.SUCCESS,
       metadata,
     });
@@ -481,7 +476,6 @@ export class AuditLogHelper {
       targetName: params.shareName,
       ipAddress: ctx?.ipAddress || 'unknown',
       userAgent: ctx?.userAgent || 'unknown',
-      deviceFingerprint: ctx?.deviceFingerprint,
       result: LogResult.SUCCESS,
       metadata,
     });

@@ -39,6 +39,8 @@ import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.por
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 import {
   NAS_FILE_SYNC_QUEUE_PREFIX,
+  NAS_SYNC_MAX_ATTEMPTS,
+  NAS_SYNC_BACKOFF_MS,
   type NasFileSyncJobData,
 } from '../worker/nas-file-sync.worker';
 
@@ -342,6 +344,10 @@ export class MultipartUploadService {
         fileId,
         action: 'upload',
         syncEventId,
+      },
+      {
+        attempts: NAS_SYNC_MAX_ATTEMPTS,
+        backoff: NAS_SYNC_BACKOFF_MS,
       },
     );
 

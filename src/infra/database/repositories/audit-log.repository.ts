@@ -80,11 +80,6 @@ export class AuditLogRepository implements IAuditLogRepository {
         ipAddress: filter.ipAddress,
       });
     }
-    if (filter.deviceFingerprint) {
-      queryBuilder.andWhere('log.deviceFingerprint = :deviceFingerprint', {
-        deviceFingerprint: filter.deviceFingerprint,
-      });
-    }
     if (filter.sessionId) {
       queryBuilder.andWhere('log.sessionId = :sessionId', {
         sessionId: filter.sessionId,

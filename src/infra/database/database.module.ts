@@ -30,6 +30,9 @@ import { AuditLogOrmEntity } from './entities/audit-log.orm-entity';
 import { SecurityLogOrmEntity } from './entities/security-log.orm-entity';
 import { FileHistoryOrmEntity } from './entities/file-history.orm-entity';
 
+// Favorite Entity
+import { FavoriteOrmEntity } from './entities/favorite.orm-entity';
+
 // Organization Entities (조직 관련 엔티티)
 import {
   Rank,
@@ -58,6 +61,8 @@ const entities = [
   AuditLogOrmEntity,
   SecurityLogOrmEntity,
   FileHistoryOrmEntity,
+  // Favorite 엔티티
+  FavoriteOrmEntity,
   // Organization 관련 엔티티
   Rank,
   Position,

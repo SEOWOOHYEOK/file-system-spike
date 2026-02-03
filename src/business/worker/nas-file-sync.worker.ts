@@ -104,6 +104,14 @@ export const NAS_FILE_SYNC_QUEUE_PREFIX = 'NAS_FILE_SYNC';
  */
 export const NAS_FILE_SYNC_CONCURRENCY = 5;
 
+/**
+ * NAS 동기화 재시도 설정
+ * - 최대 재시도 횟수: 3회
+ * - 재시도 간격: 3초 (고정)
+ */
+export const NAS_SYNC_MAX_ATTEMPTS = 3;
+export const NAS_SYNC_BACKOFF_MS = 3000;
+
 export function getNasFileSyncQueueName(fileId: string): string {
   return `${NAS_FILE_SYNC_QUEUE_PREFIX}:${fileId}`;
 }
@@ -160,15 +168,35 @@ export class NasSyncWorker implements OnModuleInit {
   }
 
   /**
-   * SyncEvent 실패 처리 (retry 또는 FAILED)
+   * SyncEvent 최종 실패 처리 (FAILED 상태로 마킹 + 알림 로그)
+   * - 큐에서 최대 재시도 횟수를 모두 소진한 후 호출됨
    */
   private async handleSyncEventFailure(
     syncEvent: SyncEventEntity | null,
     error: Error,
+    jobData: NasFileSyncJobData,
   ): Promise<void> {
     if (!syncEvent) return;
-    syncEvent.retry(error.message);
+    syncEvent.fail(error.message);
     await this.syncEventRepository.save(syncEvent);
+    this.logSyncFailureAlert(syncEvent, error, jobData);
+  }
+
+  /**
+   * 동기화 최종 실패 알림 로그
+   * - 3회 재시도 후 최종 실패 시 관리자 알림용 로그 출력
+   */
+  private logSyncFailureAlert(
+    syncEvent: SyncEventEntity,
+    error: Error,
+    jobData: NasFileSyncJobData,
+  ): void {
+    this.logger.error(
+      `[SYNC_FAILURE_ALERT] ` +
+      `action=${jobData.action} | fileId=${jobData.fileId} | ` +
+      `syncEventId=${syncEvent.id} | error=${error.message}`,
+    );
+    // TODO: 추후 알림 시스템 연동 시 확장 가능 (Slack, Email 등)
   }
 
   async onModuleInit() {
@@ -224,22 +252,22 @@ export class NasSyncWorker implements OnModuleInit {
 
         switch (action) {
           case 'upload':
-            await this.handleUpload(job.data);
+            await this.handleUpload(job);
             break;
           case 'rename':
-            await this.handleRename(job.data);
+            await this.handleRename(job);
             break;
           case 'move':
-            await this.handleMove(job.data);
+            await this.handleMove(job);
             break;
           case 'trash':
-            await this.handleTrash(job.data);
+            await this.handleTrash(job);
             break;
           case 'restore':
-            await this.handleRestore(job.data);
+            await this.handleRestore(job);
             break;
           case 'purge':
-            await this.handlePurge(job.data);
+            await this.handlePurge(job);
             break;
           default:
             this.logger.warn(`Unknown action: ${action}`);
@@ -263,8 +291,8 @@ export class NasSyncWorker implements OnModuleInit {
   /**
    * Upload 액션 처리
    */
-  private async handleUpload(data: NasFileSyncJobData): Promise<void> {
-    const { fileId, syncEventId } = data;
+  private async handleUpload(job: Job<NasFileSyncJobData>): Promise<void> {
+    const { fileId, syncEventId } = job.data;
     this.logger.debug(`Handling upload for file: ${fileId}`);
 
     const syncEvent = await this.getSyncEvent(syncEventId);
@@ -308,7 +336,10 @@ export class NasSyncWorker implements OnModuleInit {
       this.logger.log(`Successfully synced file to NAS: ${fileId} -> ${objectKey}`);
     } catch (error) {
       this.logger.error(`Failed to sync file to NAS: ${fileId}`, error);
-      await this.handleSyncEventFailure(syncEvent, error as Error);
+      // 최종 시도일 때만 실패 처리 (이전 시도는 큐에서 자동 재시도)
+      if (job.attemptsMade && job.attemptsMade >= NAS_SYNC_MAX_ATTEMPTS) {
+        await this.handleSyncEventFailure(syncEvent, error as Error, job.data);
+      }
       throw error;
     }
   }
@@ -316,8 +347,8 @@ export class NasSyncWorker implements OnModuleInit {
   /**
    * Rename 액션 처리
    */
-  private async handleRename(data: NasFileSyncJobData): Promise<void> {
-    const { fileId, oldObjectKey, newObjectKey, syncEventId } = data;
+  private async handleRename(job: Job<NasFileSyncJobData>): Promise<void> {
+    const { fileId, oldObjectKey, newObjectKey, syncEventId } = job.data;
     this.logger.debug(`Handling rename for file: ${fileId}, ${oldObjectKey} -> ${newObjectKey}`);
 
     if (!oldObjectKey || !newObjectKey) {
@@ -358,7 +389,10 @@ export class NasSyncWorker implements OnModuleInit {
       this.logger.log(`Successfully renamed file in NAS: ${fileId}, ${oldObjectKey} -> ${newObjectKey}`);
     } catch (error) {
       this.logger.error(`Failed to rename file in NAS: ${fileId}`, error);
-      await this.handleSyncEventFailure(syncEvent, error as Error);
+      // 최종 시도일 때만 실패 처리 (이전 시도는 큐에서 자동 재시도)
+      if (job.attemptsMade && job.attemptsMade >= NAS_SYNC_MAX_ATTEMPTS) {
+        await this.handleSyncEventFailure(syncEvent, error as Error, job.data);
+      }
       throw error;
     }
   }
@@ -366,8 +400,8 @@ export class NasSyncWorker implements OnModuleInit {
   /**
    * Move 액션 처리
    */
-  private async handleMove(data: NasFileSyncJobData): Promise<void> {
-    const { fileId, sourcePath, targetPath, originalFolderId, targetFolderId, syncEventId } = data;
+  private async handleMove(job: Job<NasFileSyncJobData>): Promise<void> {
+    const { fileId, sourcePath, targetPath, originalFolderId, targetFolderId, syncEventId } = job.data;
     this.logger.debug(`Handling move for file: ${fileId}, ${sourcePath} -> ${targetPath}`);
 
     if (!sourcePath || !targetPath || !originalFolderId || !targetFolderId) {
@@ -426,7 +460,10 @@ export class NasSyncWorker implements OnModuleInit {
       this.logger.log(`Successfully moved file in NAS: ${fileId}, ${sourcePath} -> ${targetPath}`);
     } catch (error) {
       this.logger.error(`Failed to move file in NAS: ${fileId}`, error);
-      await this.handleSyncEventFailure(syncEvent, error as Error);
+      // 최종 시도일 때만 실패 처리 (이전 시도는 큐에서 자동 재시도)
+      if (job.attemptsMade && job.attemptsMade >= NAS_SYNC_MAX_ATTEMPTS) {
+        await this.handleSyncEventFailure(syncEvent, error as Error, job.data);
+      }
       throw error;
     }
   }
@@ -434,8 +471,8 @@ export class NasSyncWorker implements OnModuleInit {
   /**
    * Trash 액션 처리
    */
-  private async handleTrash(data: NasFileSyncJobData): Promise<void> {
-    const { fileId, currentObjectKey, trashPath, syncEventId } = data;
+  private async handleTrash(job: Job<NasFileSyncJobData>): Promise<void> {
+    const { fileId, currentObjectKey, trashPath, syncEventId } = job.data;
     this.logger.debug(`Handling trash for file: ${fileId}, ${currentObjectKey} -> ${trashPath}`);
 
     if (!currentObjectKey || !trashPath) {
@@ -480,7 +517,10 @@ export class NasSyncWorker implements OnModuleInit {
       this.logger.log(`Successfully moved file to trash in NAS: ${fileId}, ${currentObjectKey} -> ${trashPath}`);
     } catch (error) {
       this.logger.error(`Failed to move file to trash in NAS: ${fileId}`, error);
-      await this.handleSyncEventFailure(syncEvent, error as Error);
+      // 최종 시도일 때만 실패 처리 (이전 시도는 큐에서 자동 재시도)
+      if (job.attemptsMade && job.attemptsMade >= NAS_SYNC_MAX_ATTEMPTS) {
+        await this.handleSyncEventFailure(syncEvent, error as Error, job.data);
+      }
       throw error;
     }
   }
@@ -495,8 +535,8 @@ export class NasSyncWorker implements OnModuleInit {
    * 5. 파일 상태 복원 (TRASHED -> ACTIVE)
    * 6. 휴지통 메타데이터 삭제
    */
-  private async handleRestore(data: NasFileSyncJobData): Promise<void> {
-    const { fileId, syncEventId, trashMetadataId, restoreTargetFolderId } = data;
+  private async handleRestore(job: Job<NasFileSyncJobData>): Promise<void> {
+    const { fileId, syncEventId, trashMetadataId, restoreTargetFolderId } = job.data;
     this.logger.debug(`Handling restore for file: ${fileId}`);
 
     if (!trashMetadataId || !restoreTargetFolderId) {
@@ -578,7 +618,10 @@ export class NasSyncWorker implements OnModuleInit {
       this.logger.log(`Successfully restored file: fileId=${fileId}, targetFolder=${restoreTargetFolderId}`);
     } catch (error) {
       this.logger.error(`Failed to restore file: ${fileId}`, error);
-      await this.handleSyncEventFailure(syncEvent, error as Error);
+      // 최종 시도일 때만 실패 처리 (이전 시도는 큐에서 자동 재시도)
+      if (job.attemptsMade && job.attemptsMade >= NAS_SYNC_MAX_ATTEMPTS) {
+        await this.handleSyncEventFailure(syncEvent, error as Error, job.data);
+      }
       throw error;
     }
   }
@@ -591,8 +634,8 @@ export class NasSyncWorker implements OnModuleInit {
    * 3. NAS에서 파일 삭제
    * 4. 스토리지 객체 레코드 삭제
    */
-  private async handlePurge(data: NasFileSyncJobData): Promise<void> {
-    const { fileId, syncEventId, trashMetadataId } = data;
+  private async handlePurge(job: Job<NasFileSyncJobData>): Promise<void> {
+    const { fileId, syncEventId, trashMetadataId } = job.data;
     this.logger.debug(`Handling purge for file: ${fileId}`);
 
     const syncEvent = await this.getSyncEvent(syncEventId);
@@ -659,7 +702,10 @@ export class NasSyncWorker implements OnModuleInit {
       this.logger.log(`Successfully purged file: fileId=${fileId}`);
     } catch (error) {
       this.logger.error(`Failed to purge file: ${fileId}`, error);
-      await this.handleSyncEventFailure(syncEvent, error as Error);
+      // 최종 시도일 때만 실패 처리 (이전 시도는 큐에서 자동 재시도)
+      if (job.attemptsMade && job.attemptsMade >= NAS_SYNC_MAX_ATTEMPTS) {
+        await this.handleSyncEventFailure(syncEvent, error as Error, job.data);
+      }
       throw error;
     }
   }

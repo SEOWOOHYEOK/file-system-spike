@@ -12,7 +12,7 @@ import { Request } from 'express';
 import { ExternalUserDomainService } from '../../domain/external-share';
 import { TokenBlacklistService } from '../../business/external-share/security/token-blacklist.service';
 import { RequestContext } from '../context/request-context';
-
+import { UserType } from '../../domain/audit/enums/common.enum';
 /**
  * 외부 사용자 전용 JWT 인증 가드
  *
@@ -100,7 +100,7 @@ export class ExternalJwtAuthGuard implements CanActivate {
       // RequestContext에 외부 사용자 정보 설정
       RequestContext.setUser({
         userId: user.id,
-        userType: 'EXTERNAL',
+        userType: UserType.EXTERNAL,
         userName: user.name,
         userEmail: user.email,
       });

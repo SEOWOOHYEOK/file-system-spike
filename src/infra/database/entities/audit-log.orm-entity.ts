@@ -33,7 +33,6 @@ import {
 @Index('idx_audit_user_action_time', ['userId', 'action', 'createdAt'])
 @Index('idx_audit_session', ['sessionId', 'createdAt'])
 @Index('idx_audit_ip_time', ['ipAddress', 'createdAt'])
-@Index('idx_audit_device_user', ['userId', 'deviceFingerprint', 'createdAt'])
 @Index('idx_audit_sensitivity_action', ['sensitivity', 'action', 'createdAt'])
 @Index('idx_audit_result_fail', ['result', 'failReason', 'createdAt'])
 export class AuditLogOrmEntity {
@@ -119,8 +118,6 @@ export class AuditLogOrmEntity {
     length: 64,
     nullable: true,
   })
-  @Index()
-  deviceFingerprint: string | null;
 
   @Column({ name: 'client_type', type: 'varchar', length: 20, nullable: true })
   @Index()

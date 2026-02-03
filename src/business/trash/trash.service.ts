@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { createPaginationInfo } from '../../common/types/pagination';
 import {
@@ -13,66 +13,39 @@ import {
   EmptyTrashResponse,
   PurgeResponse,
   RestorePathStatus,
-  TRASH_REPOSITORY,
-  TRASH_QUERY_SERVICE,
+  TrashDomainService,
 } from '../../domain/trash';
-import type { ITrashRepository, ITrashQueryService } from '../../domain/trash';
-import {
-  FILE_REPOSITORY,
-} from '../../domain/file';
 import { FileState } from '../../domain/file/type/file.type';
-import type { IFileRepository } from '../../domain/file';
 import {
   FolderState,
-  FOLDER_REPOSITORY,
+  FolderDomainService,
 } from '../../domain/folder';
-import type { IFolderRepository } from '../../domain/folder';
-import {
-  FILE_STORAGE_OBJECT_REPOSITORY,
-} from '../../domain/storage';
-
-import {
-  FOLDER_STORAGE_OBJECT_REPOSITORY,
-} from '../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
-
-import {
-  type IFolderStorageObjectRepository,
-} from '../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
-
-import type { IFileStorageObjectRepository } from '../../domain/storage';
+import { FileDomainService } from '../../domain/file/service/file-domain.service';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
-import { NAS_FILE_SYNC_QUEUE_PREFIX, NasFileSyncJobData } from '../worker/nas-file-sync.worker';
-import { NAS_FOLDER_SYNC_QUEUE_PREFIX, NasFolderSyncJobData } from '../worker/nas-folder-sync.worker';
+import { NAS_FILE_SYNC_QUEUE_PREFIX, NAS_SYNC_MAX_ATTEMPTS, NAS_SYNC_BACKOFF_MS, NasFileSyncJobData } from '../worker/nas-file-sync.worker';
+import { NAS_FOLDER_SYNC_QUEUE_PREFIX, NAS_FOLDER_SYNC_MAX_ATTEMPTS, NAS_FOLDER_SYNC_BACKOFF_MS, NasFolderSyncJobData } from '../worker/nas-folder-sync.worker';
 import {
-  SYNC_EVENT_REPOSITORY,
   SyncEventStatus,
+  SyncEventDomainService,
 } from '../../domain/sync-event';
-import type { ISyncEventRepository } from '../../domain/sync-event';
 
 /**
  * 휴지통 비즈니스 서비스
  * 휴지통 목록 조회, 복원, 영구삭제, 휴지통 비우기
+ * 
+ * DDD 규칙: Business Layer는 Repository를 직접 주입받지 않고
+ * Domain Service를 통해 도메인 로직을 실행합니다.
  */
 @Injectable()
 export class TrashService {
   constructor(
-    @Inject(TRASH_REPOSITORY)
-    private readonly trashRepository: ITrashRepository,
-    @Inject(TRASH_QUERY_SERVICE)
-    private readonly trashQueryService: ITrashQueryService,
-    @Inject(FILE_REPOSITORY)
-    private readonly fileRepository: IFileRepository,
-    @Inject(FILE_STORAGE_OBJECT_REPOSITORY)
-    private readonly fileStorageObjectRepository: IFileStorageObjectRepository,
-    @Inject(FOLDER_REPOSITORY)
-    private readonly folderRepository: IFolderRepository,
-    @Inject(FOLDER_STORAGE_OBJECT_REPOSITORY)
-    private readonly folderStorageObjectRepository: IFolderStorageObjectRepository,
+    private readonly trashDomainService: TrashDomainService,
+    private readonly fileDomainService: FileDomainService,
+    private readonly folderDomainService: FolderDomainService,
+    private readonly syncEventDomainService: SyncEventDomainService,
     @Inject(JOB_QUEUE_PORT)
     private readonly jobQueuePort: IJobQueuePort,
-    @Inject(SYNC_EVENT_REPOSITORY)
-    private readonly syncEventRepository: ISyncEventRepository,
   ) { }
 
   /**
@@ -82,7 +55,7 @@ export class TrashService {
     const page = query.page || 1;
     const limit = query.limit || 20;
 
-    const result = await this.trashQueryService.getTrashList({
+    const result = await this.trashDomainService.상세목록조회({
       sortBy: query.sortBy,
       order: query.order,
       page,
@@ -95,7 +68,7 @@ export class TrashService {
       // 경로 상태 확인 (Preview 로직과 유사하지만 간소화)
       // originalPath는 파일 전체 경로이므로 부모 폴더 경로 추출
       const parentFolderPath = this.extractParentFolderPath(item.originalPath);
-      const targetFolder = await this.folderRepository.findOne({
+      const targetFolder = await this.folderDomainService.조건조회({
         path: parentFolderPath,
         state: FolderState.ACTIVE,
       });
@@ -160,14 +133,14 @@ export class TrashService {
     const trashMetadataIds = request.trashMetadataIds || [];
 
     for (const id of trashMetadataIds) {
-      const trashMetadata = await this.trashRepository.findById(id);
+      const trashMetadata = await this.trashDomainService.조회(id);
       if (!trashMetadata) {
         continue;
       }
 
       // 파일 복구 미리보기
       if (trashMetadata.isFile()) {
-        const file = await this.fileRepository.findById(trashMetadata.fileId!);
+        const file = await this.fileDomainService.조회(trashMetadata.fileId!);
         if (!file) {
           continue;
         }
@@ -178,7 +151,7 @@ export class TrashService {
         const originalPath = trashMetadata.originalPath;
         const parentFolderPath = this.extractParentFolderPath(originalPath);
 
-        const targetFolder = await this.folderRepository.findOne({
+        const targetFolder = await this.folderDomainService.조건조회({
           path: parentFolderPath,
           state: FolderState.ACTIVE,
         });
@@ -193,18 +166,17 @@ export class TrashService {
           resolveFolderId = targetFolder.id;
 
           // 2. 충돌 확인 (파일명 + MIME타입 + 생성시간)
-          hasConflict = await this.fileRepository.existsByNameInFolder(
+          hasConflict = await this.fileDomainService.중복확인(
             targetFolder.id,
             file.name,
             file.mimeType,
             undefined, // excludeFileId
-            undefined, // options
             file.createdAt, // createdAt 체크
           );
 
           if (hasConflict) {
             // 충돌 파일 ID 조회 (optional)
-            const conflictFile = await this.fileRepository.findOne({
+            const conflictFile = await this.fileDomainService.조건조회({
               folderId: targetFolder.id,
               name: file.name,
               mimeType: file.mimeType,
@@ -243,7 +215,7 @@ export class TrashService {
       }
       // 폴더 복구 미리보기
       else if (trashMetadata.isFolder()) {
-        const folder = await this.folderRepository.findById(trashMetadata.folderId!);
+        const folder = await this.folderDomainService.조회(trashMetadata.folderId!);
         if (!folder || !folder.isTrashed()) {
           continue;
         }
@@ -257,13 +229,13 @@ export class TrashService {
 
         // 1. 부모 폴더 존재 여부 확인
         if (originalParentId) {
-          const parentFolder = await this.folderRepository.findById(originalParentId);
+          const parentFolder = await this.folderDomainService.조회(originalParentId);
           if (parentFolder && parentFolder.isActive()) {
             pathStatus = RestorePathStatus.AVAILABLE;
             resolveFolderId = parentFolder.id;
 
             // 2. 동일 폴더명 중복 확인
-            const existingFolder = await this.folderRepository.findOne({
+            const existingFolder = await this.folderDomainService.조건조회({
               parentId: originalParentId,
               name: folder.name,
               state: FolderState.ACTIVE,
@@ -274,7 +246,7 @@ export class TrashService {
           }
         } else {
           // 루트 폴더에 복구하는 경우
-          const rootFolder = await this.folderRepository.findOne({
+          const rootFolder = await this.folderDomainService.조건조회({
             parentId: null,
             state: FolderState.ACTIVE,
           });
@@ -283,7 +255,7 @@ export class TrashService {
             resolveFolderId = rootFolder.id;
 
             // 동일 폴더명 중복 확인 (루트 레벨)
-            const existingFolder = await this.folderRepository.findOne({
+            const existingFolder = await this.folderDomainService.조건조회({
               parentId: rootFolder.id,
               name: folder.name,
               state: FolderState.ACTIVE,
@@ -346,7 +318,7 @@ export class TrashService {
       }
 
       // 2. 휴지통 메타데이터 조회
-      const trashMetadata = await this.trashRepository.findById(item.trashMetadataId);
+      const trashMetadata = await this.trashDomainService.조회(item.trashMetadataId);
       if (!trashMetadata) {
         continue;
       }
@@ -354,7 +326,7 @@ export class TrashService {
       // 파일 복구
       if (trashMetadata.isFile()) {
         // 3. 파일 조회
-        const file = await this.fileRepository.findById(trashMetadata.fileId!);
+        const file = await this.fileDomainService.조회(trashMetadata.fileId!);
         if (!file || !file.isTrashed()) {
           continue;
         }
@@ -364,14 +336,14 @@ export class TrashService {
 
         if (item.targetFolderId) {
           // 사용자가 지정한 폴더
-          const targetFolder = await this.folderRepository.findById(item.targetFolderId);
+          const targetFolder = await this.folderDomainService.조회(item.targetFolderId);
           if (targetFolder) {
             targetFolderId = targetFolder.id;
           }
         } else {
           // 경로명으로 자동 찾기 (부모 폴더 경로 추출)
           const parentFolderPath = this.extractParentFolderPath(trashMetadata.originalPath);
-          const resolvedFolder = await this.folderRepository.findOne({
+          const resolvedFolder = await this.folderDomainService.조건조회({
             path: parentFolderPath,
             state: FolderState.ACTIVE,
           });
@@ -393,11 +365,10 @@ export class TrashService {
         }
 
         // 6. 충돌 확인
-        const hasConflict = await this.fileRepository.existsByNameInFolder(
+        const hasConflict = await this.fileDomainService.중복확인(
           targetFolderId,
           file.name,
           file.mimeType,
-          undefined,
           undefined,
           file.createdAt,
         );
@@ -422,7 +393,10 @@ export class TrashService {
           restoreTargetFolderId: targetFolderId,
           userId,
         };
-        await this.jobQueuePort.addJob(NAS_FILE_SYNC_QUEUE_PREFIX, jobData);
+        await this.jobQueuePort.addJob(NAS_FILE_SYNC_QUEUE_PREFIX, jobData, {
+          attempts: NAS_SYNC_MAX_ATTEMPTS,
+          backoff: NAS_SYNC_BACKOFF_MS,
+        });
 
         syncEventIds.push(syncEventId);
         queued++;
@@ -431,7 +405,7 @@ export class TrashService {
       // 폴더 복구
        if (trashMetadata.isFolder()) {
         // 3. 폴더 조회
-        const folder = await this.folderRepository.findById(trashMetadata.folderId!);
+        const folder = await this.folderDomainService.조회(trashMetadata.folderId!);
         if (!folder || !folder.isTrashed()) {
           continue;
         }
@@ -443,13 +417,13 @@ export class TrashService {
         let targetParentId: string | null = null;
 
         if (originalParentId) {
-          const parentFolder = await this.folderRepository.findById(originalParentId);
+          const parentFolder = await this.folderDomainService.조회(originalParentId);
           if (parentFolder && parentFolder.isActive()) {
             targetParentId = parentFolder.id;
           }
         } else {
           // 루트 폴더에 복구하는 경우
-          const rootFolder = await this.folderRepository.findOne({
+          const rootFolder = await this.folderDomainService.조건조회({
             parentId: null,
             state: FolderState.ACTIVE,
           });
@@ -471,7 +445,7 @@ export class TrashService {
         }
 
         // 6. 동일 폴더명 중복 확인
-        const existingFolder = await this.folderRepository.findOne({
+        const existingFolder = await this.folderDomainService.조건조회({
           parentId: targetParentId,
           name: folder.name,
           state: FolderState.ACTIVE,
@@ -502,7 +476,10 @@ export class TrashService {
           trashMetadataId: item.trashMetadataId,
           originalParentId: targetParentId,
         };
-        await this.jobQueuePort.addJob(NAS_FOLDER_SYNC_QUEUE_PREFIX, jobData);
+        await this.jobQueuePort.addJob(NAS_FOLDER_SYNC_QUEUE_PREFIX, jobData, {
+          attempts: NAS_FOLDER_SYNC_MAX_ATTEMPTS,
+          backoff: NAS_FOLDER_SYNC_BACKOFF_MS,
+        });
 
         syncEventIds.push(syncEventId);
         queued++;
@@ -531,7 +508,7 @@ export class TrashService {
       };
     }
 
-    const syncEvents = await this.syncEventRepository.findByIds(syncEventIds);
+    const syncEvents = await this.syncEventDomainService.아이디목록조회(syncEventIds);
 
     const summary = {
       total: syncEvents.length,
@@ -587,7 +564,7 @@ export class TrashService {
    */
   async purge(trashMetadataId: string, userId: string): Promise<PurgeResponse> {
     // 1. 휴지통 메타데이터 조회
-    const trashMetadata = await this.trashRepository.findById(trashMetadataId);
+    const trashMetadata = await this.trashDomainService.조회(trashMetadataId);
     if (!trashMetadata) {
       throw new NotFoundException({
         code: 'TRASH_ITEM_NOT_FOUND',
@@ -597,7 +574,7 @@ export class TrashService {
 
     // 파일 영구삭제
     if (trashMetadata.isFile()) {
-      const file = await this.fileRepository.findById(trashMetadata.fileId!);
+      const file = await this.fileDomainService.조회(trashMetadata.fileId!);
       if (!file || !file.isTrashed()) {
         throw new BadRequestException({
           code: 'FILE_NOT_IN_TRASH',
@@ -615,7 +592,10 @@ export class TrashService {
         trashMetadataId,
         userId,
       };
-      await this.jobQueuePort.addJob(NAS_FILE_SYNC_QUEUE_PREFIX, jobData);
+      await this.jobQueuePort.addJob(NAS_FILE_SYNC_QUEUE_PREFIX, jobData, {
+        attempts: NAS_SYNC_MAX_ATTEMPTS,
+        backoff: NAS_SYNC_BACKOFF_MS,
+      });
 
       return {
         id: file.id,
@@ -626,7 +606,7 @@ export class TrashService {
     }
     // 폴더 영구삭제
     else if (trashMetadata.isFolder()) {
-      const folder = await this.folderRepository.findById(trashMetadata.folderId!);
+      const folder = await this.folderDomainService.조회(trashMetadata.folderId!);
       if (!folder || !folder.isTrashed()) {
         throw new BadRequestException({
           code: 'FOLDER_NOT_IN_TRASH',
@@ -647,7 +627,10 @@ export class TrashService {
         trashPath,
         trashMetadataId,
       };
-      await this.jobQueuePort.addJob(NAS_FOLDER_SYNC_QUEUE_PREFIX, jobData);
+      await this.jobQueuePort.addJob(NAS_FOLDER_SYNC_QUEUE_PREFIX, jobData, {
+        attempts: NAS_FOLDER_SYNC_MAX_ATTEMPTS,
+        backoff: NAS_FOLDER_SYNC_BACKOFF_MS,
+      });
 
       return {
         id: folder.id,
@@ -675,7 +658,7 @@ export class TrashService {
    * 휴지통 비우기 (파일/폴더 모두)
    */
   async emptyTrash(userId: string): Promise<EmptyTrashResponse> {
-    const trashItems = await this.trashRepository.findAll();
+    const trashItems = await this.trashDomainService.전체목록조회();
 
     let success = 0;
     let failed = 0;

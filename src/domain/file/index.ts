@@ -6,6 +6,9 @@
 export * from './entities/file.entity';
 export * from '../storage/file/entity/file-storage-object.entity';
 
+// 타입
+export * from './type/file.type';
+
 // DTO
 export * from './dto';
 

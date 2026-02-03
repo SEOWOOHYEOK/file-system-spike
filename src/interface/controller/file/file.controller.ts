@@ -116,11 +116,11 @@ export class FileController {
    */
   @Get(':fileId')
   @ApiFileInfo()
-  @AuditAction({
-    action: AuditActionEnum.FILE_VIEW,
-    targetType: TargetType.FILE,
-    targetIdParam: 'fileId',
-  })
+  // @AuditAction({
+  //   action: AuditActionEnum.FILE_VIEW,
+  //   targetType: TargetType.FILE,
+  //   targetIdParam: 'fileId',
+  // })
   async getFileInfo(@Param('fileId') fileId: string): Promise<FileInfoResponse> {
     return this.fileDownloadService.getFileInfo(fileId);
   }

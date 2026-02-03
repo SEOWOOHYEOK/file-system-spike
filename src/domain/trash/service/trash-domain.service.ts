@@ -11,8 +11,8 @@ import {
   TrashMetadataFactory,
   TrashItemType,
 } from '../entities/trash-metadata.entity';
-import { TRASH_REPOSITORY } from '../repositories/trash.repository.interface';
-import type { ITrashRepository } from '../repositories/trash.repository.interface';
+import { TRASH_REPOSITORY, TRASH_QUERY_SERVICE } from '../repositories/trash.repository.interface';
+import type { ITrashRepository, ITrashQueryService } from '../repositories/trash.repository.interface';
 
 /**
  * 파일 휴지통 메타데이터 생성 파라미터
@@ -43,6 +43,8 @@ export class TrashDomainService {
   constructor(
     @Inject(TRASH_REPOSITORY)
     private readonly trashRepository: ITrashRepository,
+    @Inject(TRASH_QUERY_SERVICE)
+    private readonly trashQueryService: ITrashQueryService,
   ) {}
 
   // ============================================
@@ -87,6 +89,35 @@ export class TrashDomainService {
    */
   async 아이템수조회(): Promise<number> {
     return this.trashRepository.count();
+  }
+
+  /**
+   * 휴지통 목록 조회 (파일/폴더 정보 포함)
+   * 복잡한 조인 쿼리를 사용하여 상세 정보를 조회합니다.
+   */
+  async 상세목록조회(options?: {
+    sortBy?: string;
+    order?: 'asc' | 'desc';
+    page?: number;
+    limit?: number;
+  }): Promise<{
+    items: Array<{
+      type: TrashItemType;
+      id: string;
+      name: string;
+      sizeBytes?: number;
+      mimeType?: string;
+      trashMetadataId: string;
+      originalPath: string;
+      deletedAt: Date;
+      deletedBy: string;
+      modifiedAt: Date;
+      expiresAt: Date;
+    }>;
+    totalCount: number;
+    totalSizeBytes: number;
+  }> {
+    return this.trashQueryService.getTrashList(options);
   }
 
   /**

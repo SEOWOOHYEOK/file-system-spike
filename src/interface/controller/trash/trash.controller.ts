@@ -25,6 +25,8 @@ import {
 import { AuditAction } from '../../../common/decorators';
 import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
 import { TargetType } from '../../../domain/audit/enums/common.enum';
+import { RequestContext } from '../../../common/context/request-context';
+
 
 /**
  * 휴지통 컨트롤러
@@ -73,7 +75,7 @@ export class TrashController {
   })
   async executeRestore(@Body() request: RestoreExecuteRequest): Promise<RestoreExecuteResponse> {
     // TODO: 실제 구현 시 인증된 사용자 ID 사용
-    const userId = 'system';
+    const userId = RequestContext.getUserId() || 'unknown';
     return this.trashService.executeRestore(request, userId);
   }
 
@@ -101,7 +103,7 @@ export class TrashController {
     @Param('trashMetadataId') trashMetadataId: string,
   ): Promise<PurgeResponse> {
     // TODO: 실제 구현 시 인증된 사용자 ID 사용
-    const userId = 'system';
+    const userId = RequestContext.getUserId() || 'unknown';
     return this.trashService.purgeFile(trashMetadataId, userId);
   }
 
@@ -116,7 +118,7 @@ export class TrashController {
   })
   async emptyTrash(): Promise<EmptyTrashResponse> {
     // TODO: 실제 구현 시 인증된 사용자 ID 사용
-    const userId = 'system';
+    const userId = RequestContext.getUserId() || 'unknown';
     return this.trashService.emptyTrash(userId);
   }
 }

@@ -36,6 +36,14 @@ export enum AuditAction {
   // 휴지통 관련
   TRASH_EMPTY = 'TRASH_EMPTY', // 휴지통 비우기
   TRASH_VIEW = 'TRASH_VIEW', // 휴지통 조회
+
+  // 즐겨찾기 관련
+  FAVORITE_ADD = 'FAVORITE_ADD', // 즐겨찾기 등록
+  FAVORITE_REMOVE = 'FAVORITE_REMOVE', // 즐겨찾기 해제
+  FAVORITE_VIEW = 'FAVORITE_VIEW', // 즐겨찾기 조회
+
+  // 사용자 활동 관련
+  ACTIVITY_VIEW = 'ACTIVITY_VIEW', // 최근 활동 조회
 }
 
 /**
@@ -65,6 +73,10 @@ export const AuditActionDescription: Record<AuditAction, string> = {
   [AuditAction.PERMISSION_CHANGE]: '권한 변경',
   [AuditAction.TRASH_EMPTY]: '휴지통 비우기',
   [AuditAction.TRASH_VIEW]: '휴지통 조회',
+  [AuditAction.FAVORITE_ADD]: '즐겨찾기 등록',
+  [AuditAction.FAVORITE_REMOVE]: '즐겨찾기 해제',
+  [AuditAction.FAVORITE_VIEW]: '즐겨찾기 조회',
+  [AuditAction.ACTIVITY_VIEW]: '최근 활동 조회',
 };
 
 /**
@@ -76,6 +88,7 @@ export enum ActionCategory {
   SHARE = 'share',
   AUTH = 'auth',
   ADMIN = 'admin',
+  USER = 'user',
 }
 
 /**
@@ -105,4 +118,8 @@ export const AuditActionCategory: Record<AuditAction, ActionCategory> = {
   [AuditAction.PERMISSION_CHANGE]: ActionCategory.ADMIN,
   [AuditAction.TRASH_EMPTY]: ActionCategory.FILE,
   [AuditAction.TRASH_VIEW]: ActionCategory.FILE,
+  [AuditAction.FAVORITE_ADD]: ActionCategory.USER,
+  [AuditAction.FAVORITE_REMOVE]: ActionCategory.USER,
+  [AuditAction.FAVORITE_VIEW]: ActionCategory.USER,
+  [AuditAction.ACTIVITY_VIEW]: ActionCategory.USER,
 };

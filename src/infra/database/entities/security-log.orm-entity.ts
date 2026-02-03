@@ -74,8 +74,7 @@ export class SecurityLogOrmEntity {
     length: 64,
     nullable: true,
   })
-  @Index()
-  deviceFingerprint: string | null;
+
 
   @Column({ name: 'client_type', type: 'varchar', length: 20, nullable: true })
   clientType: string | null;

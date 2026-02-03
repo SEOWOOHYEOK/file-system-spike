@@ -14,7 +14,6 @@ export interface RequestContextData {
   userEmail?: string;
   ipAddress?: string;
   userAgent?: string;
-  deviceFingerprint?: string;
   startTime: number;
 }
 
@@ -42,7 +41,6 @@ export class RequestContext {
       userEmail: data.userEmail,
       ipAddress: data.ipAddress,
       userAgent: data.userAgent,
-      deviceFingerprint: data.deviceFingerprint,
       startTime: data.startTime || Date.now(),
     };
     return this.storage.run(contextData, fn);
@@ -104,12 +102,7 @@ export class RequestContext {
     return this.get()?.userAgent;
   }
 
-  /**
-   * 현재 디바이스 핑거프린트 조회
-   */
-  static getDeviceFingerprint(): string | undefined {
-    return this.get()?.deviceFingerprint;
-  }
+ 
 
   /**
    * 요청 시작 시간 조회

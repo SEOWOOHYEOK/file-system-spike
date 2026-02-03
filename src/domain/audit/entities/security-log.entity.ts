@@ -71,7 +71,7 @@ export interface CreateSecurityLogParams {
   /** HTTP User-Agent 헤더 */
   userAgent: string;
   /** 디바이스 핑거프린트 */
-  deviceFingerprint?: string;
+  
   /** 클라이언트 타입 */
   clientType?: ClientType;
 
@@ -174,13 +174,6 @@ export class SecurityLog {
   userAgent: string;
 
   /**
-   * 디바이스 핑거프린트
-   * - IP + User-Agent 기반 해시
-   * - 새 디바이스 감지에 활용
-   */
-  deviceFingerprint?: string;
-
-  /**
    * 클라이언트 타입
    * - web / mobile / api / unknown
    */
@@ -227,7 +220,7 @@ export class SecurityLog {
       usernameAttempted: params.usernameAttempted,
       ipAddress: params.ipAddress,
       userAgent: params.userAgent,
-      deviceFingerprint: params.deviceFingerprint,
+      
       clientType: params.clientType || ClientType.UNKNOWN,
       details: params.details,
       createdAt: new Date(),
@@ -254,7 +247,7 @@ export class SecurityLog {
     /** User-Agent */
     userAgent: string;
     /** 디바이스 핑거프린트 */
-    deviceFingerprint?: string;
+    
   }): SecurityLog {
     return SecurityLog.create({
       ...params,
@@ -278,7 +271,7 @@ export class SecurityLog {
     /** User-Agent */
     userAgent: string;
     /** 디바이스 핑거프린트 */
-    deviceFingerprint?: string;
+    
     /** 현재까지 시도 횟수 */
     attemptCount: number;
     /** 실패 사유 (INVALID_PASSWORD, USER_NOT_FOUND 등) */
@@ -290,7 +283,7 @@ export class SecurityLog {
       usernameAttempted: params.usernameAttempted,
       ipAddress: params.ipAddress,
       userAgent: params.userAgent,
-      deviceFingerprint: params.deviceFingerprint,
+      
       details: {
         attemptCount: params.attemptCount,
         reason: params.reason,

@@ -74,11 +74,6 @@ export class SecurityLogRepository implements ISecurityLogRepository {
         severities: filter.severities,
       });
     }
-    if (filter.deviceFingerprint) {
-      queryBuilder.andWhere('log.deviceFingerprint = :deviceFingerprint', {
-        deviceFingerprint: filter.deviceFingerprint,
-      });
-    }
     if (filter.startDate) {
       queryBuilder.andWhere('log.createdAt >= :startDate', {
         startDate: filter.startDate,

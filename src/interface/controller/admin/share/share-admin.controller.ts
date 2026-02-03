@@ -17,7 +17,6 @@ import {
   ApiGetPublicShareByIdAdmin,
   ApiBlockShare,
   ApiUnblockShare,
-  ApiGetSharedFiles,
   ApiGetSharesByFile,
   ApiBlockAllSharesByFile,
   ApiUnblockAllSharesByFile,
