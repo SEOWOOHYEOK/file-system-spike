@@ -311,5 +311,151 @@ describe('NasSyncWorker', () => {
         trashPath,
       );
     });
+
+    /**
+     * 📌 테스트 시나리오: purge action 처리 - NAS 삭제 후 파일 상태 변경
+     * 
+     * 🎯 검증 목적:
+     *   - NAS 파일 삭제 완료 후 file.permanentDelete() 호출
+     *   - 상태 변경은 NAS 작업 완료 후에만 수행
+     */
+    it('purge action은 NAS 삭제 완료 후 file.permanentDelete()를 호출해야 한다', async () => {
+      // ═══════════════════════════════════════════════════════
+      // 📥 GIVEN
+      // ═══════════════════════════════════════════════════════
+      const fileId = 'file-1';
+      const trashMetadataId = 'trash-meta-1';
+      const permanentDeleteMock = jest.fn();
+
+      const mockFile = {
+        id: fileId,
+        name: 'test.txt',
+        permanentDelete: permanentDeleteMock,
+      };
+
+      mockFileRepository.findById.mockResolvedValue(mockFile);
+      mockFileRepository.save.mockResolvedValue(mockFile);
+      
+      // NAS 스토리지 객체 (휴지통 경로)
+      mockFileStorageObjectRepository.findByFileIdAndType
+        .mockResolvedValueOnce({
+          id: 'cache-1',
+          fileId,
+          storageType: StorageType.CACHE,
+          objectKey: 'cache/test.txt',
+        })
+        .mockResolvedValueOnce({
+          id: 'nas-1',
+          fileId,
+          storageType: StorageType.NAS,
+          objectKey: '.trash/trash-meta-1__20240101000000__test.txt',
+        });
+
+      mockCacheStorage.파일삭제 = jest.fn().mockResolvedValue(undefined);
+      mockNasStorage.파일삭제 = jest.fn().mockResolvedValue(undefined);
+      mockFileStorageObjectRepository.delete = jest.fn().mockResolvedValue(undefined);
+      mockTrashRepository.delete.mockResolvedValue(undefined);
+
+      await worker.onModuleInit();
+      const fileSyncProcessor = mockJobQueue.processJobs.mock.calls[0][1];
+
+      // ═══════════════════════════════════════════════════════
+      // 🎬 WHEN
+      // ═══════════════════════════════════════════════════════
+      await fileSyncProcessor({
+        data: {
+          fileId,
+          action: 'purge',
+          trashMetadataId,
+        },
+      });
+
+      // ═══════════════════════════════════════════════════════
+      // ✅ THEN
+      // ═══════════════════════════════════════════════════════
+      // 핵심: NAS 삭제 완료 후 permanentDelete() 호출
+      expect(permanentDeleteMock).toHaveBeenCalled();
+      expect(mockFileRepository.save).toHaveBeenCalledWith(mockFile);
+      expect(mockTrashRepository.delete).toHaveBeenCalledWith(trashMetadataId);
+    });
+
+    /**
+     * 📌 테스트 시나리오: restore action 처리 - trashMetadataId 접두사 제거
+     * 
+     * 🎯 검증 목적:
+     *   - 복원 시 휴지통 파일명에서 trashMetadataId 접두사 제거
+     *   - 원본 NAS 파일명으로 복원
+     */
+    it('restore action은 trashMetadataId 접두사를 제거하고 원본 파일명으로 복원해야 한다', async () => {
+      // ═══════════════════════════════════════════════════════
+      // 📥 GIVEN
+      // ═══════════════════════════════════════════════════════
+      const fileId = 'file-1';
+      const trashMetadataId = 'f60a60a5-fd18-4ca4-b56f-5e2a4cae74dd';
+      const restoreTargetFolderId = 'folder-1';
+
+      // 휴지통 파일명: {trashMetadataId}__20240101000000__test.txt
+      const trashPath = `.trash/${trashMetadataId}__20260203023315__333.txt`;
+
+      mockTrashRepository.findById.mockResolvedValue({
+        id: trashMetadataId,
+        fileId,
+        originalPath: '/folder/333.txt',
+      });
+
+      const mockFile = {
+        id: fileId,
+        name: '333.txt',
+        restore: jest.fn(),
+      };
+      mockFileRepository.findById.mockResolvedValue(mockFile);
+      mockFileRepository.save.mockResolvedValue(mockFile);
+
+      const mockFolder = {
+        id: restoreTargetFolderId,
+        path: '/folder',
+        isActive: () => true,
+      };
+      mockFolderRepository.findById.mockResolvedValue(mockFolder);
+
+      const updateObjectKeyMock = jest.fn();
+      const updateStatusMock = jest.fn();
+      mockFileStorageObjectRepository.findByFileIdAndType.mockResolvedValue({
+        id: 'nas-1',
+        fileId,
+        storageType: StorageType.NAS,
+        objectKey: trashPath, // 휴지통 경로
+        updateObjectKey: updateObjectKeyMock,
+        updateStatus: updateStatusMock,
+      });
+      mockFileStorageObjectRepository.save.mockResolvedValue(undefined);
+      mockTrashRepository.delete.mockResolvedValue(undefined);
+
+      await worker.onModuleInit();
+      const fileSyncProcessor = mockJobQueue.processJobs.mock.calls[0][1];
+
+      // ═══════════════════════════════════════════════════════
+      // 🎬 WHEN
+      // ═══════════════════════════════════════════════════════
+      await fileSyncProcessor({
+        data: {
+          fileId,
+          action: 'restore',
+          trashMetadataId,
+          restoreTargetFolderId,
+        },
+      });
+
+      // ═══════════════════════════════════════════════════════
+      // ✅ THEN
+      // ═══════════════════════════════════════════════════════
+      // 핵심: trashMetadataId 접두사 제거 후 원본 파일명으로 복원
+      // 복원 경로: /folder/20260203023315__333.txt (trashMetadataId 제거됨)
+      expect(mockNasStorage.파일이동).toHaveBeenCalledWith(
+        trashPath,
+        '/folder/20260203023315__333.txt', // trashMetadataId 접두사 제거됨
+      );
+      expect(updateObjectKeyMock).toHaveBeenCalledWith('/folder/20260203023315__333.txt');
+    });
   });
 });

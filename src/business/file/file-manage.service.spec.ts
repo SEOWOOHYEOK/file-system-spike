@@ -1117,5 +1117,81 @@ describe('FileManageService', () => {
         response: { code: 'FILE_IN_USE' },
       });
     });
+
+    /**
+     * 📌 테스트 시나리오: 휴지통 이동 시 NAS 실제 파일명 사용
+     *
+     * 🎯 검증 목적:
+     *   - 휴지통 경로에 NAS objectKey의 실제 파일명(타임스탬프 포함)이 사용되어야 함
+     *   - file.name이 아닌 NAS objectKey에서 추출한 파일명 사용
+     *
+     * ✅ 기대 결과:
+     *   - trashPath: .trash/{trashMetadataId}__20240101000000__test.txt
+     */
+    it('휴지통 이동 시 NAS objectKey의 실제 파일명(타임스탬프 포함)을 사용해야 한다', async () => {
+      // ═══════════════════════════════════════════════════════
+      // 📥 GIVEN (사전 조건 설정)
+      // ═══════════════════════════════════════════════════════
+      const fileCreatedAt = new Date('2024-01-01T00:00:00Z');
+      const file = new FileEntity({
+        id: 'file-1',
+        name: 'test.txt', // 논리적 파일명
+        folderId: 'folder-1',
+        sizeBytes: 10,
+        mimeType: 'text/plain',
+        state: FileState.ACTIVE,
+        createdAt: fileCreatedAt,
+        updatedAt: fileCreatedAt,
+      });
+      const nasObject = new FileStorageObjectEntity({
+        id: 'nas-1',
+        fileId: 'file-1',
+        storageType: StorageType.NAS,
+        objectKey: '/test/20240101000000__test.txt', // NAS 실제 경로 (타임스탬프 포함)
+        availabilityStatus: AvailabilityStatus.AVAILABLE,
+        accessCount: 0,
+        leaseCount: 0,
+        createdAt: new Date(),
+      });
+      const folder = new FolderEntity({
+        id: 'folder-1',
+        name: 'test',
+        parentId: null,
+        path: '/test',
+        state: FolderState.ACTIVE,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      mockFileDomainService.잠금조회.mockResolvedValue(file);
+      mockFileNasStorageDomainService.잠금조회.mockResolvedValue(nasObject);
+      mockFileNasStorageDomainService.조회.mockResolvedValue(nasObject);
+      mockFolderDomainService.조회.mockResolvedValue(folder);
+      mockFileDomainService.저장.mockResolvedValue(file);
+      mockTrashDomainService.파일메타생성.mockResolvedValue(undefined);
+      mockFileNasStorageDomainService.저장.mockResolvedValue(nasObject);
+      mockSyncEventDomainService.저장.mockResolvedValue(undefined);
+      mockJobQueue.addJob.mockResolvedValue(undefined);
+
+      // ═══════════════════════════════════════════════════════
+      // 🎬 WHEN (테스트 실행)
+      // ═══════════════════════════════════════════════════════
+      await service.delete('file-1', 'user-1');
+
+      // ═══════════════════════════════════════════════════════
+      // ✅ THEN (결과 검증)
+      // ═══════════════════════════════════════════════════════
+      // trashPath에 NAS 실제 파일명(타임스탬프 포함)이 사용되어야 함
+      expect(mockJobQueue.addJob).toHaveBeenCalledWith(
+        'NAS_FILE_SYNC',
+        expect.objectContaining({
+          fileId: 'file-1',
+          action: 'trash',
+          // trashPath는 .trash/{trashMetadataId}__{NAS실제파일명} 형식
+          // NAS 파일명: 20240101000000__test.txt (타임스탬프 포함)
+          trashPath: expect.stringMatching(/\.trash\/mock-uuid__20240101000000__test\.txt/),
+        }),
+      );
+    });
   });
 });

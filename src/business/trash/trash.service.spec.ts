@@ -549,27 +549,28 @@ describe('TrashService', () => {
   });
 
   describe('purgeFile', () => {
-    it('should permanently delete file and return result', async () => {
+    it('should queue purge job without immediately changing file state', async () => {
       // Given
       const trashMetadataId = 'trash-to-purge';
       const userId = 'user1';
+      const permanentDeleteMock = jest.fn();
 
       mockTrashRepository.findById.mockResolvedValue({
         id: trashMetadataId,
         fileId: 'file-to-purge',
         isFile: () => true,
+        isFolder: () => false,
       });
 
       mockFileRepository.findById.mockResolvedValue({
         id: 'file-to-purge',
         name: 'delete-me.txt',
-        state: FileState.TRASHED,
+        state: 'TRASHED',
         isTrashed: () => true,
-        permanentDelete: jest.fn(),
+        permanentDelete: permanentDeleteMock,
       });
 
-      mockFileRepository.save.mockResolvedValue({});
-      mockTrashRepository.delete.mockResolvedValue(undefined);
+      mockJobQueuePort.addJob.mockResolvedValue({ id: 'job1' });
 
       // When
       const result = await service.purgeFile(trashMetadataId, userId);
@@ -578,7 +579,21 @@ describe('TrashService', () => {
       expect(result.id).toBe('file-to-purge');
       expect(result.name).toBe('delete-me.txt');
       expect(result.type).toBe('FILE');
-      expect(mockTrashRepository.delete).toHaveBeenCalledWith(trashMetadataId);
+      
+      // 핵심: purge 호출 시 바로 permanentDelete()를 호출하지 않음
+      // NAS worker에서 실제 삭제 완료 후 상태 변경
+      expect(permanentDeleteMock).not.toHaveBeenCalled();
+      expect(mockFileRepository.save).not.toHaveBeenCalled();
+      
+      // job이 큐에 추가되어야 함
+      expect(mockJobQueuePort.addJob).toHaveBeenCalledWith(
+        'NAS_FILE_SYNC',
+        expect.objectContaining({
+          fileId: 'file-to-purge',
+          action: 'purge',
+          trashMetadataId,
+        }),
+      );
     });
 
     it('should throw error when trash item not found', async () => {
@@ -588,6 +603,55 @@ describe('TrashService', () => {
       // When & Then
       await expect(service.purgeFile('non-existent', 'user1'))
         .rejects.toThrow();
+    });
+  });
+
+  describe('purge (folder)', () => {
+    it('should queue purge job for folder without immediately changing folder state', async () => {
+      // Given
+      const trashMetadataId = 'trash-folder-to-purge';
+      const userId = 'user1';
+      const permanentDeleteMock = jest.fn();
+
+      mockTrashRepository.findById.mockResolvedValue({
+        id: trashMetadataId,
+        folderId: 'folder-to-purge',
+        fileId: null, // fileId가 없어야 isFile()에서 file 조회 안함
+        isFile: () => false,
+        isFolder: () => true,
+      });
+
+      mockFolderRepository.findById.mockResolvedValue({
+        id: 'folder-to-purge',
+        name: 'folder-to-delete',
+        state: 'TRASHED',
+        isTrashed: () => true,
+        permanentDelete: permanentDeleteMock,
+      });
+
+      mockJobQueuePort.addJob.mockResolvedValue({ id: 'job1' });
+
+      // When
+      const result = await service.purge(trashMetadataId, userId);
+
+      // Then
+      expect(result.id).toBe('folder-to-purge');
+      expect(result.name).toBe('folder-to-delete');
+      expect(result.type).toBe('FOLDER');
+      
+      // 핵심: purge 호출 시 바로 permanentDelete()를 호출하지 않음
+      // NAS worker에서 실제 삭제 완료 후 상태 변경
+      expect(permanentDeleteMock).not.toHaveBeenCalled();
+      
+      // job이 큐에 추가되어야 함
+      expect(mockJobQueuePort.addJob).toHaveBeenCalledWith(
+        'NAS_FOLDER_SYNC',
+        expect.objectContaining({
+          folderId: 'folder-to-purge',
+          action: 'purge',
+          trashMetadataId,
+        }),
+      );
     });
   });
 

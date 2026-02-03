@@ -21,12 +21,14 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { NasFolderSyncWorker } from './nas-folder-sync.worker';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
+import { DISTRIBUTED_LOCK_PORT } from '../../domain/queue/ports/distributed-lock.port';
 import { NAS_STORAGE_PORT } from '../../domain/storage/ports/nas-storage.port';
 import {
   FOLDER_REPOSITORY,
   FolderAvailabilityStatus,
 } from '../../domain/folder';
 import { FOLDER_STORAGE_OBJECT_REPOSITORY } from '../../domain/storage';
+import { TRASH_REPOSITORY } from '../../domain/trash';
 import { SYNC_EVENT_REPOSITORY } from '../../domain/sync-event/repositories/sync-event.repository.interface';
 import {
   SyncEventEntity,
@@ -39,9 +41,16 @@ describe('NasFolderSyncWorker', () => {
   const mockJobQueue = {
     processJobs: jest.fn(),
   };
+  const mockDistributedLock = {
+    acquire: jest.fn(),
+    withLock: jest.fn((key: string, fn: () => Promise<any>) => fn()),
+    isLocked: jest.fn(),
+    forceRelease: jest.fn(),
+  };
   const mockNasStorage = {
     폴더생성: jest.fn(),
     폴더이동: jest.fn(),
+    폴더삭제: jest.fn(),
   };
   const mockFolderRepository = {
     findById: jest.fn(),
@@ -51,6 +60,11 @@ describe('NasFolderSyncWorker', () => {
     findByFolderId: jest.fn(),
     findByObjectKeyPrefix: jest.fn(),
     save: jest.fn(),
+    delete: jest.fn(),
+  };
+  const mockTrashRepository = {
+    findById: jest.fn(),
+    delete: jest.fn(),
   };
   const mockSyncEventRepository = {
     findById: jest.fn(),
@@ -65,9 +79,11 @@ describe('NasFolderSyncWorker', () => {
       providers: [
         NasFolderSyncWorker,
         { provide: JOB_QUEUE_PORT, useValue: mockJobQueue },
+        { provide: DISTRIBUTED_LOCK_PORT, useValue: mockDistributedLock },
         { provide: NAS_STORAGE_PORT, useValue: mockNasStorage },
         { provide: FOLDER_REPOSITORY, useValue: mockFolderRepository },
         { provide: FOLDER_STORAGE_OBJECT_REPOSITORY, useValue: mockFolderStorageObjectRepository },
+        { provide: TRASH_REPOSITORY, useValue: mockTrashRepository },
         { provide: SYNC_EVENT_REPOSITORY, useValue: mockSyncEventRepository },
       ],
     }).compile();
@@ -326,6 +342,109 @@ describe('NasFolderSyncWorker', () => {
       // 저장된 SyncEvent의 상태 확인 - DONE으로 변경됨
       const savedSyncEvent = mockSyncEventRepository.save.mock.calls[0][0];
       expect(savedSyncEvent.status).toBe(SyncEventStatus.DONE);
+    });
+  });
+
+  /**
+   * ============================================================
+   * 📦 Purge 액션 테스트
+   * ============================================================
+   */
+  describe('Purge 액션 처리', () => {
+    /**
+     * 📌 테스트 시나리오: purge action 처리 - NAS 삭제 후 폴더 상태 변경
+     * 
+     * 🎯 검증 목적:
+     *   - NAS 폴더 삭제 완료 후 folder.permanentDelete() 호출
+     *   - 상태 변경은 NAS 작업 완료 후에만 수행
+     */
+    it('purge action은 NAS 삭제 완료 후 folder.permanentDelete()를 호출해야 한다', async () => {
+      // ═══════════════════════════════════════════════════════
+      // 📥 GIVEN
+      // ═══════════════════════════════════════════════════════
+      const folderId = 'folder-1';
+      const trashMetadataId = 'trash-meta-1';
+      const trashPath = '.trash/trash-meta-1__test-folder';
+      const permanentDeleteMock = jest.fn();
+
+      const mockFolder = {
+        id: folderId,
+        name: 'test-folder',
+        permanentDelete: permanentDeleteMock,
+      };
+
+      mockFolderRepository.findById.mockResolvedValue(mockFolder);
+      mockFolderRepository.save.mockResolvedValue(mockFolder);
+      
+      mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue({
+        id: 'storage-1',
+        folderId,
+        objectKey: trashPath,
+      });
+      mockFolderStorageObjectRepository.delete.mockResolvedValue(undefined);
+      mockNasStorage.폴더삭제.mockResolvedValue(undefined);
+      mockTrashRepository.delete.mockResolvedValue(undefined);
+
+      await worker.onModuleInit();
+      // purge는 통합 큐에서 처리됨
+      const folderSyncProcessor = mockJobQueue.processJobs.mock.calls[0][1];
+
+      // ═══════════════════════════════════════════════════════
+      // 🎬 WHEN
+      // ═══════════════════════════════════════════════════════
+      await folderSyncProcessor({
+        data: {
+          folderId,
+          action: 'purge',
+          trashPath,
+          trashMetadataId,
+        },
+      });
+
+      // ═══════════════════════════════════════════════════════
+      // ✅ THEN
+      // ═══════════════════════════════════════════════════════
+      // 핵심: NAS 삭제 완료 후 permanentDelete() 호출
+      expect(mockNasStorage.폴더삭제).toHaveBeenCalledWith(trashPath);
+      expect(permanentDeleteMock).toHaveBeenCalled();
+      expect(mockFolderRepository.save).toHaveBeenCalledWith(mockFolder);
+      expect(mockTrashRepository.delete).toHaveBeenCalledWith(trashMetadataId);
+    });
+
+    /**
+     * 📌 테스트 시나리오: purge action - 폴더가 없으면 조기 종료
+     */
+    it('purge action에서 폴더를 찾을 수 없으면 조기 종료해야 한다', async () => {
+      // ═══════════════════════════════════════════════════════
+      // 📥 GIVEN
+      // ═══════════════════════════════════════════════════════
+      const folderId = 'non-existent-folder';
+      const trashMetadataId = 'trash-meta-1';
+      const trashPath = '.trash/trash-meta-1__test-folder';
+
+      mockFolderRepository.findById.mockResolvedValue(null);
+
+      await worker.onModuleInit();
+      const folderSyncProcessor = mockJobQueue.processJobs.mock.calls[0][1];
+
+      // ═══════════════════════════════════════════════════════
+      // 🎬 WHEN
+      // ═══════════════════════════════════════════════════════
+      await folderSyncProcessor({
+        data: {
+          folderId,
+          action: 'purge',
+          trashPath,
+          trashMetadataId,
+        },
+      });
+
+      // ═══════════════════════════════════════════════════════
+      // ✅ THEN
+      // ═══════════════════════════════════════════════════════
+      // 폴더가 없으면 NAS 삭제나 상태 변경이 수행되지 않아야 함
+      expect(mockNasStorage.폴더삭제).not.toHaveBeenCalled();
+      expect(mockFolderRepository.save).not.toHaveBeenCalled();
     });
   });
 });
