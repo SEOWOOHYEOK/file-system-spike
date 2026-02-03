@@ -9,7 +9,7 @@ import {
   ParseUUIDPipe,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiExtraModels } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../../common/guards';
 import { ExternalUserManagementService } from '../../../../business/external-share/external-user-management.service';
 import type { PaginationParams } from '../../../../common/types/pagination';
@@ -27,7 +27,7 @@ import { CreateExternalUserRequestDto } from './dto/create-external-user.dto';
 import { UpdateExternalUserRequestDto } from './dto/update-external-user.dto';
 
 import { PaginationQueryDto } from '../../../common/dto';
-;
+import { ExternalUserListItemDto } from './dto/external-user-response.dto';
 
 /**
  * 외부 사용자 관리 컨트롤러 (관리자용)
@@ -36,6 +36,7 @@ import { PaginationQueryDto } from '../../../common/dto';
 @Controller('v1/admin/external-users')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
+@ApiExtraModels(ExternalUserListItemDto)
 export class ExternalUserAdminController {
   constructor(
     private readonly userService: ExternalUserManagementService,

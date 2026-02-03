@@ -7,7 +7,7 @@ import {
   ParseUUIDPipe,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiExtraModels } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../../common/guards';
 import { PublicShareManagementService } from '../../../../business/external-share/public-share-management.service';
 import type { PaginationParams } from '../../../../common/types/pagination';
@@ -39,6 +39,7 @@ import { PaginationQueryDto, PaginatedResponseDto} from '../../../common/dto';
 @Controller('v1/admin/shares')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
+@ApiExtraModels(PublicShareListItemDto, SharedFileStatsDto)
 export class ShareAdminController {
   constructor(
     private readonly shareService: PublicShareManagementService,

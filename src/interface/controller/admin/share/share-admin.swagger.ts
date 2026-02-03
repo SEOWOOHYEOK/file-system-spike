@@ -17,7 +17,6 @@ import {
   SharedFileStatsDto,
 } from './dto';
 import { PublicShareListItemDto } from '../../share/dto';
-import { PaginatedResponseDto } from '../../../common/dto';
 
 /**
  * 전체 공유 현황 조회 API 문서
@@ -46,17 +45,19 @@ export const ApiGetAllPublicShares = () =>
       status: 200,
       description: '전체 공유 현황 조회 성공',
       schema: {
-        allOf: [
-          { $ref: '#/components/schemas/PaginatedResponseDto' },
-          {
-            properties: {
-              items: {
-                type: 'array',
-                items: { $ref: '#/components/schemas/PublicShareListItemDto' },
-              },
-            },
+        type: 'object',
+        properties: {
+          items: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/PublicShareListItemDto' },
           },
-        ],
+          page: { type: 'integer', example: 1 },
+          pageSize: { type: 'integer', example: 20 },
+          totalItems: { type: 'integer', example: 50 },
+          totalPages: { type: 'integer', example: 3 },
+          hasNext: { type: 'boolean', example: true },
+          hasPrev: { type: 'boolean', example: false },
+        },
       },
     }),
     ApiResponse({ status: 401, description: '인증 필요' }),
@@ -175,17 +176,19 @@ export const ApiGetSharedFiles = () =>
       status: 200,
       description: '공유된 파일 목록 조회 성공',
       schema: {
-        allOf: [
-          { $ref: '#/components/schemas/PaginatedResponseDto' },
-          {
-            properties: {
-              items: {
-                type: 'array',
-                items: { $ref: '#/components/schemas/SharedFileStatsDto' },
-              },
-            },
+        type: 'object',
+        properties: {
+          items: {
+            type: 'array',
+            items: { $ref: '#/components/schemas/SharedFileStatsDto' },
           },
-        ],
+          page: { type: 'integer', example: 1 },
+          pageSize: { type: 'integer', example: 20 },
+          totalItems: { type: 'integer', example: 50 },
+          totalPages: { type: 'integer', example: 3 },
+          hasNext: { type: 'boolean', example: true },
+          hasPrev: { type: 'boolean', example: false },
+        },
       },
     }),
     ApiResponse({ status: 401, description: '인증 필요' }),

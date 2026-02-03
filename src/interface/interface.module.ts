@@ -20,19 +20,22 @@ import { ExternalShareController } from './controller/external-auth/external-sha
 import { SyncEventController } from './controller/sync-event/sync-event.controller';
 
 // 내 정보 컨트롤러 (user 폴더에 위치)
-import { UserFavoriteController } from './controller/user/userFavorite.controller';
+
 
 // 모듈
 import { AdminModule } from './controller/admin/admin.module';
 import { BusinessModule } from '../business/business.module';
 import { SSOModule } from '../integrations/sso/sso.module';
 import { OrganizationMigrationModule } from '../integrations/migration/migration.module';
-import { ExternalShareModule } from '../business/external-share/external-share.module';
-import { ExternalShareDomainModule } from '../domain/external-share/external-share.module';
+
 
 // 인터셉터
 import { AuditLogInterceptor } from '../common/interceptors';
 import { DomainModule } from '../domain/domain.module';
+
+import { UserAuditLogController } from './controller/user/audit.controller';
+import { UserFavoriteController } from './controller/user/userFavorite.controller';
+
 
 /**
  * 인터페이스 레이어 통합 모듈
@@ -75,6 +78,7 @@ import { DomainModule } from '../domain/domain.module';
     SyncEventController,
     // 내 정보 컨트롤러
     UserFavoriteController,
+    UserAuditLogController,
   ],
   providers: [
     // 글로벌 인터셉터: 감사 로그 자동 기록
@@ -84,4 +88,4 @@ import { DomainModule } from '../domain/domain.module';
     },
   ],
 })
-export class InterfaceModule {}
+export class InterfaceModule { }
