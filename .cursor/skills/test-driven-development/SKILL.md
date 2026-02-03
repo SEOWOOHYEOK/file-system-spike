@@ -15,6 +15,92 @@ Write the test first. Watch it fail. Write minimal code to pass. **Document in K
 
 **Violating the letter of the rules is violating the spirit of the rules.**
 
+## DDD Alignment (Required During TDD Structure)
+
+When designing tests and shaping implementation, you MUST enforce DDD layering rules from `@maintain-ddd-structure`.
+
+### Domain vs Business Placement Rules
+
+- Domain services contain only logic within a single domain boundary.
+- If a service touches more than one domain (even one external domain), it must live in the Business layer.
+- Single-domain orchestration belongs in `src/domain/<domain>/` (Domain layer).
+- Two-or-more domain coordination belongs in `src/business/<module>/` (Business layer) and is exposed via API flow.
+
+### Domain Method Naming (Korean)
+
+- All domain-level execution method names must be in Korean.
+- If the domain action is a file-name change, the method name must be exactly `수정`.
+
+### Mandatory Pre-TDD Checklist (DDD)
+
+- Identify the domain boundary for the feature.
+- Count how many domains are involved.
+- Place the service by rule:
+  - 1 domain → `src/domain/<domain>/` (Domain Service)
+  - 2+ domains → `src/business/<module>/` (Application/Use Case Service)
+- Confirm method names in Domain are Korean.
+
+### Examples (Placement)
+
+<Good>
+```text
+Scenario: "파일 업로드"가 파일 도메인만 사용
+Service location: src/domain/file/file-domain.service.ts
+Reason: single domain only
+```
+</Good>
+
+<Good>
+```text
+Scenario: "외부공유"가 파일 + 외부공유 도메인을 함께 사용
+Service location: src/business/external-share/external-share.service.ts
+Reason: multi-domain orchestration
+```
+</Good>
+
+<Bad>
+```text
+Scenario: 파일 + 감사로그를 함께 처리하면서
+Domain service 안에서 두 도메인을 직접 호출함
+Problem: multi-domain logic in Domain layer
+Fix: move orchestration to Business layer
+```
+</Bad>
+
+### Examples (Domain Method Naming)
+
+<Good>
+```typescript
+// Domain service method names in Korean
+파일생성()
+파일삭제()
+폴더이동()
+```
+</Good>
+
+<Good>
+```typescript
+// File-name change action must be exactly "수정"
+수정(fileId: string, newName: string)
+```
+</Good>
+
+<Bad>
+```typescript
+// English or mixed names are not allowed in Domain
+renameFile()
+updateName()
+```
+</Bad>
+
+### Test Design Reminder (DDD + TDD)
+
+- Tests for a Domain service must touch only one domain.
+- Tests that require multiple domains must target Business layer services.
+- If a test requires cross-domain setup, you placed the service in the wrong layer.
+
+Apply these rules before writing tests, and keep them consistent while refactoring.
+
 ## When to Use
 
 **Always:**

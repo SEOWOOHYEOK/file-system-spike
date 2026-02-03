@@ -25,12 +25,21 @@ The project follows a 4-layer architecture:
     -   `*.controller.ts`: API Controllers.
     -   `*.dto.ts`: Data Transfer Objects for API requests/responses.
     -   `*.swagger.ts`: Swagger/OpenAPI definitions.
+-   **Conventions**:
+    -   **Request validation**: Use class-validator decorators in request DTOs; controllers should rely on validation pipes (no manual validation).
+    -   **Response typing**: Controller handlers must return `Promise<T>` with explicit response DTO or entity type for quick type visibility.
+    -   **Swagger docs**: Keep `summary`, `description`, `tags`, `params`, and `responses` detailed and up-to-date.
+    -   **Swagger separation**: Define Swagger metadata in a separate `.swagger.ts` file and import into the `.controller.ts`.
 
 ### 2. Business Layer (`src/business`)
 -   **Location**: `src/business/<module>/`
 -   **Files**:
     -   `*.service.ts`: Application Services (handling use cases).
     -   `*.module.ts`: NestJS Modules for the business layer.
+-   **Dependency Rule (IMPORTANT)**:
+    -   **Business services must not depend on repository ports directly.**
+    -   Business layer should depend on **Domain Services** (and other business services) only.
+    -   Repository ports (`*.repository.interface.ts`, tokens like `*_REPOSITORY`) should be injected only inside Domain Services.
 
 ### 3. Domain Layer (`src/domain`)
 -   **Location**: `src/domain/<module>/`
@@ -40,6 +49,7 @@ The project follows a 4-layer architecture:
     -   `*.repository.interface.ts` (or `*.port.ts`): Repository interfaces (Ports).
     -   `*-domain.service.ts`: Domain Services (pure domain logic).
     -   `*.exception.ts`: Domain-specific exceptions.
+    -   **Ports must live in domain only**: Interfaces that represent domain-level ports (e.g. repository ports, external service ports) belong in `src/domain` and must not be declared in `src/business`, `src/interface`, or `src/infra`.
 
 ### 4. Infrastructure Layer (`src/infra`)
 -   **Location**: `src/infra/<module>/` or `src/infra/database/`, `src/infra/storage/`
@@ -59,6 +69,12 @@ When asked to analyze or fix the structure:
     -   Are Controllers (`*.controller.ts`) in `src/business`? -> Move to `src/interface`.
     -   Are Repository Implementations (`*.repository.ts`) in `src/domain`? -> Move to `src/infra`.
     -   Are Domain Entities (`*.entity.ts`) in `src/infra`? -> Move to `src/domain`.
+    -   Are domain-level ports/interfaces (e.g. `*.repository.interface.ts`, `*.port.ts`) declared outside `src/domain` (including other domain folders)? -> Move to the correct `src/domain/<module>/` and update imports.
+    -   Are ports for one domain placed under a different domain (e.g. file ports under `src/domain/folder/`)? -> Move to the owning domain folder and update imports.
+    -   **Are Business services injecting repository ports or tokens directly?**
+        -   Example smells: `@Inject(FILE_REPOSITORY)`, `ISyncEventRepository` in `src/business/**`.
+        -   Fix: Create/Use a Domain Service in `src/domain/<module>/service/*-domain.service.ts` and inject that service instead.
+        -   If multiple domains are needed, Business can orchestrate multiple **domain services**, but still should not inject repository ports.
 3.  **Report Findings**: List misplaced files and their intended locations.
 
 ## Refactoring Workflow
