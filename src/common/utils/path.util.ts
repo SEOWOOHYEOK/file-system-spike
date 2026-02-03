@@ -23,6 +23,7 @@
  * // 중첩 폴더에 추가
  * buildPath('/a/b/c', 'd');  // '/a/b/c/d'
  */
+
 export function buildPath(parentPath: string, name: string): string {
   if (!parentPath || parentPath === '/') {
     return `/${name}`;

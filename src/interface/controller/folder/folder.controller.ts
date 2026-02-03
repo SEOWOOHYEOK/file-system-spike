@@ -163,5 +163,24 @@ export class FolderController {
     return this.folderCommandService.이동(folderId, request, userId);
   }
 
-
+  /**
+   * DELETE /folders/:folderId - 폴더 삭제 (휴지통 이동)
+   */
+  @Delete(':folderId')
+  @ApiFolderDelete()
+  @AuditAction({
+    action: AuditActionEnum.FOLDER_DELETE,
+    targetType: TargetType.FOLDER,
+    targetIdParam: 'folderId',
+  })
+  async delete(@Param('folderId') folderId: string): Promise<{
+    id: string;
+    name: string;
+    state: FolderState;
+    trashedAt: string;
+  }> {
+    // TODO: 실제 구현 시 인증된 사용자 ID 사용
+    const userId = 'system';
+    return this.folderCommandService.delete(folderId, userId);
+  }
 }

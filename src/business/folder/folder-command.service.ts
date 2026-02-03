@@ -413,7 +413,7 @@ export class FolderCommandService implements OnModuleInit {
   }
 
   /**
-   * 폴더 삭제 (휴지통 이동)
+ * 폴더 삭제 (휴지통 이동)
    */
   async delete(folderId: string, userId: string): Promise<{
     id: string;
@@ -477,9 +477,10 @@ export class FolderCommandService implements OnModuleInit {
       folder.delete();
       await this.folderDomainService.저장(folder, txOptions);
 
-      // 5. trash_metadata 생성 (최상위 폴더만)
+      // 5. trashMetadataId 먼저 생성 후 trash_metadata 생성 (최상위 폴더만)
+      const trashMetadataId = uuidv4();
       await this.trashDomainService.폴더메타생성({
-        id: uuidv4(),
+        id: trashMetadataId,
         folderId: folder.id,
         originalPath: folder.path,
         originalParentId: folder.parentId,
@@ -488,7 +489,8 @@ export class FolderCommandService implements OnModuleInit {
 
       // 6. NAS 상태 업데이트
       const storageObject = await this.folderStorageService.조회(folderId, txOptions);
-      const trashPath = `.trash/${folder.id}_${folder.name}`;
+      // 휴지통 경로: .trash/{trashMetadataId}__{folderName} (통일된 형식)
+      const trashPath = `.trash/${trashMetadataId}__${folder.name}`;
       if (storageObject) {
         storageObject.updateStatus(FolderAvailabilityStatus.SYNCING);
         await this.folderStorageService.저장(storageObject, txOptions);

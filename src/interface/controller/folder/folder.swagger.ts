@@ -420,7 +420,7 @@ export const ApiFolderDelete = () =>
 
 ### 주의사항
 - 영구삭제가 아닌 휴지통 이동입니다.
-- 하위 파일/폴더도 함께 휴지통으로 이동됩니다.
+- 하위 파일/폴더가 있다면 실행되지 않습니다.
 - 휴지통에서 복원하거나 영구삭제할 수 있습니다.
       `,
     }),
@@ -438,12 +438,12 @@ export const ApiFolderDelete = () =>
           id: { type: 'string', example: 'folder_abc123' },
           name: { type: 'string', example: 'Documents' },
           state: { type: 'string', example: 'TRASHED' },
-          deletedChildCount: { type: 'number', description: '함께 삭제된 하위 항목 수', example: 25 },
           trashedAt: { type: 'string', example: '2024-01-23T10:00:00.000Z' },
         },
       },
     }),
     ApiResponse({ status: 404, description: '폴더를 찾을 수 없음' }),
+    ApiResponse({ status: 400, description: '하위 파일/폴더가 있어 삭제할 수 없음' }),
   );
 
 /**

@@ -121,6 +121,7 @@ export interface RestoreExecuteResponse {
     fileName: string;
     reason: 'CONFLICT' | 'PATH_NOT_FOUND';
     conflictFileId?: string;
+    message?: string;  // 상세 에러 메시지
   }[];
 }
 

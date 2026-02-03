@@ -17,6 +17,7 @@ import {
 
 import { SYNC_EVENT_REPOSITORY } from '../../domain/sync-event/repositories/sync-event.repository.interface';
 import { SyncEventEntity } from '../../domain/sync-event/entities/sync-event.entity';
+import { TRASH_REPOSITORY } from '../../domain/trash/repositories/trash.repository.interface';
 
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 import type { IDistributedLockPort } from '../../domain/queue/ports/distributed-lock.port';
@@ -24,6 +25,7 @@ import type { INasStoragePort } from '../../domain/storage/ports/nas-storage.por
 import type { IFolderRepository } from '../../domain/folder';
 
 import type { ISyncEventRepository } from '../../domain/sync-event/repositories/sync-event.repository.interface';
+import type { ITrashRepository } from '../../domain/trash/repositories/trash.repository.interface';
 
 import {
   type IFolderStorageObjectRepository,
@@ -35,7 +37,7 @@ import {
 /**
  * NAS 폴더 동기화 Action 타입
  */
-export type NasFolderAction = 'mkdir' | 'rename' | 'move' | 'trash';
+export type NasFolderAction = 'mkdir' | 'rename' | 'move' | 'trash' | 'restore' | 'purge';
 
 /**
  * NAS 폴더 동기화 통합 Job 데이터 타입
@@ -73,8 +75,14 @@ export interface NasFolderSyncJobData {
   // trash 액션용
   /** 현재 폴더 경로 (trash) */
   currentPath?: string;
-  /** 휴지통 경로 (trash) */
+  /** 휴지통 경로 (trash, restore, purge) */
   trashPath?: string;
+
+  // restore 액션용
+  /** 복구 대상 경로 (restore) */
+  restorePath?: string;
+  /** 휴지통 메타데이터 ID (restore, purge) */
+  trashMetadataId?: string;
 }
 
 /**
@@ -111,6 +119,8 @@ export class NasFolderSyncWorker implements OnModuleInit {
     private readonly folderStorageObjectRepository: IFolderStorageObjectRepository,
     @Inject(SYNC_EVENT_REPOSITORY)
     private readonly syncEventRepository: ISyncEventRepository,
+    @Inject(TRASH_REPOSITORY)
+    private readonly trashRepository: ITrashRepository,
   ) { }
 
   /**
@@ -214,6 +224,12 @@ export class NasFolderSyncWorker implements OnModuleInit {
             break;
           case 'trash':
             await this.handleTrash(job.data);
+            break;
+          case 'restore':
+            await this.handleRestore(job.data);
+            break;
+          case 'purge':
+            await this.handlePurge(job.data);
             break;
           default:
             this.logger.warn(`Unknown action: ${action}`);
@@ -482,6 +498,140 @@ export class NasFolderSyncWorker implements OnModuleInit {
       this.logger.log(`Successfully moved folder to trash in NAS: ${folderId}, ${currentPath} -> ${trashPath}`);
     } catch (error) {
       this.logger.error(`Failed to move folder to trash in NAS: ${folderId}`, error);
+      await this.handleSyncEventFailure(syncEvent, error as Error);
+      throw error;
+    }
+  }
+
+  /**
+   * Restore 액션 처리
+   * 휴지통에서 원래 경로로 폴더 복구
+   */
+  private async handleRestore(data: NasFolderSyncJobData): Promise<void> {
+    const { folderId, trashPath, restorePath, trashMetadataId, originalParentId, syncEventId } = data;
+    this.logger.debug(`Handling restore for folder: ${folderId}, ${trashPath} -> ${restorePath}`);
+
+    if (!trashPath || !restorePath || !trashMetadataId) {
+      this.logger.error(`Missing required fields for restore: ${folderId}`);
+      return;
+    }
+
+    // SyncEvent 조회 (선택적)
+    const syncEvent = await this.getSyncEvent(syncEventId);
+
+    try {
+      // SyncEvent 처리 시작
+      await this.markSyncEventProcessing(syncEvent);
+
+      // 1. 폴더 스토리지 객체 조회
+      const storageObject = await this.folderStorageObjectRepository.findByFolderId(folderId);
+
+      if (!storageObject) {
+        this.logger.warn(`Folder storage object not found for folder: ${folderId}`);
+        await this.markSyncEventDone(syncEvent);
+        return;
+      }
+
+      // 이미 완료된 경우 스킵
+      if (storageObject.isAvailable() && storageObject.objectKey === restorePath) {
+        this.logger.debug(`Folder already restored in NAS: ${folderId}`);
+        await this.markSyncEventDone(syncEvent);
+        return;
+      }
+
+      // 2. 폴더 조회
+      const folder = await this.folderRepository.findById(folderId);
+      if (!folder) {
+        this.logger.warn(`Folder not found for restore: ${folderId}`);
+        await this.markSyncEventDone(syncEvent);
+        return;
+      }
+
+      // 3. NAS에서 휴지통에서 원래 경로로 이동
+      await this.nasStorage.폴더이동(trashPath, restorePath);
+
+      // 4. 폴더 상태 복구 (TRASHED → ACTIVE)
+      folder.restore();
+      folder.moveTo(originalParentId || folder.parentId!, restorePath);
+      await this.folderRepository.save(folder);
+
+      // 5. 스토리지 상태 업데이트
+      storageObject.updateStatus(FolderAvailabilityStatus.AVAILABLE);
+      storageObject.updateObjectKey(restorePath);
+      await this.folderStorageObjectRepository.save(storageObject);
+
+      // 6. trash_metadata 삭제
+      await this.trashRepository.delete(trashMetadataId);
+
+      // SyncEvent 완료
+      await this.markSyncEventDone(syncEvent);
+
+      this.logger.log(`Successfully restored folder from trash in NAS: ${folderId}, ${trashPath} -> ${restorePath}`);
+    } catch (error) {
+      this.logger.error(`Failed to restore folder from trash in NAS: ${folderId}`, error);
+      await this.handleSyncEventFailure(syncEvent, error as Error);
+      throw error;
+    }
+  }
+
+  /**
+   * Purge 액션 처리
+   * 휴지통에서 폴더를 영구 삭제
+   */
+  private async handlePurge(data: NasFolderSyncJobData): Promise<void> {
+    const { folderId, trashPath, trashMetadataId, syncEventId } = data;
+    this.logger.debug(`Handling purge for folder: ${folderId}, trashPath: ${trashPath}`);
+
+    if (!trashPath || !trashMetadataId) {
+      this.logger.error(`Missing required fields for purge: ${folderId}`);
+      return;
+    }
+
+    // SyncEvent 조회 (선택적)
+    const syncEvent = await this.getSyncEvent(syncEventId);
+
+    try {
+      // SyncEvent 처리 시작
+      await this.markSyncEventProcessing(syncEvent);
+
+      // 1. 폴더 조회
+      const folder = await this.folderRepository.findById(folderId);
+      if (!folder) {
+        this.logger.warn(`Folder not found for purge: ${folderId}`);
+        await this.markSyncEventDone(syncEvent);
+        return;
+      }
+
+      // 2. 폴더 스토리지 객체 조회
+      const storageObject = await this.folderStorageObjectRepository.findByFolderId(folderId);
+
+      // 3. NAS에서 폴더 삭제
+      try {
+        await this.nasStorage.폴더삭제(trashPath);
+        this.logger.debug(`Folder deleted from NAS: ${trashPath}`);
+      } catch (deleteError) {
+        // 이미 삭제된 경우 무시
+        this.logger.warn(`Folder may already be deleted from NAS: ${trashPath}`, deleteError);
+      }
+
+      // 4. 스토리지 객체 삭제
+      if (storageObject) {
+        await this.folderStorageObjectRepository.delete(storageObject.id);
+      }
+
+      // 5. 폴더 상태를 DELETED로 변경 (NAS 작업 완료 후)
+      folder.permanentDelete();
+      await this.folderRepository.save(folder);
+
+      // 6. trash_metadata 삭제
+      await this.trashRepository.delete(trashMetadataId);
+
+      // SyncEvent 완료
+      await this.markSyncEventDone(syncEvent);
+
+      this.logger.log(`Successfully purged folder from NAS: ${folderId}, trashPath: ${trashPath}`);
+    } catch (error) {
+      this.logger.error(`Failed to purge folder from NAS: ${folderId}`, error);
       await this.handleSyncEventFailure(syncEvent, error as Error);
       throw error;
     }

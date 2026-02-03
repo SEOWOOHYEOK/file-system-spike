@@ -303,7 +303,7 @@ export class NfsNasAdapter implements INasStoragePort {
     }
   }
 
-  async 폴더삭제(folderPath: string, recursive: boolean = false): Promise<void> {
+  async 폴더삭제(folderPath: string, recursive: boolean = true): Promise<void> {
     const fullPath = this.clientProvider.validateAndCreatePath(folderPath);
     
     // 존재 확인
@@ -314,7 +314,8 @@ export class NfsNasAdapter implements INasStoragePort {
     }
 
     try {
-      await fs.rm(fullPath, { recursive, force: recursive });
+      // 디렉토리 삭제는 기본적으로 recursive: true 필요
+      await fs.rm(fullPath, { recursive, force: true });
       this.logger.log(`🗑️ 디렉토리 삭제 완료: ${fullPath}`);
     } catch (error: any) {
       throw new InternalServerErrorException(`디렉토리 삭제 실패: ${error.message}`);

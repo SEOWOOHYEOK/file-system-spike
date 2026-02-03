@@ -1,7 +1,7 @@
 import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
 import { DataSource } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
-import { buildPath } from '../../common/utils';
+import { buildPath, extractName } from '../../common/utils';
 import {
   AvailabilityStatus,
   RenameFileRequest,
@@ -405,9 +405,10 @@ export class FileManageService {
       file.delete();
       await this.fileDomainService.저장(file, txOptions);
 
-      // 6. trash_metadata 생성
+      // 6. trashMetadataId 먼저 생성 후 trash_metadata 생성
+      const trashMetadataId = uuidv4();
       await this.trashDomainService.파일메타생성({
-        id: uuidv4(),
+        id: trashMetadataId,
         fileId: file.id,
         originalPath,
         originalFolderId: file.folderId,
@@ -417,8 +418,10 @@ export class FileManageService {
       // 7. NAS 상태 업데이트 (nasObject는 checkNasSyncStatus에서 이미 조회됨)
       if (nasObject) {
         currentObjectKey = nasObject.objectKey;
-        // 휴지통 경로: .trash/{fileId}_{fileName}
-        trashPath = `.trash/${this.extractFileNameFromPath(nasObject.objectKey)}`; // 1769417075898_222.txt
+        // 휴지통 경로: .trash/{trashMetadataId}__{NAS실제파일명} (통일된 형식)
+        // NAS 파일명은 타임스탬프가 포함된 전체 파일명 (예: 20260203023315__333.txt)
+        const nasFileName = extractName(currentObjectKey);
+        trashPath = `.trash/${trashMetadataId}__${nasFileName}`;
         nasObject.updateStatus(AvailabilityStatus.SYNCING);
         await this.fileNasStorageDomainService.저장(nasObject, txOptions);
       }

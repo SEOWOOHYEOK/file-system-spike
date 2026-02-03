@@ -43,6 +43,7 @@ import type { IFileStorageObjectRepository } from '../../domain/storage';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 import { NAS_FILE_SYNC_QUEUE_PREFIX, NasFileSyncJobData } from '../worker/nas-file-sync.worker';
+import { NAS_FOLDER_SYNC_QUEUE_PREFIX, NasFolderSyncJobData } from '../worker/nas-folder-sync.worker';
 import {
   SYNC_EVENT_REPOSITORY,
   SyncEventStatus,
@@ -150,93 +151,173 @@ export class TrashService {
 
   /**
    * 복원 미리보기 (경로 상태 확인)
+   * 파일과 폴더 모두 지원
    */
   async previewRestore(request: RestorePreviewRequest): Promise<RestorePreviewResponse> {
     const items: RestorePreviewResponse['items'] = [];
     const summary = { available: 0, notFound: 0, conflict: 0 };
 
-
     const trashMetadataIds = request.trashMetadataIds || [];
 
     for (const id of trashMetadataIds) {
       const trashMetadata = await this.trashRepository.findById(id);
-      if (!trashMetadata || !trashMetadata.isFile()) {
+      if (!trashMetadata) {
         continue;
       }
 
-      const file = await this.fileRepository.findById(trashMetadata.fileId!);
-      if (!file) {
-        continue;
-      }
+      // 파일 복구 미리보기
+      if (trashMetadata.isFile()) {
+        const file = await this.fileRepository.findById(trashMetadata.fileId!);
+        if (!file) {
+          continue;
+        }
 
-      // 1. 경로명으로 폴더 존재 여부 확인
-      // originalPath는 파일의 전체 경로 (예: "/projects/2024/report.pdf")
-      // 부모 폴더 경로를 추출해야 함 (예: "/projects/2024/")
-      const originalPath = trashMetadata.originalPath;
-      const parentFolderPath = this.extractParentFolderPath(originalPath);
+        // 1. 경로명으로 폴더 존재 여부 확인
+        // originalPath는 파일의 전체 경로 (예: "/projects/2024/report.pdf")
+        // 부모 폴더 경로를 추출해야 함 (예: "/projects/2024/")
+        const originalPath = trashMetadata.originalPath;
+        const parentFolderPath = this.extractParentFolderPath(originalPath);
 
-      const targetFolder = await this.folderRepository.findOne({
-        path: parentFolderPath,
-        state: FolderState.ACTIVE,
-      });
+        const targetFolder = await this.folderRepository.findOne({
+          path: parentFolderPath,
+          state: FolderState.ACTIVE,
+        });
 
-      let pathStatus = RestorePathStatus.NOT_FOUND;
-      let resolveFolderId: string | null = null;
-      let hasConflict = false;
-      let conflictFileId: string | undefined;
+        let pathStatus = RestorePathStatus.NOT_FOUND;
+        let resolveFolderId: string | null = null;
+        let hasConflict = false;
+        let conflictFileId: string | undefined;
 
-      if (targetFolder) {
-        pathStatus = RestorePathStatus.AVAILABLE;
-        resolveFolderId = targetFolder.id;
+        if (targetFolder) {
+          pathStatus = RestorePathStatus.AVAILABLE;
+          resolveFolderId = targetFolder.id;
 
-        // 2. 충돌 확인 (파일명 + MIME타입 + 생성시간)
-        hasConflict = await this.fileRepository.existsByNameInFolder(
-          targetFolder.id,
-          file.name,
-          file.mimeType,
-          undefined, // excludeFileId
-          undefined, // options
-          file.createdAt, // createdAt 체크
-        );
+          // 2. 충돌 확인 (파일명 + MIME타입 + 생성시간)
+          hasConflict = await this.fileRepository.existsByNameInFolder(
+            targetFolder.id,
+            file.name,
+            file.mimeType,
+            undefined, // excludeFileId
+            undefined, // options
+            file.createdAt, // createdAt 체크
+          );
 
-        if (hasConflict) {
-          // 충돌 파일 ID 조회 (optional)
-          const conflictFile = await this.fileRepository.findOne({
-            folderId: targetFolder.id,
-            name: file.name,
-            mimeType: file.mimeType,
-            state: FileState.ACTIVE,
-          });
-          if (conflictFile) {
-            conflictFileId = conflictFile.id;
+          if (hasConflict) {
+            // 충돌 파일 ID 조회 (optional)
+            const conflictFile = await this.fileRepository.findOne({
+              folderId: targetFolder.id,
+              name: file.name,
+              mimeType: file.mimeType,
+              state: FileState.ACTIVE,
+            });
+            if (conflictFile) {
+              conflictFileId = conflictFile.id;
+            }
           }
         }
-      }
 
-      // 요약 집계
-      if (pathStatus === RestorePathStatus.AVAILABLE) {
-        summary.available++;
-        if (hasConflict) {
-          summary.conflict++;
+        // 요약 집계
+        if (pathStatus === RestorePathStatus.AVAILABLE) {
+          summary.available++;
+          if (hasConflict) {
+            summary.conflict++;
+          }
+        } else {
+          summary.notFound++;
         }
-      } else {
-        summary.notFound++;
-      }
 
-      items.push({
-        trashMetadataId: id,
-        fileId: file.id,
-        fileName: file.name,
-        mimeType: file.mimeType,
-        sizeBytes: file.sizeBytes,
-        deletedAt: trashMetadata.deletedAt,
-        pathStatus,
-        originalPath,
-        originalFolderId: trashMetadata.originalFolderId!,
-        resolveFolderId,
-        hasConflict,
-        conflictFileId,
-      });
+        items.push({
+          trashMetadataId: id,
+          fileId: file.id,
+          fileName: file.name,
+          mimeType: file.mimeType,
+          sizeBytes: file.sizeBytes,
+          deletedAt: trashMetadata.deletedAt,
+          pathStatus,
+          originalPath,
+          originalFolderId: trashMetadata.originalFolderId!,
+          resolveFolderId,
+          hasConflict,
+          conflictFileId,
+        });
+      }
+      // 폴더 복구 미리보기
+      else if (trashMetadata.isFolder()) {
+        const folder = await this.folderRepository.findById(trashMetadata.folderId!);
+        if (!folder || !folder.isTrashed()) {
+          continue;
+        }
+
+        const originalPath = trashMetadata.originalPath;
+        const originalParentId = trashMetadata.originalParentId;
+
+        let pathStatus = RestorePathStatus.NOT_FOUND;
+        let resolveFolderId: string | null = null;
+        let hasConflict = false;
+
+        // 1. 부모 폴더 존재 여부 확인
+        if (originalParentId) {
+          const parentFolder = await this.folderRepository.findById(originalParentId);
+          if (parentFolder && parentFolder.isActive()) {
+            pathStatus = RestorePathStatus.AVAILABLE;
+            resolveFolderId = parentFolder.id;
+
+            // 2. 동일 폴더명 중복 확인
+            const existingFolder = await this.folderRepository.findOne({
+              parentId: originalParentId,
+              name: folder.name,
+              state: FolderState.ACTIVE,
+            });
+            if (existingFolder) {
+              hasConflict = true;
+            }
+          }
+        } else {
+          // 루트 폴더에 복구하는 경우
+          const rootFolder = await this.folderRepository.findOne({
+            parentId: null,
+            state: FolderState.ACTIVE,
+          });
+          if (rootFolder) {
+            pathStatus = RestorePathStatus.AVAILABLE;
+            resolveFolderId = rootFolder.id;
+
+            // 동일 폴더명 중복 확인 (루트 레벨)
+            const existingFolder = await this.folderRepository.findOne({
+              parentId: rootFolder.id,
+              name: folder.name,
+              state: FolderState.ACTIVE,
+            });
+            if (existingFolder) {
+              hasConflict = true;
+            }
+          }
+        }
+
+        // 요약 집계
+        if (pathStatus === RestorePathStatus.AVAILABLE) {
+          summary.available++;
+          if (hasConflict) {
+            summary.conflict++;
+          }
+        } else {
+          summary.notFound++;
+        }
+
+        items.push({
+          trashMetadataId: id,
+          fileId: folder.id, // 폴더의 경우 folderId를 fileId 필드에 사용
+          fileName: folder.name,
+          mimeType: 'folder',
+          sizeBytes: 0,
+          deletedAt: trashMetadata.deletedAt,
+          pathStatus,
+          originalPath,
+          originalFolderId: originalParentId || '',
+          resolveFolderId,
+          hasConflict,
+        });
+      }
     }
 
     return {
@@ -248,6 +329,7 @@ export class TrashService {
 
   /**
    * 복원 실행
+   * 파일과 폴더 모두 지원
    */
   async executeRestore(request: RestoreExecuteRequest, userId: string): Promise<RestoreExecuteResponse> {
     let queued = 0;
@@ -265,84 +347,166 @@ export class TrashService {
 
       // 2. 휴지통 메타데이터 조회
       const trashMetadata = await this.trashRepository.findById(item.trashMetadataId);
-      if (!trashMetadata || !trashMetadata.isFile()) {
+      if (!trashMetadata) {
         continue;
       }
 
-      // 3. 파일 조회
-      const file = await this.fileRepository.findById(trashMetadata.fileId!);
-      if (!file || !file.isTrashed()) {
-        continue;
-      }
-
-      // 4. 복구 대상 폴더 결정
-      let targetFolderId: string | null = null;
-
-      if (item.targetFolderId) {
-        // 사용자가 지정한 폴더
-        const targetFolder = await this.folderRepository.findById(item.targetFolderId);
-        if (targetFolder) {
-          targetFolderId = targetFolder.id;
+      // 파일 복구
+      if (trashMetadata.isFile()) {
+        // 3. 파일 조회
+        const file = await this.fileRepository.findById(trashMetadata.fileId!);
+        if (!file || !file.isTrashed()) {
+          continue;
         }
-      } else {
-        // 경로명으로 자동 찾기 (부모 폴더 경로 추출)
-        const parentFolderPath = this.extractParentFolderPath(trashMetadata.originalPath);
-        const resolvedFolder = await this.folderRepository.findOne({
-          path: parentFolderPath,
+
+        // 4. 복구 대상 폴더 결정
+        let targetFolderId: string | null = null;
+
+        if (item.targetFolderId) {
+          // 사용자가 지정한 폴더
+          const targetFolder = await this.folderRepository.findById(item.targetFolderId);
+          if (targetFolder) {
+            targetFolderId = targetFolder.id;
+          }
+        } else {
+          // 경로명으로 자동 찾기 (부모 폴더 경로 추출)
+          const parentFolderPath = this.extractParentFolderPath(trashMetadata.originalPath);
+          const resolvedFolder = await this.folderRepository.findOne({
+            path: parentFolderPath,
+            state: FolderState.ACTIVE,
+          });
+
+          if (resolvedFolder) {
+            targetFolderId = resolvedFolder.id;
+          }
+        }
+
+        // 5. 경로 없으면 skip
+        if (!targetFolderId) {
+          skipped++;
+          skippedItems.push({
+            trashMetadataId: item.trashMetadataId,
+            fileName: file.name,
+            reason: 'PATH_NOT_FOUND',
+          });
+          continue;
+        }
+
+        // 6. 충돌 확인
+        const hasConflict = await this.fileRepository.existsByNameInFolder(
+          targetFolderId,
+          file.name,
+          file.mimeType,
+          undefined,
+          undefined,
+          file.createdAt,
+        );
+
+        if (hasConflict) {
+          skipped++;
+          skippedItems.push({
+            trashMetadataId: item.trashMetadataId,
+            fileName: file.name,
+            reason: 'CONFLICT',
+          });
+          continue;
+        }
+
+        // 7. 큐에 복원 작업 추가
+        const syncEventId = uuidv4();
+        const jobData: NasFileSyncJobData = {
+          fileId: file.id,
+          action: 'restore',
+          syncEventId,
+          trashMetadataId: item.trashMetadataId,
+          restoreTargetFolderId: targetFolderId,
+          userId,
+        };
+        await this.jobQueuePort.addJob(NAS_FILE_SYNC_QUEUE_PREFIX, jobData);
+
+        syncEventIds.push(syncEventId);
+        queued++;
+      }
+      
+      // 폴더 복구
+       if (trashMetadata.isFolder()) {
+        // 3. 폴더 조회
+        const folder = await this.folderRepository.findById(trashMetadata.folderId!);
+        if (!folder || !folder.isTrashed()) {
+          continue;
+        }
+
+        const originalPath = trashMetadata.originalPath;
+        const originalParentId = trashMetadata.originalParentId;
+
+        // 4. 부모 폴더 존재 확인
+        let targetParentId: string | null = null;
+
+        if (originalParentId) {
+          const parentFolder = await this.folderRepository.findById(originalParentId);
+          if (parentFolder && parentFolder.isActive()) {
+            targetParentId = parentFolder.id;
+          }
+        } else {
+          // 루트 폴더에 복구하는 경우
+          const rootFolder = await this.folderRepository.findOne({
+            parentId: null,
+            state: FolderState.ACTIVE,
+          });
+          if (rootFolder) {
+            targetParentId = rootFolder.id;
+          }
+        }
+
+        // 5. 경로 없으면 skip
+        if (!targetParentId) {
+          skipped++;
+          skippedItems.push({
+            trashMetadataId: item.trashMetadataId,
+            fileName: folder.name,
+            reason: 'PATH_NOT_FOUND',
+            message: `원래경로가 사라져서 복구가 불가합니다. 복구 경로:${originalPath}`,
+          });
+          continue;
+        }
+
+        // 6. 동일 폴더명 중복 확인
+        const existingFolder = await this.folderRepository.findOne({
+          parentId: targetParentId,
+          name: folder.name,
           state: FolderState.ACTIVE,
         });
 
-        
-        if (resolvedFolder) {
-          targetFolderId = resolvedFolder.id;
+        if (existingFolder) {
+          skipped++;
+          skippedItems.push({
+            trashMetadataId: item.trashMetadataId,
+            fileName: folder.name,
+            reason: 'CONFLICT',
+            message: `복구 경로에 동일 폴더명 존재하여 복구가 불가합니다. 복구 경로:${originalPath}`,
+          });
+          continue;
         }
-      }
 
-      // 5. 경로 없으면 skip
-      if (!targetFolderId) {
-        skipped++;
-        skippedItems.push({
+        // 7. 휴지통 경로 계산 (trashMetadataId__{폴더명} 형식)
+        const trashPath = `.trash/${item.trashMetadataId}__${folder.name}`;
+
+        // 8. 큐에 복원 작업 추가 (NAS 폴더 동기화)
+        const syncEventId = uuidv4();
+        const jobData: NasFolderSyncJobData = {
+          folderId: folder.id,
+          action: 'restore',
+          syncEventId,
+          trashPath,
+          restorePath: originalPath,
           trashMetadataId: item.trashMetadataId,
-          fileName: file.name,
-          reason: 'PATH_NOT_FOUND',
-        });
-        continue;
+          originalParentId: targetParentId,
+        };
+        await this.jobQueuePort.addJob(NAS_FOLDER_SYNC_QUEUE_PREFIX, jobData);
+
+        syncEventIds.push(syncEventId);
+        queued++;
       }
-
-      // 6. 충돌 확인
-      const hasConflict = await this.fileRepository.existsByNameInFolder(
-        targetFolderId,
-        file.name,
-        file.mimeType,
-        undefined,
-        undefined,
-        file.createdAt,
-      );
-
-      if (hasConflict) {
-        skipped++;
-        skippedItems.push({
-          trashMetadataId: item.trashMetadataId,
-          fileName: file.name,
-          reason: 'CONFLICT',
-        });
-        continue;
-      }
-
-      // 7. 큐에 복원 작업 추가
-      const syncEventId = uuidv4();
-      const jobData: NasFileSyncJobData = {
-        fileId: file.id,
-        action: 'restore',
-        syncEventId,
-        trashMetadataId: item.trashMetadataId,
-        restoreTargetFolderId: targetFolderId,
-        userId,
-      };
-      await this.jobQueuePort.addJob(NAS_FILE_SYNC_QUEUE_PREFIX, jobData);
-
-      syncEventIds.push(syncEventId);
-      queued++;
     }
 
     return {
@@ -419,52 +583,96 @@ export class TrashService {
   }
 
   /**
-   * 파일 영구삭제
+   * 영구삭제 (파일/폴더 모두 지원)
    */
-  async purgeFile(trashMetadataId: string, userId: string): Promise<PurgeResponse> {
+  async purge(trashMetadataId: string, userId: string): Promise<PurgeResponse> {
     // 1. 휴지통 메타데이터 조회
     const trashMetadata = await this.trashRepository.findById(trashMetadataId);
-    if (!trashMetadata || !trashMetadata.isFile()) {
+    if (!trashMetadata) {
       throw new NotFoundException({
         code: 'TRASH_ITEM_NOT_FOUND',
         message: '휴지통 항목을 찾을 수 없습니다.',
       });
     }
 
-    // 2. 파일 조회
-    const file = await this.fileRepository.findById(trashMetadata.fileId!);
-    if (!file || !file.isTrashed()) {
-      throw new BadRequestException({
-        code: 'FILE_NOT_IN_TRASH',
-        message: '휴지통에 있는 파일만 영구 삭제할 수 있습니다.',
-      });
+    // 파일 영구삭제
+    if (trashMetadata.isFile()) {
+      const file = await this.fileRepository.findById(trashMetadata.fileId!);
+      if (!file || !file.isTrashed()) {
+        throw new BadRequestException({
+          code: 'FILE_NOT_IN_TRASH',
+          message: '휴지통에 있는 파일만 영구 삭제할 수 있습니다.',
+        });
+      }
+
+      // 큐에 영구삭제 작업 추가 (캐시/NAS 스토리지 삭제)
+      // 파일 상태는 NAS 작업 완료 후 worker에서 변경
+      const syncEventId = uuidv4();
+      const jobData: NasFileSyncJobData = {
+        fileId: file.id,
+        action: 'purge',
+        syncEventId,
+        trashMetadataId,
+        userId,
+      };
+      await this.jobQueuePort.addJob(NAS_FILE_SYNC_QUEUE_PREFIX, jobData);
+
+      return {
+        id: file.id,
+        name: file.name,
+        type: 'FILE',
+        purgedAt: new Date().toISOString(),
+      };
+    }
+    // 폴더 영구삭제
+    else if (trashMetadata.isFolder()) {
+      const folder = await this.folderRepository.findById(trashMetadata.folderId!);
+      if (!folder || !folder.isTrashed()) {
+        throw new BadRequestException({
+          code: 'FOLDER_NOT_IN_TRASH',
+          message: '휴지통에 있는 폴더만 영구 삭제할 수 있습니다.',
+        });
+      }
+
+      // 휴지통 경로 계산 (trashMetadataId__{폴더명} 형식)
+      const trashPath = `.trash/${trashMetadataId}__${folder.name}`;
+
+      // 큐에 영구삭제 작업 추가 (NAS 스토리지 삭제)
+      // 폴더 상태는 NAS 작업 완료 후 worker에서 변경
+      const syncEventId = uuidv4();
+      const jobData: NasFolderSyncJobData = {
+        folderId: folder.id,
+        action: 'purge',
+        syncEventId,
+        trashPath,
+        trashMetadataId,
+      };
+      await this.jobQueuePort.addJob(NAS_FOLDER_SYNC_QUEUE_PREFIX, jobData);
+
+      return {
+        id: folder.id,
+        name: folder.name,
+        type: 'FOLDER',
+        purgedAt: new Date().toISOString(),
+      };
     }
 
-    // 3. 파일 상태를 DELETED로 변경
-    file.permanentDelete();
-    await this.fileRepository.save(file);
-
-    // 4. 큐에 영구삭제 작업 추가 (캐시/NAS 스토리지 삭제)
-    const syncEventId = uuidv4();
-    const jobData: NasFileSyncJobData = {
-      fileId: file.id,
-      action: 'purge',
-      syncEventId,
-      trashMetadataId,
-      userId,
-    };
-    await this.jobQueuePort.addJob(NAS_FILE_SYNC_QUEUE_PREFIX, jobData);
-
-    return {
-      id: file.id,
-      name: file.name,
-      type: 'FILE',
-      purgedAt: new Date().toISOString(),
-    };
+    throw new BadRequestException({
+      code: 'INVALID_TRASH_ITEM',
+      message: '유효하지 않은 휴지통 항목입니다.',
+    });
   }
 
   /**
-   * 휴지통 비우기
+   * 파일 영구삭제 (하위 호환성 유지)
+   * @deprecated purge 메서드를 사용하세요
+   */
+  async purgeFile(trashMetadataId: string, userId: string): Promise<PurgeResponse> {
+    return this.purge(trashMetadataId, userId);
+  }
+
+  /**
+   * 휴지통 비우기 (파일/폴더 모두)
    */
   async emptyTrash(userId: string): Promise<EmptyTrashResponse> {
     const trashItems = await this.trashRepository.findAll();
@@ -474,11 +682,9 @@ export class TrashService {
 
     for (const item of trashItems) {
       try {
-        if (item.isFile()) {
-          await this.purgeFile(item.id, userId);
-          success++;
-        }
-        // 폴더는 휴지통에 가지 않으므로 파일만 처리
+        // 파일과 폴더 모두 purge 메서드로 처리
+        await this.purge(item.id, userId);
+        success++;
       } catch (error) {
         failed++;
         console.error(`휴지통 비우기 실패: ${item.id}`, error);

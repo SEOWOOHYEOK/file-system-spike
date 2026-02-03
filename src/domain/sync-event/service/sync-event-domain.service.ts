@@ -36,6 +36,13 @@ export class SyncEventDomainService {
     return this.repository.findByStatus(status);
   }
 
+  /**
+   * 여러 ID로 동기화 이벤트 조회
+   */
+  async 아이디목록조회(syncEventIds: string[]): Promise<SyncEventEntity[]> {
+    return this.repository.findByIds(syncEventIds);
+  }
+
   // ============================================
   // 명령 메서드 (Command Methods)
   // ============================================

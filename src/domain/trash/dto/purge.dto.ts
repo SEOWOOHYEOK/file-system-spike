@@ -8,6 +8,6 @@
 export interface PurgeResponse {
   id: string;
   name: string;
-  type: 'FILE'; // 폴더는 휴지통에 가지 않음
+  type: 'FILE' | 'FOLDER';
   purgedAt: string;
 }

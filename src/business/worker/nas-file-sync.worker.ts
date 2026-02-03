@@ -550,12 +550,15 @@ export class NasSyncWorker implements OnModuleInit {
 
       if (nasObject) {
         const trashPath = nasObject.objectKey;
-        const nasFileName = this.extractFileNameFromPath(trashPath);
+        // 휴지통 파일명에서 trashMetadataId 접두사 제거
+        // 예: {trashMetadataId}__20260203023315__333.txt → 20260203023315__333.txt
+        const trashFileName = this.extractFileNameFromPath(trashPath);
+        const originalNasFileName = this.extractOriginalFileName(trashFileName);
 
         const folderPath = targetFolder.path.endsWith('/')
           ? targetFolder.path.slice(0, -1)
           : targetFolder.path;
-        const restorePath = `${folderPath}/${nasFileName}`;
+        const restorePath = `${folderPath}/${originalNasFileName}`;
 
         await this.nasStorage.파일이동(trashPath, restorePath);
 
@@ -643,7 +646,11 @@ export class NasSyncWorker implements OnModuleInit {
         }
       }
 
-      // 4. 휴지통 메타데이터 삭제 (있는 경우)
+      // 4. 파일 상태를 DELETED로 변경 (NAS 작업 완료 후)
+      file.permanentDelete();
+      await this.fileRepository.save(file);
+
+      // 5. 휴지통 메타데이터 삭제 (있는 경우)
       if (trashMetadataId) {
         await this.trashRepository.delete(trashMetadataId);
       }
@@ -670,6 +677,22 @@ export class NasSyncWorker implements OnModuleInit {
       return filePath;
     }
     return filePath.substring(lastSlashIndex + 1);
+  }
+
+  /**
+   * 휴지통 파일명에서 trashMetadataId 접두사를 제거하여 원본 NAS 파일명 추출
+   * 
+   * 예: f60a60a5-fd18-4ca4-b56f-5e2a4cae74dd__20260203023315__333.txt
+   *     → 20260203023315__333.txt
+   */
+  private extractOriginalFileName(trashFileName: string): string {
+    const parts = trashFileName.split('__');
+    if (parts.length < 2) {
+      // '__' 구분자가 없으면 원본 그대로 반환
+      return trashFileName;
+    }
+    // 첫 번째 부분(trashMetadataId)을 제거하고 나머지를 '__'로 연결
+    return parts.slice(1).join('__');
   }
 
   /**
