@@ -41,46 +41,37 @@ import { ConflictException, NotFoundException, BadRequestException } from '@nest
 describe('FolderCommandService', () => {
   /**
    * 🎭 Mock 설정
-   * 📍 mockFolderRepository:
-   *   - 실제 동작: 폴더 CRUD 및 조회
+   * 📍 mockFolderDomainService:
+   *   - 실제 동작: 폴더 도메인 로직 (생성, 조회, 저장 등)
    *   - Mock 이유: DB 연결 없이 비즈니스 로직만 검증하기 위함
    *
-   * 📍 mockFolderStorageObjectRepository:
+   * 📍 mockFolderStorageService:
    *   - 실제 동작: NAS 스토리지 상태 관리
    *   - Mock 이유: 스토리지 동기화 상태 시뮬레이션
    */
-  const mockFolderRepository = {
-    findById: jest.fn(),
-    findByIdForUpdate: jest.fn(),
-    findOne: jest.fn(),
-    findByParentId: jest.fn(),
-    existsByNameInParent: jest.fn(),
-    save: jest.fn(),
-    updatePathByPrefix: jest.fn(),
-    getStatistics: jest.fn(),
+  const mockFolderDomainService = {
+    조회: jest.fn(),
+    잠금조회: jest.fn(),
+    루트폴더조회: jest.fn(),
+    중복확인: jest.fn(),
+    통계조회: jest.fn(),
+    생성: jest.fn(),
+    저장: jest.fn(),
+    경로일괄변경: jest.fn(),
   };
 
-  const mockFolderStorageObjectRepository = {
-    findByFolderId: jest.fn(),
-    findByFolderIdForUpdate: jest.fn(),
-    save: jest.fn(),
+  const mockFolderStorageService = {
+    조회: jest.fn(),
+    생성: jest.fn(),
+    저장: jest.fn(),
   };
 
-  const mockFileRepository = {
-    findByFolderId: jest.fn(),
-    countByFolderId: jest.fn(),
+  const mockTrashDomainService = {
+    폴더메타생성: jest.fn(),
   };
 
-  const mockFileStorageObjectRepository = {
-    findByFileId: jest.fn(),
-  };
-
-  const mockTrashRepository = {
-    save: jest.fn(),
-  };
-
-  const mockSyncEventRepository = {
-    save: jest.fn(),
+  const mockSyncEventDomainService = {
+    저장: jest.fn(),
   };
 
   const mockJobQueue = {
@@ -105,12 +96,10 @@ describe('FolderCommandService', () => {
     jest.clearAllMocks();
     service = new FolderCommandService(
       mockDataSource as any,
-      mockFolderRepository as any,
-      mockFolderStorageObjectRepository as any,
-      mockFileRepository as any,
-      mockFileStorageObjectRepository as any,
-      mockTrashRepository as any,
-      mockSyncEventRepository as any,
+      mockFolderDomainService as any,
+      mockFolderStorageService as any,
+      mockTrashDomainService as any,
+      mockSyncEventDomainService as any,
       mockJobQueue as any,
     );
   });
@@ -143,11 +132,11 @@ describe('FolderCommandService', () => {
         updatedAt: new Date(),
       });
 
-      mockFolderRepository.findById.mockResolvedValue(parentFolder);
-      mockFolderRepository.existsByNameInParent.mockResolvedValue(false);
-      mockFolderRepository.save.mockResolvedValue(undefined);
-      mockFolderStorageObjectRepository.save.mockResolvedValue(undefined);
-      mockSyncEventRepository.save.mockResolvedValue(undefined);
+      mockFolderDomainService.조회.mockResolvedValue(parentFolder);
+      mockFolderDomainService.중복확인.mockResolvedValue(false);
+      mockFolderDomainService.저장.mockResolvedValue(undefined);
+      mockFolderStorageService.저장.mockResolvedValue(undefined);
+      mockSyncEventDomainService.저장.mockResolvedValue(undefined);
       mockJobQueue.addJob.mockResolvedValue(undefined);
 
       // ═══════════════════════════════════════════════════════
@@ -169,9 +158,9 @@ describe('FolderCommandService', () => {
       expect(result.name).toBe('new-folder');
       expect(result.path).toBe('/new-folder');
       expect(result.storageStatus.nas).toBe('SYNCING');
-      expect(mockSyncEventRepository.save).toHaveBeenCalled();
+      expect(mockSyncEventDomainService.저장).toHaveBeenCalled();
       expect(mockJobQueue.addJob).toHaveBeenCalledWith(
-        'NAS_SYNC_MKDIR',
+        'NAS_FOLDER_SYNC',
         expect.objectContaining({
           path: '/new-folder',
           syncEventId: 'mock-uuid',
@@ -240,7 +229,7 @@ describe('FolderCommandService', () => {
       // ═══════════════════════════════════════════════════════
       // 📥 GIVEN (사전 조건 설정)
       // ═══════════════════════════════════════════════════════
-      mockFolderRepository.findById.mockResolvedValue(null);
+      mockFolderDomainService.조회.mockResolvedValue(null);
 
       const request = {
         name: 'new-folder',
@@ -276,8 +265,8 @@ describe('FolderCommandService', () => {
         updatedAt: new Date(),
       });
 
-      mockFolderRepository.findById.mockResolvedValue(parentFolder);
-      mockFolderRepository.existsByNameInParent.mockResolvedValue(true);
+      mockFolderDomainService.조회.mockResolvedValue(parentFolder);
+      mockFolderDomainService.중복확인.mockResolvedValue(true);
 
       const request = {
         name: 'existing-folder',
@@ -314,14 +303,14 @@ describe('FolderCommandService', () => {
         updatedAt: new Date(),
       });
 
-      mockFolderRepository.findById.mockResolvedValue(parentFolder);
+      mockFolderDomainService.조회.mockResolvedValue(parentFolder);
       // 첫 번째 호출: 기본 이름 존재함
       // 두 번째 호출: folder (1) 존재하지 않음
-      mockFolderRepository.existsByNameInParent
+      mockFolderDomainService.중복확인
         .mockResolvedValueOnce(true)
         .mockResolvedValueOnce(false);
-      mockFolderRepository.save.mockResolvedValue(undefined);
-      mockFolderStorageObjectRepository.save.mockResolvedValue(undefined);
+      mockFolderDomainService.저장.mockResolvedValue(undefined);
+      mockFolderStorageService.저장.mockResolvedValue(undefined);
       mockJobQueue.addJob.mockResolvedValue(undefined);
 
       const request = {
@@ -379,12 +368,12 @@ describe('FolderCommandService', () => {
         createdAt: new Date(),
       });
 
-      mockFolderRepository.findByIdForUpdate.mockResolvedValue(folder);
-      mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(storageObject);
-      mockFolderRepository.existsByNameInParent.mockResolvedValue(false);
-      mockFolderRepository.save.mockResolvedValue(undefined);
-      mockFolderRepository.updatePathByPrefix.mockResolvedValue(0);
-      mockFolderStorageObjectRepository.save.mockResolvedValue(undefined);
+      mockFolderDomainService.잠금조회.mockResolvedValue(folder);
+      mockFolderStorageService.조회.mockResolvedValue(storageObject);
+      mockFolderDomainService.중복확인.mockResolvedValue(false);
+      mockFolderDomainService.저장.mockResolvedValue(undefined);
+      mockFolderDomainService.경로일괄변경.mockResolvedValue(0);
+      mockFolderStorageService.저장.mockResolvedValue(undefined);
       mockJobQueue.addJob.mockResolvedValue(undefined);
 
       // ═══════════════════════════════════════════════════════
@@ -401,14 +390,14 @@ describe('FolderCommandService', () => {
       // ═══════════════════════════════════════════════════════
       expect(result.name).toBe('new-name');
       expect(result.path).toBe('/parent/new-name');
-      expect(mockFolderRepository.updatePathByPrefix).toHaveBeenCalledWith(
+      expect(mockFolderDomainService.경로일괄변경).toHaveBeenCalledWith(
         '/parent/old-name',
         '/parent/new-name',
         expect.anything(),
       );
-      expect(mockSyncEventRepository.save).toHaveBeenCalled();
+      expect(mockSyncEventDomainService.저장).toHaveBeenCalled();
       expect(mockJobQueue.addJob).toHaveBeenCalledWith(
-        'NAS_SYNC_RENAME_DIR',
+        'NAS_FOLDER_SYNC',
         expect.objectContaining({
           oldPath: '/parent/old-name',
           newPath: '/parent/new-name',
@@ -430,7 +419,7 @@ describe('FolderCommandService', () => {
       // ═══════════════════════════════════════════════════════
       // 📥 GIVEN (사전 조건 설정)
       // ═══════════════════════════════════════════════════════
-      mockFolderRepository.findByIdForUpdate.mockResolvedValue(null);
+      mockFolderDomainService.잠금조회.mockResolvedValue(null);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN & ✅ THEN
@@ -472,8 +461,8 @@ describe('FolderCommandService', () => {
         createdAt: new Date(),
       });
 
-      mockFolderRepository.findByIdForUpdate.mockResolvedValue(folder);
-      mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(syncingStorageObject);
+      mockFolderDomainService.잠금조회.mockResolvedValue(folder);
+      mockFolderStorageService.조회.mockResolvedValue(syncingStorageObject);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN & ✅ THEN
@@ -515,9 +504,9 @@ describe('FolderCommandService', () => {
         createdAt: new Date(),
       });
 
-      mockFolderRepository.findByIdForUpdate.mockResolvedValue(folder);
-      mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(storageObject);
-      mockFolderRepository.existsByNameInParent.mockResolvedValue(true);
+      mockFolderDomainService.잠금조회.mockResolvedValue(folder);
+      mockFolderStorageService.조회.mockResolvedValue(storageObject);
+      mockFolderDomainService.중복확인.mockResolvedValue(true);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN & ✅ THEN
@@ -579,13 +568,13 @@ describe('FolderCommandService', () => {
         createdAt: new Date(),
       });
 
-      mockFolderRepository.findById.mockResolvedValue(targetParent);
-      mockFolderRepository.findByIdForUpdate.mockResolvedValue(folder);
-      mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(storageObject);
-      mockFolderRepository.existsByNameInParent.mockResolvedValue(false);
-      mockFolderRepository.save.mockResolvedValue(undefined);
-      mockFolderRepository.updatePathByPrefix.mockResolvedValue(0);
-      mockFolderStorageObjectRepository.save.mockResolvedValue(undefined);
+      mockFolderDomainService.조회.mockResolvedValue(targetParent);
+      mockFolderDomainService.잠금조회.mockResolvedValue(folder);
+      mockFolderStorageService.조회.mockResolvedValue(storageObject);
+      mockFolderDomainService.중복확인.mockResolvedValue(false);
+      mockFolderDomainService.저장.mockResolvedValue(undefined);
+      mockFolderDomainService.경로일괄변경.mockResolvedValue(0);
+      mockFolderStorageService.저장.mockResolvedValue(undefined);
       mockJobQueue.addJob.mockResolvedValue(undefined);
 
       // ═══════════════════════════════════════════════════════
@@ -602,9 +591,9 @@ describe('FolderCommandService', () => {
       // ═══════════════════════════════════════════════════════
       expect(result.parentId).toBe('target-parent-id');
       expect(result.path).toBe('/target-parent/folder-to-move');
-      expect(mockSyncEventRepository.save).toHaveBeenCalled();
+      expect(mockSyncEventDomainService.저장).toHaveBeenCalled();
       expect(mockJobQueue.addJob).toHaveBeenCalledWith(
-        'NAS_SYNC_MOVE_DIR',
+        'NAS_FOLDER_SYNC',
         expect.objectContaining({
           oldPath: '/old-parent/folder-to-move',
           newPath: '/target-parent/folder-to-move',
@@ -626,7 +615,7 @@ describe('FolderCommandService', () => {
       // ═══════════════════════════════════════════════════════
       // 📥 GIVEN (사전 조건 설정)
       // ═══════════════════════════════════════════════════════
-      mockFolderRepository.findById.mockResolvedValue(null);
+      mockFolderDomainService.조회.mockResolvedValue(null);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN & ✅ THEN
@@ -661,8 +650,8 @@ describe('FolderCommandService', () => {
       });
 
       // 대상 폴더가 자기 자신
-      mockFolderRepository.findById.mockResolvedValue(folder);
-      mockFolderRepository.findByIdForUpdate.mockResolvedValue(folder);
+      mockFolderDomainService.조회.mockResolvedValue(folder);
+      mockFolderDomainService.잠금조회.mockResolvedValue(folder);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN & ✅ THEN
@@ -706,8 +695,8 @@ describe('FolderCommandService', () => {
         updatedAt: new Date(),
       });
 
-      mockFolderRepository.findById.mockResolvedValue(childFolder);
-      mockFolderRepository.findByIdForUpdate.mockResolvedValue(folder);
+      mockFolderDomainService.조회.mockResolvedValue(childFolder);
+      mockFolderDomainService.잠금조회.mockResolvedValue(folder);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN & ✅ THEN
@@ -759,10 +748,10 @@ describe('FolderCommandService', () => {
         createdAt: new Date(),
       });
 
-      mockFolderRepository.findById.mockResolvedValue(targetParent);
-      mockFolderRepository.findByIdForUpdate.mockResolvedValue(folder);
-      mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(storageObject);
-      mockFolderRepository.existsByNameInParent.mockResolvedValue(true); // 중복 존재
+      mockFolderDomainService.조회.mockResolvedValue(targetParent);
+      mockFolderDomainService.잠금조회.mockResolvedValue(folder);
+      mockFolderStorageService.조회.mockResolvedValue(storageObject);
+      mockFolderDomainService.중복확인.mockResolvedValue(true); // 중복 존재
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
@@ -822,20 +811,18 @@ describe('FolderCommandService', () => {
         createdAt: new Date(),
       });
 
-      mockFolderRepository.findByIdForUpdate.mockResolvedValue(folder);
-      mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(storageObject);
-      // 빈 폴더: 하위 폴더 0개, 파일 0개
-      mockFolderRepository.findByParentId.mockResolvedValue([]);
-      mockFileRepository.findByFolderId.mockResolvedValue([]);
-      mockFolderRepository.getStatistics.mockResolvedValue({
+      mockFolderDomainService.잠금조회.mockResolvedValue(folder);
+      mockFolderStorageService.조회.mockResolvedValue(storageObject);
+      // 빈 폴더: 하위 폴더 0개, 파일 0개 (통계조회로 확인)
+      mockFolderDomainService.통계조회.mockResolvedValue({
         fileCount: 0,
         folderCount: 0,
         totalSize: 0,
       });
-      mockFolderRepository.save.mockResolvedValue(undefined);
-      mockTrashRepository.save.mockResolvedValue(undefined);
-      mockFolderStorageObjectRepository.save.mockResolvedValue(undefined);
-      mockSyncEventRepository.save.mockResolvedValue(undefined);
+      mockFolderDomainService.저장.mockResolvedValue(undefined);
+      mockTrashDomainService.폴더메타생성.mockResolvedValue(undefined);
+      mockFolderStorageService.저장.mockResolvedValue(undefined);
+      mockSyncEventDomainService.저장.mockResolvedValue(undefined);
       mockJobQueue.addJob.mockResolvedValue(undefined);
 
       // ═══════════════════════════════════════════════════════
@@ -847,9 +834,9 @@ describe('FolderCommandService', () => {
       // ✅ THEN (결과 검증)
       // ═══════════════════════════════════════════════════════
       expect(result.state).toBe(FolderState.TRASHED);
-      expect(mockSyncEventRepository.save).toHaveBeenCalled();
+      expect(mockSyncEventDomainService.저장).toHaveBeenCalled();
       expect(mockJobQueue.addJob).toHaveBeenCalledWith(
-        'NAS_FOLDER_TO_TRASH',
+        'NAS_FOLDER_SYNC',
         expect.objectContaining({
           folderId: 'folder-1',
           syncEventId: 'mock-uuid',
@@ -870,7 +857,7 @@ describe('FolderCommandService', () => {
       // ═══════════════════════════════════════════════════════
       // 📥 GIVEN (사전 조건 설정)
       // ═══════════════════════════════════════════════════════
-      mockFolderRepository.findByIdForUpdate.mockResolvedValue(null);
+      mockFolderDomainService.잠금조회.mockResolvedValue(null);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN & ✅ THEN
@@ -903,7 +890,7 @@ describe('FolderCommandService', () => {
         updatedAt: new Date(),
       });
 
-      mockFolderRepository.findByIdForUpdate.mockResolvedValue(trashedFolder);
+      mockFolderDomainService.잠금조회.mockResolvedValue(trashedFolder);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN & ✅ THEN
@@ -958,12 +945,10 @@ describe('FolderCommandService', () => {
         updatedAt: new Date(),
       });
 
-      mockFolderRepository.findByIdForUpdate.mockResolvedValue(folder);
-      mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(storageObject);
-      // 하위 폴더 1개 존재
-      mockFolderRepository.findByParentId.mockResolvedValue([childFolder]);
-      mockFileRepository.findByFolderId.mockResolvedValue([]);
-      mockFolderRepository.getStatistics.mockResolvedValue({
+      mockFolderDomainService.잠금조회.mockResolvedValue(folder);
+      mockFolderStorageService.조회.mockResolvedValue(storageObject);
+      // 하위 폴더 1개 존재 (통계조회로 확인)
+      mockFolderDomainService.통계조회.mockResolvedValue({
         fileCount: 0,
         folderCount: 1, // 하위 폴더 존재
         totalSize: 0,
@@ -1017,12 +1002,10 @@ describe('FolderCommandService', () => {
         folderId: 'folder-1',
       };
 
-      mockFolderRepository.findByIdForUpdate.mockResolvedValue(folder);
-      mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(storageObject);
-      mockFolderRepository.findByParentId.mockResolvedValue([]);
-      // 파일 1개 존재
-      mockFileRepository.findByFolderId.mockResolvedValue([file]);
-      mockFolderRepository.getStatistics.mockResolvedValue({
+      mockFolderDomainService.잠금조회.mockResolvedValue(folder);
+      mockFolderStorageService.조회.mockResolvedValue(storageObject);
+      // 파일 1개 존재 (통계조회로 확인)
+      mockFolderDomainService.통계조회.mockResolvedValue({
         fileCount: 1, // 파일 존재
         folderCount: 0,
         totalSize: 1024,
@@ -1066,9 +1049,9 @@ describe('FolderCommandService', () => {
         createdAt: new Date(),
       });
 
-      mockFolderRepository.findByIdForUpdate.mockResolvedValue(folder);
-      mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(storageObject);
-      mockFolderRepository.getStatistics.mockResolvedValue({
+      mockFolderDomainService.잠금조회.mockResolvedValue(folder);
+      mockFolderStorageService.조회.mockResolvedValue(storageObject);
+      mockFolderDomainService.통계조회.mockResolvedValue({
         fileCount: 3, // 파일 3개
         folderCount: 2, // 하위 폴더 2개
         totalSize: 10240,
@@ -1120,10 +1103,10 @@ describe('FolderCommandService', () => {
         createdAt: new Date(),
       });
 
-      mockFolderRepository.findByIdForUpdate.mockResolvedValue(folder);
-      mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(syncingStorageObject);
+      mockFolderDomainService.잠금조회.mockResolvedValue(folder);
+      mockFolderStorageService.조회.mockResolvedValue(syncingStorageObject);
       // 빈 폴더로 설정
-      mockFolderRepository.getStatistics.mockResolvedValue({
+      mockFolderDomainService.통계조회.mockResolvedValue({
         fileCount: 0,
         folderCount: 0,
         totalSize: 0,
@@ -1172,11 +1155,11 @@ describe('FolderCommandService', () => {
         createdAt: new Date(),
       });
 
-      mockFolderRepository.findByIdForUpdate.mockResolvedValue(folder);
-      mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(storageObject);
-      mockFolderRepository.existsByNameInParent.mockResolvedValue(false);
+      mockFolderDomainService.잠금조회.mockResolvedValue(folder);
+      mockFolderStorageService.조회.mockResolvedValue(storageObject);
+      mockFolderDomainService.중복확인.mockResolvedValue(false);
       // save에서 에러 발생
-      mockFolderRepository.save.mockRejectedValue(new Error('DB Error'));
+      mockFolderDomainService.저장.mockRejectedValue(new Error('DB Error'));
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN & ✅ THEN

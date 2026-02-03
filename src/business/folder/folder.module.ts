@@ -5,6 +5,8 @@ import { QueueInfraModule } from '../../infra/queue/queue-infra.module';
 import { FolderDomainModule } from '../../domain/folder/folder.module';
 import { FileDomainModule } from '../../domain/file/file.module';
 import { TrashDomainModule } from '../../domain/trash/trash.module';
+import { SyncEventDomainModule } from '../../domain/sync-event/sync-event.module';
+import { StorageDomainModule } from '../../domain/storage/storage.module';
 import { AuditModule } from '../audit/audit.module';
 import { FolderQueryService } from './folder-query.service';
 import { FolderCommandService } from './folder-command.service';
@@ -19,9 +21,12 @@ import { SearchService } from './search.service';
     RepositoryModule,
     StorageInfraModule,
     QueueInfraModule,
+    // Domain modules
     FolderDomainModule,
     FileDomainModule,
     TrashDomainModule,
+    SyncEventDomainModule,
+    StorageDomainModule,
     AuditModule,
   ],
   providers: [FolderQueryService, FolderCommandService, SearchService],

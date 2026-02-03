@@ -10,27 +10,15 @@ import {
   FileListItemInFolder,
   SortBy,
   SortOrder,
-  FOLDER_REPOSITORY,
+  FolderDomainService,
 } from '../../domain/folder';
 import { createPaginationInfo } from '../../common/types/pagination';
-import type { IFolderRepository } from '../../domain/folder';
-import {
-  StorageType,
-  FILE_REPOSITORY,
-} from '../../domain/file';
-import type { IFileRepository } from '../../domain/file';
-import {
-  FILE_STORAGE_OBJECT_REPOSITORY,
-} from '../../domain/storage';
+import { StorageType } from '../../domain/file';
+import { FileDomainService } from '../../domain/file/service/file-domain.service';
+import { FolderNasStorageObjectDomainService } from '../../domain/storage/folder/service/folder-nas-storage-object-domain.service';
+import { FILE_STORAGE_OBJECT_REPOSITORY } from '../../domain/storage';
 import type { IFileStorageObjectRepository } from '../../domain/storage';
-import {
-  type IFolderStorageObjectRepository,
-} from '../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
 import { FileState } from '../../domain/file/type/file.type';
-
-import {
-  FOLDER_STORAGE_OBJECT_REPOSITORY,
-} from '../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
 
 /**
  * 폴더 조회 비즈니스 서비스
@@ -39,12 +27,9 @@ import {
 @Injectable()
 export class FolderQueryService {
   constructor(
-    @Inject(FOLDER_REPOSITORY)
-    private readonly folderRepository: IFolderRepository,
-    @Inject(FOLDER_STORAGE_OBJECT_REPOSITORY)
-    private readonly folderStorageObjectRepository: IFolderStorageObjectRepository,
-    @Inject(FILE_REPOSITORY)
-    private readonly fileRepository: IFileRepository,
+    private readonly folderDomainService: FolderDomainService,
+    private readonly folderStorageService: FolderNasStorageObjectDomainService,
+    private readonly fileDomainService: FileDomainService,
     @Inject(FILE_STORAGE_OBJECT_REPOSITORY)
     private readonly fileStorageObjectRepository: IFileStorageObjectRepository,
   ) {}
@@ -53,7 +38,7 @@ export class FolderQueryService {
    * 루트 폴더 정보 조회
    */
   async getRootFolderInfo(): Promise<FolderInfoResponse> {
-    const folder = await this.folderRepository.findOne({ parentId: null });
+    const folder = await this.folderDomainService.루트폴더조회();
     if (!folder) {
       throw new NotFoundException({
         code: 'ROOT_FOLDER_NOT_FOUND',
@@ -61,8 +46,8 @@ export class FolderQueryService {
       });
     }
 
-    const storageObject = await this.folderStorageObjectRepository.findByFolderId(folder.id);
-    const statistics = await this.folderRepository.getStatistics(folder.id);
+    const storageObject = await this.folderStorageService.조회(folder.id);
+    const statistics = await this.folderDomainService.통계조회(folder.id);
 
     return {
       id: folder.id,
@@ -85,7 +70,7 @@ export class FolderQueryService {
    * 폴더 정보 조회
    */
   async getFolderInfo(folderId: string): Promise<FolderInfoResponse> {
-    const folder = await this.folderRepository.findById(folderId);
+    const folder = await this.folderDomainService.조회(folderId);
     if (!folder) {
       throw new NotFoundException({
         code: 'FOLDER_NOT_FOUND',
@@ -93,8 +78,8 @@ export class FolderQueryService {
       });
     }
 
-    const storageObject = await this.folderStorageObjectRepository.findByFolderId(folderId);
-    const statistics = await this.folderRepository.getStatistics(folderId);
+    const storageObject = await this.folderStorageService.조회(folderId);
+    const statistics = await this.folderDomainService.통계조회(folderId);
 
     return {
       id: folder.id,
@@ -129,7 +114,7 @@ export class FolderQueryService {
     } = query;
 
     // 2. 폴더 존재 확인
-    const folder = await this.folderRepository.findById(folderId);
+    const folder = await this.folderDomainService.조회(folderId);
     if (!folder || folder.isTrashed()) {
       throw new NotFoundException({
         code: 'FOLDER_NOT_FOUND',
@@ -141,11 +126,11 @@ export class FolderQueryService {
     const breadcrumbs = await this.getBreadcrumbs(folderId);
 
     // 4. 하위 폴더 조회
-    const subFolders = await this.folderRepository.findByParentId(folderId, FolderState.ACTIVE);
+    const subFolders = await this.folderDomainService.하위폴더조회(folderId, FolderState.ACTIVE);
     const folderListItems = await this.mapToFolderListItems(subFolders);
 
     // 5. 파일 조회
-    const files = await this.fileRepository.findByFolderId(folderId, FileState.ACTIVE);
+    const files = await this.fileDomainService.폴더내파일조회(folderId, FileState.ACTIVE);
     const fileListItems = await this.mapToFileListItems(files);
 
     // 6. 정렬
@@ -181,7 +166,7 @@ export class FolderQueryService {
    * 브레드크럼 조회 (상위 폴더 체인)
    */
   async getBreadcrumbs(folderId: string): Promise<BreadcrumbItem[]> {
-    const ancestors = await this.folderRepository.findAncestors(folderId);
+    const ancestors = await this.folderDomainService.상위폴더체인조회(folderId);
     return ancestors.map(folder => ({
       id: folder.id,
       name: folder.name,
@@ -195,8 +180,8 @@ export class FolderQueryService {
     const items: FolderListItem[] = [];
 
     for (const folder of folders) {
-      const storageObject = await this.folderStorageObjectRepository.findByFolderId(folder.id);
-      const statistics = await this.folderRepository.getStatistics(folder.id);
+      const storageObject = await this.folderStorageService.조회(folder.id);
+      const statistics = await this.folderDomainService.통계조회(folder.id);
 
       items.push({
         id: folder.id,

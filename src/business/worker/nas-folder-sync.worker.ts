@@ -5,6 +5,9 @@ import {
   Job,
 } from '../../domain/queue/ports/job-queue.port';
 import {
+  DISTRIBUTED_LOCK_PORT,
+} from '../../domain/queue/ports/distributed-lock.port';
+import {
   NAS_STORAGE_PORT,
 } from '../../domain/storage/ports/nas-storage.port';
 import {
@@ -16,6 +19,7 @@ import { SYNC_EVENT_REPOSITORY } from '../../domain/sync-event/repositories/sync
 import { SyncEventEntity } from '../../domain/sync-event/entities/sync-event.entity';
 
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
+import type { IDistributedLockPort } from '../../domain/queue/ports/distributed-lock.port';
 import type { INasStoragePort } from '../../domain/storage/ports/nas-storage.port';
 import type { IFolderRepository } from '../../domain/folder';
 
@@ -29,36 +33,65 @@ import {
 } from '../../domain/storage/folder/repositories/folder-storage-object.repository.interface';
 
 /**
- * NAS 폴더 동기화 Job 데이터 타입들
- * syncEventId: SyncEvent 상태 추적용 (선택적, 하위 호환성)
+ * NAS 폴더 동기화 Action 타입
  */
-export interface NasSyncMkdirJobData {
+export type NasFolderAction = 'mkdir' | 'rename' | 'move' | 'trash';
+
+/**
+ * NAS 폴더 동기화 통합 Job 데이터 타입
+ * 
+ * 폴더 기반 큐 구조: NAS_FOLDER_SYNC:{folderId}
+ * - 같은 폴더에 대한 작업은 순차 처리 보장
+ * - 다른 폴더에 대한 작업은 병렬 처리 가능
+ */
+export interface NasFolderSyncJobData {
+  /** 폴더 ID */
   folderId: string;
-  path: string;
+  /** 동기화 액션 타입 */
+  action: NasFolderAction;
+  /** SyncEvent 상태 추적용 (선택적) */
   syncEventId?: string;
+
+  // === Action별 추가 데이터 ===
+
+  // mkdir 액션용
+  /** 생성할 폴더 경로 (mkdir) */
+  path?: string;
+
+  // rename/move 액션용
+  /** 기존 경로 (rename, move) */
+  oldPath?: string;
+  /** 새 경로 (rename, move) */
+  newPath?: string;
+
+  // move 액션용
+  /** 원본 부모 폴더 ID (move - 롤백용) */
+  originalParentId?: string | null;
+  /** 타겟 부모 폴더 ID (move) */
+  targetParentId?: string;
+
+  // trash 액션용
+  /** 현재 폴더 경로 (trash) */
+  currentPath?: string;
+  /** 휴지통 경로 (trash) */
+  trashPath?: string;
 }
 
-export interface NasSyncRenameDirJobData {
-  folderId: string;
-  oldPath: string;
-  newPath: string;
-  syncEventId?: string;
-}
+/**
+ * NAS 폴더 동기화 큐 설정
+ */
+export const NAS_FOLDER_SYNC_QUEUE_PREFIX = 'NAS_FOLDER_SYNC';
 
-export interface NasSyncMoveDirJobData {
-  folderId: string;
-  oldPath: string;
-  newPath: string;
-  originalParentId: string | null;
-  targetParentId: string;
-  syncEventId?: string;
-}
+/**
+ * 동시 처리 수 (concurrency)
+ * - 다른 폴더는 병렬 처리
+ * - 같은 폴더는 폴더별 락으로 순차 처리 보장
+ * - 환경에 따라 조정 가능 (기본값: 5)
+ */
+export const NAS_FOLDER_SYNC_CONCURRENCY = 5;
 
-export interface NasFolderToTrashJobData {
-  folderId: string;
-  currentPath: string;
-  trashPath: string;
-  syncEventId?: string;
+export function getNasFolderSyncQueueName(folderId: string): string {
+  return `${NAS_FOLDER_SYNC_QUEUE_PREFIX}:${folderId}`;
 }
 
 @Injectable()
@@ -68,6 +101,8 @@ export class NasFolderSyncWorker implements OnModuleInit {
   constructor(
     @Inject(JOB_QUEUE_PORT)
     private readonly jobQueue: IJobQueuePort,
+    @Inject(DISTRIBUTED_LOCK_PORT)
+    private readonly distributedLock: IDistributedLockPort,
     @Inject(NAS_STORAGE_PORT)
     private readonly nasStorage: INasStoragePort,
     @Inject(FOLDER_REPOSITORY)
@@ -119,27 +154,97 @@ export class NasFolderSyncWorker implements OnModuleInit {
   async onModuleInit() {
     this.logger.log('Registering NAS folder sync job processors...');
 
-    // 폴더 생성 동기화
-    await this.jobQueue.processJobs('NAS_SYNC_MKDIR', this.processMkdirJob.bind(this));
-
-    // 폴더 이름 변경 동기화
-    await this.jobQueue.processJobs('NAS_SYNC_RENAME_DIR', this.processRenameDirJob.bind(this));
-
-    // 폴더 이동 동기화
-    await this.jobQueue.processJobs('NAS_SYNC_MOVE_DIR', this.processMoveDirJob.bind(this));
-
-    // 폴더 휴지통 이동
-    await this.jobQueue.processJobs('NAS_FOLDER_TO_TRASH', this.processTrashJob.bind(this));
-
-    this.logger.log('All NAS folder sync job processors registered');
+    // 통합 큐: NAS_FOLDER_SYNC (폴더별 락으로 순차 처리 보장)
+    // concurrency: 다른 폴더는 병렬 처리, 같은 폴더는 락으로 순차 처리
+    const concurrency = NAS_FOLDER_SYNC_CONCURRENCY;
+    await this.jobQueue.processJobs(
+      NAS_FOLDER_SYNC_QUEUE_PREFIX,
+      this.processFolderSyncJob.bind(this),
+      { concurrency },
+    );
+    this.logger.log(`NAS_FOLDER_SYNC queue registered with concurrency: ${concurrency}`);
   }
 
   /**
-   * NAS 폴더 생성 작업 처리
+   * 통합 폴더 동기화 작업 처리
+   * 
+   * 폴더별 락을 사용하여 같은 폴더에 대한 작업은 순차 처리됩니다.
+   * 다른 폴더에 대한 작업은 병렬로 처리됩니다.
    */
-  private async processMkdirJob(job: Job<NasSyncMkdirJobData>): Promise<void> {
-    const { folderId, path, syncEventId } = job.data;
-    this.logger.debug(`Processing NAS mkdir for folder: ${folderId}, path: ${path}`);
+  private async processFolderSyncJob(job: Job<NasFolderSyncJobData>): Promise<void> {
+    const { folderId, action } = job.data;
+    const lockKey = `folder-sync:${folderId}`;
+    const jobStartTime = Date.now();
+    const shortFolderId = folderId.substring(0, 8);
+
+    // 🔵 작업 시작 로그 (병렬 처리 확인용)
+    this.logger.log(
+      `[PARALLEL] 📥 JOB_START | folder=${shortFolderId}... | action=${action} | jobId=${job.id}`,
+    );
+
+    // 🟡 락 획득 시도 로그
+    this.logger.log(
+      `[PARALLEL] 🔐 LOCK_WAIT | folder=${shortFolderId}... | action=${action} | lockKey=${lockKey}`,
+    );
+
+    const lockWaitStart = Date.now();
+
+    // 폴더별 락 획득 후 작업 실행 (같은 폴더는 순차 처리)
+    await this.distributedLock.withLock(
+      lockKey,
+      async () => {
+        const lockWaitTime = Date.now() - lockWaitStart;
+
+        // 🟢 락 획득 성공 로그
+        this.logger.log(
+          `[PARALLEL] 🔓 LOCK_ACQUIRED | folder=${shortFolderId}... | action=${action} | waitTime=${lockWaitTime}ms`,
+        );
+
+        const actionStartTime = Date.now();
+
+        switch (action) {
+          case 'mkdir':
+            await this.handleMkdir(job.data);
+            break;
+          case 'rename':
+            await this.handleRename(job.data);
+            break;
+          case 'move':
+            await this.handleMove(job.data);
+            break;
+          case 'trash':
+            await this.handleTrash(job.data);
+            break;
+          default:
+            this.logger.warn(`Unknown action: ${action}`);
+        }
+
+        const actionDuration = Date.now() - actionStartTime;
+        const totalDuration = Date.now() - jobStartTime;
+
+        // ✅ 작업 완료 로그
+        this.logger.log(
+          `[PARALLEL] ✅ JOB_DONE | folder=${shortFolderId}... | action=${action} | ` +
+          `actionTime=${actionDuration}ms | totalTime=${totalDuration}ms | lockWait=${lockWaitTime}ms`,
+        );
+      },
+      { ttl: 60000, waitTimeout: 30000 }, // 60초 TTL, 30초 대기
+    );
+  }
+
+  // ===== 통합 Job용 핸들러 메서드들 =====
+
+  /**
+   * Mkdir 액션 처리
+   */
+  private async handleMkdir(data: NasFolderSyncJobData): Promise<void> {
+    const { folderId, path, syncEventId } = data;
+    this.logger.debug(`Handling mkdir for folder: ${folderId}, path: ${path}`);
+
+    if (!path) {
+      this.logger.error(`Missing path for mkdir: ${folderId}`);
+      return;
+    }
 
     // SyncEvent 조회 (선택적)
     const syncEvent = await this.getSyncEvent(syncEventId);
@@ -184,11 +289,16 @@ export class NasFolderSyncWorker implements OnModuleInit {
   }
 
   /**
-   * NAS 폴더 이름 변경 작업 처리
+   * Rename 액션 처리
    */
-  private async processRenameDirJob(job: Job<NasSyncRenameDirJobData>): Promise<void> {
-    const { folderId, oldPath, newPath, syncEventId } = job.data;
-    this.logger.debug(`Processing NAS rename for folder: ${folderId}, ${oldPath} -> ${newPath}`);
+  private async handleRename(data: NasFolderSyncJobData): Promise<void> {
+    const { folderId, oldPath, newPath, syncEventId } = data;
+    this.logger.debug(`Handling rename for folder: ${folderId}, ${oldPath} -> ${newPath}`);
+
+    if (!oldPath || !newPath) {
+      this.logger.error(`Missing oldPath or newPath for rename: ${folderId}`);
+      return;
+    }
 
     // SyncEvent 조회 (선택적)
     const syncEvent = await this.getSyncEvent(syncEventId);
@@ -236,13 +346,18 @@ export class NasFolderSyncWorker implements OnModuleInit {
   }
 
   /**
-   * NAS 폴더 이동 작업 처리
+   * Move 액션 처리
    * 
    * 2차 방어: 대상 폴더가 삭제된 경우 원복 처리
    */
-  private async processMoveDirJob(job: Job<NasSyncMoveDirJobData>): Promise<void> {
-    const { folderId, oldPath, newPath, originalParentId, targetParentId, syncEventId } = job.data;
-    this.logger.debug(`Processing NAS move for folder: ${folderId}, ${oldPath} -> ${newPath}`);
+  private async handleMove(data: NasFolderSyncJobData): Promise<void> {
+    const { folderId, oldPath, newPath, originalParentId, targetParentId, syncEventId } = data;
+    this.logger.debug(`Handling move for folder: ${folderId}, ${oldPath} -> ${newPath}`);
+
+    if (!oldPath || !newPath || !targetParentId) {
+      this.logger.error(`Missing required fields for move: ${folderId}`);
+      return;
+    }
 
     // SyncEvent 조회 (선택적)
     const syncEvent = await this.getSyncEvent(syncEventId);
@@ -319,11 +434,16 @@ export class NasFolderSyncWorker implements OnModuleInit {
   }
 
   /**
-   * NAS 폴더 휴지통 이동 작업 처리
+   * Trash 액션 처리
    */
-  private async processTrashJob(job: Job<NasFolderToTrashJobData>): Promise<void> {
-    const { folderId, currentPath, trashPath, syncEventId } = job.data;
-    this.logger.debug(`Processing NAS trash move for folder: ${folderId}, ${currentPath} -> ${trashPath}`);
+  private async handleTrash(data: NasFolderSyncJobData): Promise<void> {
+    const { folderId, currentPath, trashPath, syncEventId } = data;
+    this.logger.debug(`Handling trash for folder: ${folderId}, ${currentPath} -> ${trashPath}`);
+
+    if (!currentPath || !trashPath) {
+      this.logger.error(`Missing currentPath or trashPath for trash: ${folderId}`);
+      return;
+    }
 
     // SyncEvent 조회 (선택적)
     const syncEvent = await this.getSyncEvent(syncEventId);

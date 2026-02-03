@@ -28,35 +28,36 @@ import {
   SortOrder,
 } from '../../domain/folder';
 import { FolderStorageObjectEntity, FolderAvailabilityStatus } from '../../domain/storage/folder/entity/folder-storage-object.entity';
-import { FileState, StorageType } from '../../domain/file';
+import { StorageType } from '../../domain/file';
+import { FileState } from '../../domain/file/type/file.type';
 import { FileStorageObjectEntity, AvailabilityStatus } from '../../domain/storage/file/entity/file-storage-object.entity';
 import { NotFoundException } from '@nestjs/common';
 
 describe('FolderQueryService', () => {
   /**
    * 🎭 Mock 설정
-   * 📍 mockFolderRepository:
-   *   - 실제 동작: 폴더 조회
+   * 📍 mockFolderDomainService:
+   *   - 실제 동작: 폴더 도메인 로직 (조회, 통계 등)
    *   - Mock 이유: DB 연결 없이 비즈니스 로직만 검증하기 위함
    *
-   * 📍 mockFileRepository:
+   * 📍 mockFileDomainService:
    *   - 실제 동작: 파일 조회
    *   - Mock 이유: 폴더 내용 조회 시 파일 목록 시뮬레이션
    */
-  const mockFolderRepository = {
-    findById: jest.fn(),
-    findOne: jest.fn(),
-    findByParentId: jest.fn(),
-    findAncestors: jest.fn(),
-    getStatistics: jest.fn(),
+  const mockFolderDomainService = {
+    조회: jest.fn(),
+    루트폴더조회: jest.fn(),
+    하위폴더조회: jest.fn(),
+    상위폴더체인조회: jest.fn(),
+    통계조회: jest.fn(),
   };
 
-  const mockFolderStorageObjectRepository = {
-    findByFolderId: jest.fn(),
+  const mockFolderStorageService = {
+    조회: jest.fn(),
   };
 
-  const mockFileRepository = {
-    findByFolderId: jest.fn(),
+  const mockFileDomainService = {
+    폴더내파일조회: jest.fn(),
   };
 
   const mockFileStorageObjectRepository = {
@@ -68,9 +69,9 @@ describe('FolderQueryService', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     service = new FolderQueryService(
-      mockFolderRepository as any,
-      mockFolderStorageObjectRepository as any,
-      mockFileRepository as any,
+      mockFolderDomainService as any,
+      mockFolderStorageService as any,
+      mockFileDomainService as any,
       mockFileStorageObjectRepository as any,
     );
   });
@@ -118,9 +119,9 @@ describe('FolderQueryService', () => {
         totalSize: 1024000,
       };
 
-      mockFolderRepository.findById.mockResolvedValue(folder);
-      mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(storageObject);
-      mockFolderRepository.getStatistics.mockResolvedValue(statistics);
+      mockFolderDomainService.조회.mockResolvedValue(folder);
+      mockFolderStorageService.조회.mockResolvedValue(storageObject);
+      mockFolderDomainService.통계조회.mockResolvedValue(statistics);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
@@ -160,7 +161,7 @@ describe('FolderQueryService', () => {
       // ═══════════════════════════════════════════════════════
       // 📥 GIVEN (사전 조건 설정)
       // ═══════════════════════════════════════════════════════
-      mockFolderRepository.findById.mockResolvedValue(null);
+      mockFolderDomainService.조회.mockResolvedValue(null);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN & ✅ THEN
@@ -193,9 +194,9 @@ describe('FolderQueryService', () => {
         updatedAt: new Date(),
       });
 
-      mockFolderRepository.findById.mockResolvedValue(folder);
-      mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(null);
-      mockFolderRepository.getStatistics.mockResolvedValue({
+      mockFolderDomainService.조회.mockResolvedValue(folder);
+      mockFolderStorageService.조회.mockResolvedValue(null);
+      mockFolderDomainService.통계조회.mockResolvedValue({
         fileCount: 0,
         folderCount: 0,
         totalSize: 0,
@@ -309,16 +310,16 @@ describe('FolderQueryService', () => {
         }),
       ];
 
-      mockFolderRepository.findById.mockResolvedValue(folder);
-      mockFolderRepository.findAncestors.mockResolvedValue(ancestors);
-      mockFolderRepository.findByParentId.mockResolvedValue(subFolders);
-      mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(folderStorageObject);
-      mockFolderRepository.getStatistics.mockResolvedValue({
+      mockFolderDomainService.조회.mockResolvedValue(folder);
+      mockFolderDomainService.상위폴더체인조회.mockResolvedValue(ancestors);
+      mockFolderDomainService.하위폴더조회.mockResolvedValue(subFolders);
+      mockFolderStorageService.조회.mockResolvedValue(folderStorageObject);
+      mockFolderDomainService.통계조회.mockResolvedValue({
         fileCount: 0,
         folderCount: 0,
         totalSize: 0,
       });
-      mockFileRepository.findByFolderId.mockResolvedValue(files);
+      mockFileDomainService.폴더내파일조회.mockResolvedValue(files);
       mockFileStorageObjectRepository.findByFileId.mockResolvedValue(fileStorageObjects);
 
       // ═══════════════════════════════════════════════════════
@@ -360,7 +361,7 @@ describe('FolderQueryService', () => {
         updatedAt: new Date(),
       });
 
-      mockFolderRepository.findById.mockResolvedValue(trashedFolder);
+      mockFolderDomainService.조회.mockResolvedValue(trashedFolder);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN & ✅ THEN
@@ -404,16 +405,16 @@ describe('FolderQueryService', () => {
         }),
       );
 
-      mockFolderRepository.findById.mockResolvedValue(folder);
-      mockFolderRepository.findAncestors.mockResolvedValue([]);
-      mockFolderRepository.findByParentId.mockResolvedValue(subFolders);
-      mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(null);
-      mockFolderRepository.getStatistics.mockResolvedValue({
+      mockFolderDomainService.조회.mockResolvedValue(folder);
+      mockFolderDomainService.상위폴더체인조회.mockResolvedValue([]);
+      mockFolderDomainService.하위폴더조회.mockResolvedValue(subFolders);
+      mockFolderStorageService.조회.mockResolvedValue(null);
+      mockFolderDomainService.통계조회.mockResolvedValue({
         fileCount: 0,
         folderCount: 0,
         totalSize: 0,
       });
-      mockFileRepository.findByFolderId.mockResolvedValue([]);
+      mockFileDomainService.폴더내파일조회.mockResolvedValue([]);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
@@ -488,16 +489,16 @@ describe('FolderQueryService', () => {
         }),
       ];
 
-      mockFolderRepository.findById.mockResolvedValue(folder);
-      mockFolderRepository.findAncestors.mockResolvedValue([]);
-      mockFolderRepository.findByParentId.mockResolvedValue(subFolders);
-      mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(null);
-      mockFolderRepository.getStatistics.mockResolvedValue({
+      mockFolderDomainService.조회.mockResolvedValue(folder);
+      mockFolderDomainService.상위폴더체인조회.mockResolvedValue([]);
+      mockFolderDomainService.하위폴더조회.mockResolvedValue(subFolders);
+      mockFolderStorageService.조회.mockResolvedValue(null);
+      mockFolderDomainService.통계조회.mockResolvedValue({
         fileCount: 0,
         folderCount: 0,
         totalSize: 0,
       });
-      mockFileRepository.findByFolderId.mockResolvedValue([]);
+      mockFileDomainService.폴더내파일조회.mockResolvedValue([]);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
@@ -564,7 +565,7 @@ describe('FolderQueryService', () => {
         }),
       ];
 
-      mockFolderRepository.findAncestors.mockResolvedValue(ancestors);
+      mockFolderDomainService.상위폴더체인조회.mockResolvedValue(ancestors);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
@@ -617,9 +618,9 @@ describe('FolderQueryService', () => {
         createdAt: new Date(),
       });
 
-      mockFolderRepository.findOne.mockResolvedValue(rootFolder);
-      mockFolderStorageObjectRepository.findByFolderId.mockResolvedValue(storageObject);
-      mockFolderRepository.getStatistics.mockResolvedValue({
+      mockFolderDomainService.루트폴더조회.mockResolvedValue(rootFolder);
+      mockFolderStorageService.조회.mockResolvedValue(storageObject);
+      mockFolderDomainService.통계조회.mockResolvedValue({
         fileCount: 100,
         folderCount: 20,
         totalSize: 1024000000,
@@ -653,7 +654,7 @@ describe('FolderQueryService', () => {
       // ═══════════════════════════════════════════════════════
       // 📥 GIVEN (사전 조건 설정)
       // ═══════════════════════════════════════════════════════
-      mockFolderRepository.findOne.mockResolvedValue(null);
+      mockFolderDomainService.루트폴더조회.mockResolvedValue(null);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN & ✅ THEN

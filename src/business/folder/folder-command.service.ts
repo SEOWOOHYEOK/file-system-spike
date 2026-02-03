@@ -4,7 +4,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { buildPath } from '../../common/utils';
 import {
   FolderEntity,
-  FolderStorageObjectEntity,
   FolderState,
   FolderAvailabilityStatus,
   CreateFolderRequest,
@@ -15,37 +14,16 @@ import {
   MoveFolderResponse,
   FolderConflictStrategy,
   MoveFolderConflictStrategy,
-  FOLDER_REPOSITORY,
+  FolderDomainService,
 } from '../../domain/folder';
 import type { TransactionOptions } from '../../domain/folder/repositories/folder.repository.interface';
-import {
-  FILE_REPOSITORY,
-} from '../../domain/file';
-import {
-  FILE_STORAGE_OBJECT_REPOSITORY,
-  FOLDER_STORAGE_OBJECT_REPOSITORY,
-} from '../../domain/storage';
-import {
-  TrashMetadataFactory,
-  TRASH_REPOSITORY,
-} from '../../domain/trash';
-import {
-  SyncEventFactory,
-  SYNC_EVENT_REPOSITORY,
-} from '../../domain/sync-event';
+import { SyncEventFactory } from '../../domain/sync-event';
+import { SyncEventDomainService } from '../../domain/sync-event/service/sync-event-domain.service';
+import { TrashDomainService } from '../../domain/trash/service/trash-domain.service';
+import { FolderNasStorageObjectDomainService } from '../../domain/storage/folder/service/folder-nas-storage-object-domain.service';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
+import { NAS_FOLDER_SYNC_QUEUE_PREFIX } from '../worker/nas-folder-sync.worker';
 
-import type {
-  IFileRepository,
-} from '../../domain/file';
-import type {
-  IFolderRepository,
-} from '../../domain/folder';
-import type { IFileStorageObjectRepository, IFolderStorageObjectRepository } from '../../domain/storage';
-import type {
-  ITrashRepository,
-} from '../../domain/trash';
-import type { ISyncEventRepository } from '../../domain/sync-event';
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 
 
@@ -60,18 +38,10 @@ export class FolderCommandService implements OnModuleInit {
 
   constructor(
     private readonly dataSource: DataSource,
-    @Inject(FOLDER_REPOSITORY)
-    private readonly folderRepository: IFolderRepository,
-    @Inject(FOLDER_STORAGE_OBJECT_REPOSITORY)
-    private readonly folderStorageObjectRepository: IFolderStorageObjectRepository,
-    @Inject(FILE_REPOSITORY)
-    private readonly fileRepository: IFileRepository,
-    @Inject(FILE_STORAGE_OBJECT_REPOSITORY)
-    private readonly fileStorageObjectRepository: IFileStorageObjectRepository,
-    @Inject(TRASH_REPOSITORY)
-    private readonly trashRepository: ITrashRepository,
-    @Inject(SYNC_EVENT_REPOSITORY)
-    private readonly syncEventRepository: ISyncEventRepository,
+    private readonly folderDomainService: FolderDomainService,
+    private readonly folderStorageService: FolderNasStorageObjectDomainService,
+    private readonly trashDomainService: TrashDomainService,
+    private readonly syncEventDomainService: SyncEventDomainService,
     @Inject(JOB_QUEUE_PORT)
     private readonly jobQueue: IJobQueuePort,
   ) { }
@@ -85,35 +55,28 @@ export class FolderCommandService implements OnModuleInit {
    */
   private async ensureRootFolderExists(): Promise<void> {
     try {
-      const rootFolder = await this.folderRepository.findOne({ parentId: null });
+      const rootFolder = await this.folderDomainService.루트폴더조회();
       
       if (!rootFolder) {
         this.logger.log('Root folder not found. Creating root folder...');
         
         const folderId = uuidv4();
-        const folder = new FolderEntity({
+        
+        // FolderDomainService를 통해 루트 폴더 생성
+        await this.folderDomainService.생성({
           id: folderId,
           name: '',
           parentId: null,
           path: '/',
-          state: FolderState.ACTIVE,
-          createdAt: new Date(),
-          updatedAt: new Date(),
         });
-
-        await this.folderRepository.save(folder);
         
-        // NAS 스토리지 객체 생성 (루트 폴더용)
-        const storageObject = new FolderStorageObjectEntity({
+        // FolderNasStorageObjectDomainService를 통해 스토리지 객체 생성
+        await this.folderStorageService.생성({
           id: uuidv4(),
           folderId,
-          storageType: 'NAS',
           objectKey: '/',
           availabilityStatus: FolderAvailabilityStatus.AVAILABLE, // 루트는 이미 존재한다고 가정
-          createdAt: new Date(),
         });
-
-        await this.folderStorageObjectRepository.save(storageObject);
         
         this.logger.log(`Root folder created with ID: ${folderId}`);
       } else {
@@ -136,7 +99,7 @@ export class FolderCommandService implements OnModuleInit {
     // 2. 상위 폴더 존재 확인
     let parentPath = '';
     if (parentId) {
-      const parent = await this.folderRepository.findById(parentId);
+      const parent = await this.folderDomainService.조회(parentId);
       if (!parent || !parent.isActive()) {
         throw new NotFoundException({
           code: 'PARENT_FOLDER_NOT_FOUND',
@@ -153,29 +116,20 @@ export class FolderCommandService implements OnModuleInit {
     const folderId = uuidv4();
     const folderPath = buildPath(parentPath, finalName);
 
-    const folder = new FolderEntity({
+    const folder = await this.folderDomainService.생성({
       id: folderId,
       name: finalName,
       parentId,
       path: folderPath,
-      state: FolderState.ACTIVE,
-      createdAt: new Date(),
-      updatedAt: new Date(),
     });
-
-    await this.folderRepository.save(folder);
 
     // 5. NAS 스토리지 객체 생성
-    const storageObject = new FolderStorageObjectEntity({
+    await this.folderStorageService.생성({
       id: uuidv4(),
       folderId,
-      storageType: 'NAS',
       objectKey: folderPath,
       availabilityStatus: FolderAvailabilityStatus.SYNCING,
-      createdAt: new Date(),
     });
-
-    await this.folderStorageObjectRepository.save(storageObject);
 
     // 6. sync_events 생성
     const syncEventId = uuidv4();
@@ -186,15 +140,16 @@ export class FolderCommandService implements OnModuleInit {
       folderName: finalName,
       parentId,
     });
-    await this.syncEventRepository.save(syncEvent);
+    await this.syncEventDomainService.저장(syncEvent);
 
-    // 7. Bull 큐 등록 (NAS_SYNC_MKDIR)
-    await this.jobQueue.addJob('NAS_SYNC_MKDIR', {
+    // 7. Bull 큐 등록 (NAS_FOLDER_SYNC - mkdir)
+    await this.jobQueue.addJob(NAS_FOLDER_SYNC_QUEUE_PREFIX, {
       folderId,
+      action: 'mkdir',
       path: folderPath,
       syncEventId,
     });
-    this.logger.debug(`NAS_SYNC_MKDIR job added for folder: ${folderId}`);
+    this.logger.debug(`NAS_FOLDER_SYNC (mkdir) job added for folder: ${folderId}`);
 
     return {
       id: folder.id,
@@ -226,7 +181,7 @@ export class FolderCommandService implements OnModuleInit {
       const txOptions: TransactionOptions = { queryRunner };
 
       // 2. 폴더 조회 (락)
-      const folder = await this.folderRepository.findByIdForUpdate(folderId, txOptions);
+      const folder = await this.folderDomainService.잠금조회(folderId, txOptions);
       if (!folder) {
         throw new NotFoundException({
           code: 'FOLDER_NOT_FOUND',
@@ -261,17 +216,17 @@ export class FolderCommandService implements OnModuleInit {
 
       // 6. 폴더명 업데이트
       folder.rename(finalName, newPath);
-      await this.folderRepository.save(folder, txOptions);
+      await this.folderDomainService.저장(folder, txOptions);
 
       // 7. 하위 폴더 경로 일괄 업데이트
-      await this.folderRepository.updatePathByPrefix(oldPath, newPath, txOptions);
+      await this.folderDomainService.경로일괄변경(oldPath, newPath, txOptions);
 
       // 8. NAS 스토리지 상태 업데이트
-      const storageObject = await this.folderStorageObjectRepository.findByFolderId(folderId, txOptions);
+      const storageObject = await this.folderStorageService.조회(folderId, txOptions);
       if (storageObject) {
         storageObject.updateStatus(FolderAvailabilityStatus.SYNCING);
         storageObject.updateObjectKey(newPath);
-        await this.folderStorageObjectRepository.save(storageObject, txOptions);
+        await this.folderStorageService.저장(storageObject, txOptions);
       }
 
       // 트랜잭션 커밋
@@ -287,16 +242,17 @@ export class FolderCommandService implements OnModuleInit {
         oldName: folder.name,
         newName: finalName,
       });
-      await this.syncEventRepository.save(syncEvent);
+      await this.syncEventDomainService.저장(syncEvent);
 
-      // 10. Bull 큐 등록 (NAS_SYNC_RENAME_DIR) - 커밋 후 등록
-      await this.jobQueue.addJob('NAS_SYNC_RENAME_DIR', {
+      // 10. Bull 큐 등록 (NAS_FOLDER_SYNC - rename) - 커밋 후 등록
+      await this.jobQueue.addJob(NAS_FOLDER_SYNC_QUEUE_PREFIX, {
         folderId,
+        action: 'rename',
         oldPath,
         newPath,
         syncEventId,
       });
-      this.logger.debug(`NAS_SYNC_RENAME_DIR job added for folder: ${folderId}`);
+      this.logger.debug(`NAS_FOLDER_SYNC (rename) job added for folder: ${folderId}`);
 
       return {
         id: folder.id,
@@ -322,7 +278,7 @@ export class FolderCommandService implements OnModuleInit {
     const { targetParentId, conflictStrategy = MoveFolderConflictStrategy.ERROR } = request;
 
     // 1. 대상 상위 폴더 존재 확인
-    const targetParent = await this.folderRepository.findById(targetParentId);
+    const targetParent = await this.folderDomainService.조회(targetParentId);
     if (!targetParent || !targetParent.isActive()) {
       throw new NotFoundException({
         code: 'TARGET_FOLDER_NOT_FOUND',
@@ -339,7 +295,7 @@ export class FolderCommandService implements OnModuleInit {
       const txOptions: TransactionOptions = { queryRunner };
 
       // 2. 폴더 조회 (락)
-      const folder = await this.folderRepository.findByIdForUpdate(folderId, txOptions);
+      const folder = await this.folderDomainService.잠금조회(folderId, txOptions);
       if (!folder) {
         throw new NotFoundException({
           code: 'FOLDER_NOT_FOUND',
@@ -398,17 +354,17 @@ export class FolderCommandService implements OnModuleInit {
       if (finalName !== folder.name) {
         folder.rename(finalName, newPath);
       }
-      await this.folderRepository.save(folder, txOptions);
+      await this.folderDomainService.저장(folder, txOptions);
 
       // 8. 하위 폴더 경로 일괄 업데이트
-      await this.folderRepository.updatePathByPrefix(oldPath, newPath, txOptions);
+      await this.folderDomainService.경로일괄변경(oldPath, newPath, txOptions);
 
       // 9. NAS 상태 업데이트
-      const storageObject = await this.folderStorageObjectRepository.findByFolderId(folderId, txOptions);
+      const storageObject = await this.folderStorageService.조회(folderId, txOptions);
       if (storageObject) {
         storageObject.updateStatus(FolderAvailabilityStatus.SYNCING);
         storageObject.updateObjectKey(newPath);
-        await this.folderStorageObjectRepository.save(storageObject, txOptions);
+        await this.folderStorageService.저장(storageObject, txOptions);
       }
 
       // 트랜잭션 커밋
@@ -424,18 +380,19 @@ export class FolderCommandService implements OnModuleInit {
         originalParentId,
         targetParentId,
       });
-      await this.syncEventRepository.save(syncEvent);
+      await this.syncEventDomainService.저장(syncEvent);
 
-      // 11. Bull 큐 등록 (NAS_SYNC_MOVE_DIR) - 커밋 후 등록
-      await this.jobQueue.addJob('NAS_SYNC_MOVE_DIR', {
+      // 11. Bull 큐 등록 (NAS_FOLDER_SYNC - move) - 커밋 후 등록
+      await this.jobQueue.addJob(NAS_FOLDER_SYNC_QUEUE_PREFIX, {
         folderId,
+        action: 'move',
         oldPath,
         newPath,
         originalParentId,
         targetParentId,
         syncEventId,
       });
-      this.logger.debug(`NAS_SYNC_MOVE_DIR job added for folder: ${folderId}`);
+      this.logger.debug(`NAS_FOLDER_SYNC (move) job added for folder: ${folderId}`);
 
       return {
         id: folder.id,
@@ -473,7 +430,7 @@ export class FolderCommandService implements OnModuleInit {
       const txOptions: TransactionOptions = { queryRunner };
 
       // 1. 폴더 조회 (락)
-      const folder = await this.folderRepository.findByIdForUpdate(folderId, txOptions);
+      const folder = await this.folderDomainService.잠금조회(folderId, txOptions);
       if (!folder) {
         throw new NotFoundException({
           code: 'FOLDER_NOT_FOUND',
@@ -497,7 +454,7 @@ export class FolderCommandService implements OnModuleInit {
 
       // 2. 빈 폴더 체크 (정책: 빈 폴더만 삭제 가능)
       // FLOW 4-1 step 3: check child contents (folders + files)
-      const statistics = await this.folderRepository.getStatistics(folderId);
+      const statistics = await this.folderDomainService.통계조회(folderId);
       const childFolderCount = statistics.folderCount;
       const childFileCount = statistics.fileCount;
 
@@ -518,24 +475,23 @@ export class FolderCommandService implements OnModuleInit {
 
       // 4. 폴더 상태 변경 (TRASHED)
       folder.delete();
-      await this.folderRepository.save(folder, txOptions);
+      await this.folderDomainService.저장(folder, txOptions);
 
       // 5. trash_metadata 생성 (최상위 폴더만)
-      const trashMetadata = TrashMetadataFactory.createForFolder({
+      await this.trashDomainService.폴더메타생성({
         id: uuidv4(),
         folderId: folder.id,
         originalPath: folder.path,
         originalParentId: folder.parentId,
         deletedBy: userId,
       });
-      await this.trashRepository.save(trashMetadata);
 
       // 6. NAS 상태 업데이트
-      const storageObject = await this.folderStorageObjectRepository.findByFolderId(folderId, txOptions);
+      const storageObject = await this.folderStorageService.조회(folderId, txOptions);
       const trashPath = `.trash/${folder.id}_${folder.name}`;
       if (storageObject) {
         storageObject.updateStatus(FolderAvailabilityStatus.SYNCING);
-        await this.folderStorageObjectRepository.save(storageObject, txOptions);
+        await this.folderStorageService.저장(storageObject, txOptions);
       }
 
       // 트랜잭션 커밋
@@ -551,16 +507,17 @@ export class FolderCommandService implements OnModuleInit {
         originalPath: currentPath,
         originalParentId: folder.parentId,
       });
-      await this.syncEventRepository.save(syncEvent);
+      await this.syncEventDomainService.저장(syncEvent);
 
-      // 8. Bull 큐 등록 (NAS_FOLDER_TO_TRASH) - 커밋 후 등록
-      await this.jobQueue.addJob('NAS_FOLDER_TO_TRASH', {
+      // 8. Bull 큐 등록 (NAS_FOLDER_SYNC - trash) - 커밋 후 등록
+      await this.jobQueue.addJob(NAS_FOLDER_SYNC_QUEUE_PREFIX, {
         folderId,
+        action: 'trash',
         currentPath,
         trashPath,
         syncEventId,
       });
-      this.logger.debug(`NAS_FOLDER_TO_TRASH job added for folder: ${folderId}`);
+      this.logger.debug(`NAS_FOLDER_SYNC (trash) job added for folder: ${folderId}`);
 
       return {
         id: folder.id,
@@ -609,8 +566,8 @@ export class FolderCommandService implements OnModuleInit {
    * NAS 동기화 상태 체크
    */
   private async checkNasSyncStatus(folderId: string, options?: TransactionOptions): Promise<void> {
-    // 상태 체크만 하므로 lock 불필요 - findByFolderId 사용
-    const storageObject = await this.folderStorageObjectRepository.findByFolderId(folderId, options);
+    // 상태 체크만 하므로 lock 불필요 - 조회 사용
+    const storageObject = await this.folderStorageService.조회(folderId, options);
 
     if (storageObject && storageObject.isSyncing()) {
       throw new ConflictException({
@@ -628,7 +585,7 @@ export class FolderCommandService implements OnModuleInit {
     name: string,
     conflictStrategy: FolderConflictStrategy,
   ): Promise<string> {
-    const exists = await this.folderRepository.existsByNameInParent(parentId, name);
+    const exists = await this.folderDomainService.중복확인(parentId, name);
 
     if (!exists) {
       return name;
@@ -653,7 +610,7 @@ export class FolderCommandService implements OnModuleInit {
     excludeFolderId: string,
     conflictStrategy: FolderConflictStrategy,
   ): Promise<string> {
-    const exists = await this.folderRepository.existsByNameInParent(parentId, name, excludeFolderId);
+    const exists = await this.folderDomainService.중복확인(parentId, name, excludeFolderId);
 
     if (!exists) {
       return name;
@@ -677,7 +634,7 @@ export class FolderCommandService implements OnModuleInit {
     folderName: string,
     conflictStrategy: MoveFolderConflictStrategy,
   ): Promise<{ finalName: string; skipped: boolean }> {
-    const exists = await this.folderRepository.existsByNameInParent(targetParentId, folderName);
+    const exists = await this.folderDomainService.중복확인(targetParentId, folderName);
 
     if (!exists) {
       return { finalName: folderName, skipped: false };
@@ -713,7 +670,7 @@ export class FolderCommandService implements OnModuleInit {
     let counter = 1;
     let newName = `${baseName} (${counter})`;
 
-    while (await this.folderRepository.existsByNameInParent(parentId, newName, excludeFolderId)) {
+    while (await this.folderDomainService.중복확인(parentId, newName, excludeFolderId)) {
       counter++;
       newName = `${baseName} (${counter})`;
     }
