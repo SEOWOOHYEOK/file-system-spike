@@ -30,8 +30,7 @@ import {
 import {
   AddFavoriteSwagger,
   RemoveFavoriteSwagger,
-  GetFavoritesSwagger,
-  GetRecentActivitiesSwagger,
+  GetFavoritesSwagger
 } from './userFavorite.swagger';
 import { RequestContext } from '../../../common/context/request-context';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
@@ -122,51 +121,4 @@ export class UserFavoriteController {
     }));
   }
 
-  // ========== 최근 활동 API ==========
-
-  /**
-   * GET /v1/users/favorites/recent-activities - 최근 파일 활동 조회
-   */
-  @Get('recent-activities')
-  @GetRecentActivitiesSwagger()
-  async getRecentActivities(
-    @Req() req: any,
-    @Query() query: RecentActivitiesQueryDto,
-  ): Promise<RecentActivitiesResponseDto> {
-    const userId = RequestContext.getUserId() || 'unknown';
-    const limit = query.limit || 20;
-
-    // 액션 필터 파싱
-    let actions: AuditActionEnum[] | undefined;
-    if (query.actions) {
-      actions = query.actions
-        .split(',')
-        .map((a) => a.trim())
-        .filter((a) => Object.values(AuditActionEnum).includes(a as AuditActionEnum))
-        .map((a) => a as AuditActionEnum);
-    }
-
-    // AuditLogService를 통해 사용자별 최근 로그 조회
-    const logs = await this.auditLogService.findByUserId(userId, limit);
-
-    // 액션 필터 적용
-    const filtered = actions
-      ? logs.filter((log) => actions!.includes(log.action))
-      : logs;
-
-    return {
-      userId,
-      activities: filtered.map((log) => ({
-        action: log.action,
-        actionCategory: log.actionCategory,
-        targetType: log.targetType,
-        targetId: log.targetId,
-        targetName: log.targetName || '',
-        targetPath: log.targetPath,
-        result: log.result,
-        createdAt: log.createdAt,
-      })),
-      total: filtered.length,
-    };
-  }
 }
