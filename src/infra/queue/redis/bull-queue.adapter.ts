@@ -18,7 +18,8 @@ import type {
   JobStatus,
   QueueStats,
   ProcessorOptions,
-} from '../../../domain/queue/ports/job-queue.port';
+  JobsByStatusResult,
+} from '../job-queue.port';
 
 @Injectable()
 export class BullQueueAdapter implements IJobQueuePort, OnModuleDestroy {
@@ -174,6 +175,7 @@ export class BullQueueAdapter implements IJobQueuePort, OnModuleDestroy {
     const queue = this.getOrCreateQueue(queueName);
     return queue.getFailedCount();
   }
+  
 
   async cleanQueue(queueName: string): Promise<void> {
     const queue = this.getOrCreateQueue(queueName);
@@ -208,6 +210,48 @@ export class BullQueueAdapter implements IJobQueuePort, OnModuleDestroy {
 
   getAllQueueNames(): string[] {
     return Array.from(this.queues.keys());
+  }
+
+  async getJobsByStatus<T = JobData>(queueName: string, limit: number = 50): Promise<JobsByStatusResult<T>> {
+    const queue = this.getOrCreateQueue(queueName);
+
+    const [waiting, active, delayed, failed, completed] = await Promise.all([
+      queue.getWaiting(0, limit - 1),
+      queue.getActive(0, limit - 1),
+      queue.getDelayed(0, limit - 1),
+      queue.getFailed(0, limit - 1),
+      queue.getCompleted(0, limit - 1),
+    ]);
+
+    const mapJob = (bullJob: BullJob<T>): Job<T> => ({
+      id: bullJob.id?.toString() || '',
+      queueName,
+      data: bullJob.data,
+      status: this.mapBullStatus(bullJob),
+      createdAt: new Date(bullJob.timestamp),
+      processedAt: bullJob.processedOn ? new Date(bullJob.processedOn) : undefined,
+      completedAt: bullJob.finishedOn ? new Date(bullJob.finishedOn) : undefined,
+      failedReason: bullJob.failedReason,
+      attemptsMade: bullJob.attemptsMade,
+    });
+
+    return {
+      waiting: waiting.map(mapJob),
+      active: active.map(mapJob),
+      delayed: delayed.map(mapJob),
+      failed: failed.map(mapJob),
+      completed: completed.map(mapJob),
+    };
+  }
+
+  private mapBullStatus(bullJob: BullJob): JobStatus {
+    if (bullJob.finishedOn && !bullJob.failedReason) return 'completed';
+    if (bullJob.failedReason) return 'failed';
+    if (bullJob.processedOn) return 'active';
+    // Bull Job의 opts.delay 속성 확인
+    const delay = (bullJob.opts as { delay?: number })?.delay;
+    if (delay && delay > 0) return 'delayed';
+    return 'waiting';
   }
 
   /**

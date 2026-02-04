@@ -149,6 +149,66 @@ export class AdminService {
   }
 
   /**
+   * 동기화 대시보드 조회
+   * 현재 진행 중인 동기화 작업 현황을 한눈에 볼 수 있습니다.
+   */
+  async getSyncDashboard(): Promise<SyncDashboardResponseDto> {
+    // SyncEvent 상태별 요약
+    const syncEventsResult = await this.syncEventStatsService.findSyncEvents({
+      hours: 24,
+      limit: 1000,
+      offset: 0,
+    });
+
+    // 현재 진행 중인 작업 (PENDING, QUEUED, PROCESSING, RETRYING)
+    const activeEvents = syncEventsResult.events.filter(
+      (e) => ['PENDING', 'QUEUED', 'PROCESSING', 'RETRYING'].includes(e.status),
+    );
+
+    // 최근 실패한 작업 (최대 10개)
+    const recentFailed = syncEventsResult.events
+      .filter((e) => e.status === 'FAILED')
+      .slice(0, 10);
+
+    return {
+      summary: {
+        pending: syncEventsResult.summary.pending,
+        queued: syncEventsResult.events.filter((e) => e.status === 'QUEUED').length,
+        processing: syncEventsResult.summary.processing,
+        retrying: syncEventsResult.events.filter((e) => e.status === 'RETRYING').length,
+        done: syncEventsResult.summary.done,
+        failed: syncEventsResult.summary.failed,
+        stuckCount: syncEventsResult.summary.stuckPending + syncEventsResult.summary.stuckProcessing,
+      },
+      activeJobs: activeEvents.map((e) => ({
+        syncEventId: e.id,
+        eventType: e.eventType,
+        targetType: e.targetType,
+        fileId: e.fileId,
+        folderId: e.folderId,
+        status: e.status,
+        retryCount: e.retryCount,
+        maxRetries: e.maxRetries,
+        isStuck: e.isStuck,
+        ageHours: Math.round(e.ageHours * 100) / 100,
+        createdAt: e.createdAt,
+        errorMessage: e.errorMessage,
+      })),
+      recentFailed: recentFailed.map((e) => ({
+        syncEventId: e.id,
+        eventType: e.eventType,
+        targetType: e.targetType,
+        fileId: e.fileId,
+        folderId: e.folderId,
+        errorMessage: e.errorMessage,
+        retryCount: e.retryCount,
+        createdAt: e.createdAt,
+      })),
+      checkedAt: new Date(),
+    };
+  }
+
+  /**
    * 바이트를 읽기 쉬운 형식으로 변환
    */
   private formatBytes(bytes: number): string {
@@ -160,4 +220,44 @@ export class AdminService {
 
     return `${(bytes / Math.pow(k, i)).toFixed(2)} ${units[i]}`;
   }
+}
+
+/**
+ * 동기화 대시보드 응답 DTO
+ */
+export interface SyncDashboardResponseDto {
+  summary: {
+    pending: number;
+    queued: number;
+    processing: number;
+    retrying: number;
+    done: number;
+    failed: number;
+    stuckCount: number;
+  };
+  activeJobs: {
+    syncEventId: string;
+    eventType: string;
+    targetType: string;
+    fileId?: string;
+    folderId?: string;
+    status: string;
+    retryCount: number;
+    maxRetries: number;
+    isStuck: boolean;
+    ageHours: number;
+    createdAt: Date;
+    errorMessage?: string;
+  }[];
+  recentFailed: {
+    syncEventId: string;
+    eventType: string;
+    targetType: string;
+    fileId?: string;
+    folderId?: string;
+    errorMessage?: string;
+    retryCount: number;
+    createdAt: Date;
+  }[];
+  checkedAt: Date;
 }

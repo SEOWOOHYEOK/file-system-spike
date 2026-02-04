@@ -20,8 +20,13 @@ export interface TransactionOptions {
  */
 export interface FindSessionOptions {
   folderId?: string;
-  status?: UploadSessionStatus;
+  /** 단일 상태 또는 여러 상태 */
+  status?: UploadSessionStatus | UploadSessionStatus[];
   fileId?: string;
+  /** 이 시간 이전에 업데이트된 세션만 조회 */
+  updatedBefore?: Date;
+  /** 최대 조회 수 */
+  limit?: number;
 }
 
 /**

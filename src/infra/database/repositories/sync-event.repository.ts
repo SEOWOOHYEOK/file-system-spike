@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In } from 'typeorm';
+import { Repository, In, LessThan } from 'typeorm';
 import { SyncEventOrmEntity } from '../entities/sync-event.orm-entity';
 import {
   ISyncEventRepository,
@@ -9,6 +9,7 @@ import {
   SyncEventType,
   SyncEventTargetType,
 } from '../../../domain/sync-event';
+import type { TransactionOptions } from '../../../domain/sync-event/repositories/sync-event.repository.interface';
 
 /**
  * 동기화 이벤트 Repository 구현체
@@ -20,48 +21,74 @@ export class SyncEventRepository implements ISyncEventRepository {
     private readonly repository: Repository<SyncEventOrmEntity>,
   ) {}
 
-  async findById(id: string): Promise<SyncEventEntity | null> {
-    const entity = await this.repository.findOne({ where: { id } });
+  /**
+   * 트랜잭션 옵션에 따른 Repository 반환
+   */
+  private getRepository(options?: TransactionOptions): Repository<SyncEventOrmEntity> {
+    if (options?.queryRunner) {
+      return options.queryRunner.manager.getRepository(SyncEventOrmEntity);
+    }
+    return this.repository;
+  }
+
+  async findById(id: string, options?: TransactionOptions): Promise<SyncEventEntity | null> {
+    const repo = this.getRepository(options);
+    const entity = await repo.findOne({ where: { id } });
     return entity ? this.toDomain(entity) : null;
   }
 
-  async findByIds(ids: string[]): Promise<SyncEventEntity[]> {
+  async findByIds(ids: string[], options?: TransactionOptions): Promise<SyncEventEntity[]> {
     if (ids.length === 0) {
       return [];
     }
-    const entities = await this.repository.find({
+    const repo = this.getRepository(options);
+    const entities = await repo.find({
       where: { id: In(ids) },
     });
     return entities.map((e) => this.toDomain(e));
   }
 
-  async findByFileId(fileId: string): Promise<SyncEventEntity[]> {
-    const entities = await this.repository.find({
+  async findByFileId(fileId: string, options?: TransactionOptions): Promise<SyncEventEntity[]> {
+    const repo = this.getRepository(options);
+    const entities = await repo.find({
       where: { fileId },
       order: { createdAt: 'DESC' },
     });
     return entities.map((e) => this.toDomain(e));
   }
 
-  async findByStatus(status: SyncEventStatus): Promise<SyncEventEntity[]> {
-    const entities = await this.repository.find({
+  async findByFolderId(folderId: string, options?: TransactionOptions): Promise<SyncEventEntity[]> {
+    const repo = this.getRepository(options);
+    const entities = await repo.find({
+      where: { folderId },
+      order: { createdAt: 'DESC' },
+    });
+    return entities.map((e) => this.toDomain(e));
+  }
+
+  async findByStatus(status: SyncEventStatus, options?: TransactionOptions): Promise<SyncEventEntity[]> {
+    const repo = this.getRepository(options);
+    const entities = await repo.find({
       where: { status },
       order: { createdAt: 'ASC' },
     });
     return entities.map((e) => this.toDomain(e));
   }
 
-  async save(entity: SyncEventEntity): Promise<SyncEventEntity> {
+  async save(entity: SyncEventEntity, options?: TransactionOptions): Promise<SyncEventEntity> {
+    const repo = this.getRepository(options);
     const ormEntity = this.toOrm(entity);
-    const saved = await this.repository.save(ormEntity);
+    const saved = await repo.save(ormEntity);
     return this.toDomain(saved);
   }
 
-  async delete(id: string): Promise<void> {
-    await this.repository.delete(id);
+  async delete(id: string, options?: TransactionOptions): Promise<void> {
+    const repo = this.getRepository(options);
+    await repo.delete(id);
   }
 
-  async updateStatus(id: string, status: SyncEventStatus, errorMessage?: string): Promise<void> {
+  async updateStatus(id: string, status: SyncEventStatus, errorMessage?: string, options?: TransactionOptions): Promise<void> {
+    const repo = this.getRepository(options);
     const updateData: Partial<SyncEventOrmEntity> = {
       status,
       updatedAt: new Date(),
@@ -75,7 +102,20 @@ export class SyncEventRepository implements ISyncEventRepository {
       updateData.processedAt = new Date();
     }
 
-    await this.repository.update(id, updateData);
+    await repo.update(id, updateData);
+  }
+
+  async findStalePending(olderThanMs: number, options?: TransactionOptions): Promise<SyncEventEntity[]> {
+    const repo = this.getRepository(options);
+    const cutoffTime = new Date(Date.now() - olderThanMs);
+    const entities = await repo.find({
+      where: {
+        status: SyncEventStatus.PENDING,
+        createdAt: LessThan(cutoffTime),
+      },
+      order: { createdAt: 'ASC' },
+    });
+    return entities.map((e) => this.toDomain(e));
   }
 
   /**

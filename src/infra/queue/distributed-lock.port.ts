@@ -15,6 +15,8 @@ export interface LockResult {
   acquired: boolean;
   /** 락 해제 함수 (획득 성공 시) */
   release: () => Promise<void>;
+  /** 락 TTL 연장 함수 (획득 성공 시) - 작업이 오래 걸릴 때 사용 */
+  extend: (ttlMs?: number) => Promise<boolean>;
 }
 
 /**
@@ -27,6 +29,10 @@ export interface LockOptions {
   waitTimeout?: number;
   /** 재시도 간격 (ms) */
   retryInterval?: number;
+  /** 자동 갱신 활성화 - 작업 중 자동으로 락 TTL 연장 */
+  autoRenew?: boolean;
+  /** 자동 갱신 주기 (ms) - 기본값: TTL의 50% */
+  renewIntervalMs?: number;
 }
 
 /**

@@ -21,13 +21,22 @@ import {
   FolderDomainService,
 } from '../../domain/folder';
 import { FileDomainService } from '../../domain/file/service/file-domain.service';
-import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
-import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
-import { NAS_FILE_SYNC_QUEUE_PREFIX, NAS_SYNC_MAX_ATTEMPTS, NAS_SYNC_BACKOFF_MS, NasFileSyncJobData } from '../worker/nas-file-sync.worker';
-import { NAS_FOLDER_SYNC_QUEUE_PREFIX, NAS_FOLDER_SYNC_MAX_ATTEMPTS, NAS_FOLDER_SYNC_BACKOFF_MS, NasFolderSyncJobData } from '../worker/nas-folder-sync.worker';
+import { JOB_QUEUE_PORT } from '../../infra/queue/job-queue.port';
+import type { IJobQueuePort } from '../../infra/queue/job-queue.port';
+import {
+  NAS_FILE_SYNC_QUEUE_PREFIX,
+  NasFileRestoreJobData,
+  NasFilePurgeJobData,
+} from '../worker/nas-file-sync.worker';
+import {
+  NAS_FOLDER_SYNC_QUEUE_PREFIX,
+  NasFolderRestoreJobData,
+  NasFolderPurgeJobData,
+} from '../worker/nas-folder-sync.worker';
 import {
   SyncEventStatus,
   SyncEventDomainService,
+  SyncEventFactory,
 } from '../../domain/sync-event';
 
 /**
@@ -383,9 +392,20 @@ export class TrashService {
           continue;
         }
 
-        // 7. 큐에 복원 작업 추가
+        // 7. SyncEvent 생성 (PENDING)
         const syncEventId = uuidv4();
-        const jobData: NasFileSyncJobData = {
+        const syncEvent = SyncEventFactory.createFileRestoreEvent({
+          id: syncEventId,
+          fileId: file.id,
+          sourcePath: trashMetadata.originalPath,
+          targetFolderId,
+          trashMetadataId: item.trashMetadataId,
+          userId,
+        });
+        await this.syncEventDomainService.저장(syncEvent);
+
+        // 8. 큐에 복원 작업 추가
+        const jobData: NasFileRestoreJobData = {
           fileId: file.id,
           action: 'restore',
           syncEventId,
@@ -393,17 +413,18 @@ export class TrashService {
           restoreTargetFolderId: targetFolderId,
           userId,
         };
-        await this.jobQueuePort.addJob(NAS_FILE_SYNC_QUEUE_PREFIX, jobData, {
-          attempts: NAS_SYNC_MAX_ATTEMPTS,
-          backoff: NAS_SYNC_BACKOFF_MS,
-        });
+        await this.jobQueuePort.addJob<NasFileRestoreJobData>(NAS_FILE_SYNC_QUEUE_PREFIX, jobData);
+
+        // 9. 큐 등록 성공 시 QUEUED로 변경
+        syncEvent.markQueued();
+        await this.syncEventDomainService.저장(syncEvent);
 
         syncEventIds.push(syncEventId);
         queued++;
       }
-      
+
       // 폴더 복구
-       if (trashMetadata.isFolder()) {
+      if (trashMetadata.isFolder()) {
         // 3. 폴더 조회
         const folder = await this.folderDomainService.조회(trashMetadata.folderId!);
         if (!folder || !folder.isTrashed()) {
@@ -465,9 +486,22 @@ export class TrashService {
         // 7. 휴지통 경로 계산 (trashMetadataId__{폴더명} 형식)
         const trashPath = `.trash/${item.trashMetadataId}__${folder.name}`;
 
-        // 8. 큐에 복원 작업 추가 (NAS 폴더 동기화)
+        // 8. SyncEvent 생성 (PENDING)
         const syncEventId = uuidv4();
-        const jobData: NasFolderSyncJobData = {
+        const syncEvent = SyncEventFactory.createFolderRestoreEvent({
+          id: syncEventId,
+          folderId: folder.id,
+          sourcePath: trashPath,
+          targetPath: originalPath,
+          trashPath,
+          restorePath: originalPath,
+          trashMetadataId: item.trashMetadataId,
+          originalParentId: targetParentId,
+        });
+        await this.syncEventDomainService.저장(syncEvent);
+
+        // 9. 큐에 복원 작업 추가 (NAS 폴더 동기화)
+        const jobData: NasFolderRestoreJobData = {
           folderId: folder.id,
           action: 'restore',
           syncEventId,
@@ -476,10 +510,11 @@ export class TrashService {
           trashMetadataId: item.trashMetadataId,
           originalParentId: targetParentId,
         };
-        await this.jobQueuePort.addJob(NAS_FOLDER_SYNC_QUEUE_PREFIX, jobData, {
-          attempts: NAS_FOLDER_SYNC_MAX_ATTEMPTS,
-          backoff: NAS_FOLDER_SYNC_BACKOFF_MS,
-        });
+        await this.jobQueuePort.addJob<NasFolderRestoreJobData>(NAS_FOLDER_SYNC_QUEUE_PREFIX, jobData);
+
+        // 10. 큐 등록 성공 시 QUEUED로 변경
+        syncEvent.markQueued();
+        await this.syncEventDomainService.저장(syncEvent);
 
         syncEventIds.push(syncEventId);
         queued++;
@@ -582,20 +617,27 @@ export class TrashService {
         });
       }
 
+
+      //파일 영구삭제 상태로 변경
+      file.permanentDelete();
+      await this.fileDomainService.저장(file);
+
+      //TRASH_METADATA 삭제
+      await this.trashDomainService.삭제(trashMetadataId);
+
       // 큐에 영구삭제 작업 추가 (캐시/NAS 스토리지 삭제)
       // 파일 상태는 NAS 작업 완료 후 worker에서 변경
       const syncEventId = uuidv4();
-      const jobData: NasFileSyncJobData = {
+      const jobData: NasFilePurgeJobData = {
         fileId: file.id,
         action: 'purge',
         syncEventId,
         trashMetadataId,
         userId,
       };
-      await this.jobQueuePort.addJob(NAS_FILE_SYNC_QUEUE_PREFIX, jobData, {
-        attempts: NAS_SYNC_MAX_ATTEMPTS,
-        backoff: NAS_SYNC_BACKOFF_MS,
-      });
+
+
+      await this.jobQueuePort.addJob<NasFilePurgeJobData>(NAS_FILE_SYNC_QUEUE_PREFIX, jobData);
 
       return {
         id: file.id,
@@ -604,8 +646,10 @@ export class TrashService {
         purgedAt: new Date().toISOString(),
       };
     }
+
+
     // 폴더 영구삭제
-    else if (trashMetadata.isFolder()) {
+    if (trashMetadata.isFolder()) {
       const folder = await this.folderDomainService.조회(trashMetadata.folderId!);
       if (!folder || !folder.isTrashed()) {
         throw new BadRequestException({
@@ -617,20 +661,27 @@ export class TrashService {
       // 휴지통 경로 계산 (trashMetadataId__{폴더명} 형식)
       const trashPath = `.trash/${trashMetadataId}__${folder.name}`;
 
+
       // 큐에 영구삭제 작업 추가 (NAS 스토리지 삭제)
       // 폴더 상태는 NAS 작업 완료 후 worker에서 변경
       const syncEventId = uuidv4();
-      const jobData: NasFolderSyncJobData = {
+      const jobData: NasFolderPurgeJobData = {
         folderId: folder.id,
         action: 'purge',
         syncEventId,
         trashPath,
         trashMetadataId,
       };
-      await this.jobQueuePort.addJob(NAS_FOLDER_SYNC_QUEUE_PREFIX, jobData, {
-        attempts: NAS_FOLDER_SYNC_MAX_ATTEMPTS,
-        backoff: NAS_FOLDER_SYNC_BACKOFF_MS,
-      });
+
+
+      //폴더 영구삭제 상태로 변경
+      folder.permanentDelete();
+      await this.folderDomainService.저장(folder);
+
+      //TRASH_METADATA 삭제
+      await this.trashDomainService.삭제(trashMetadataId);
+
+      await this.jobQueuePort.addJob<NasFolderPurgeJobData>(NAS_FOLDER_SYNC_QUEUE_PREFIX, jobData);
 
       return {
         id: folder.id,

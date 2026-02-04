@@ -3,10 +3,10 @@ import { buildPath } from '../../common/utils';
 import {
   JOB_QUEUE_PORT,
   Job,
-} from '../../domain/queue/ports/job-queue.port';
+} from '../../infra/queue/job-queue.port';
 import {
   DISTRIBUTED_LOCK_PORT,
-} from '../../domain/queue/ports/distributed-lock.port';
+} from '../../infra/queue/distributed-lock.port';
 import {
   NAS_STORAGE_PORT,
 } from '../../domain/storage/ports/nas-storage.port';
@@ -19,8 +19,8 @@ import { SYNC_EVENT_REPOSITORY } from '../../domain/sync-event/repositories/sync
 import { SyncEventEntity } from '../../domain/sync-event/entities/sync-event.entity';
 import { TRASH_REPOSITORY } from '../../domain/trash/repositories/trash.repository.interface';
 
-import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
-import type { IDistributedLockPort } from '../../domain/queue/ports/distributed-lock.port';
+import type { IJobQueuePort } from '../../infra/queue/job-queue.port';
+import type { IDistributedLockPort } from '../../infra/queue/distributed-lock.port';
 import type { INasStoragePort } from '../../domain/storage/ports/nas-storage.port';
 import type { IFolderRepository } from '../../domain/folder';
 
@@ -39,51 +39,110 @@ import {
  */
 export type NasFolderAction = 'mkdir' | 'rename' | 'move' | 'trash' | 'restore' | 'purge';
 
+// ===== 액션별 Job 데이터 인터페이스 =====
+
 /**
- * NAS 폴더 동기화 통합 Job 데이터 타입
+ * 기본 Job 데이터 (모든 액션 공통)
+ */
+interface NasFolderSyncJobBase {
+  /** 폴더 ID */
+  folderId: string;
+  /** SyncEvent 상태 추적용 (선택적) */
+  syncEventId?: string;
+}
+
+/**
+ * mkdir 액션 Job 데이터
+ * 폴더 생성
+ */
+export interface NasFolderMkdirJobData extends NasFolderSyncJobBase {
+  action: 'mkdir';
+  /** 생성할 폴더 경로 */
+  path: string;
+}
+
+/**
+ * rename 액션 Job 데이터
+ * 폴더 이름 변경
+ */
+export interface NasFolderRenameJobData extends NasFolderSyncJobBase {
+  action: 'rename';
+  /** 기존 경로 */
+  oldPath: string;
+  /** 새 경로 */
+  newPath: string;
+}
+
+/**
+ * move 액션 Job 데이터
+ * 폴더 이동
+ */
+export interface NasFolderMoveJobData extends NasFolderSyncJobBase {
+  action: 'move';
+  /** 기존 경로 */
+  oldPath: string;
+  /** 새 경로 */
+  newPath: string;
+  /** 원본 부모 폴더 ID (롤백용) */
+  originalParentId?: string | null;
+  /** 타겟 부모 폴더 ID */
+  targetParentId: string;
+}
+
+/**
+ * trash 액션 Job 데이터
+ * 폴더 휴지통 이동
+ */
+export interface NasFolderTrashJobData extends NasFolderSyncJobBase {
+  action: 'trash';
+  /** 현재 폴더 경로 */
+  currentPath: string;
+  /** 휴지통 경로 */
+  trashPath: string;
+}
+
+/**
+ * restore 액션 Job 데이터
+ * 휴지통에서 폴더 복구
+ */
+export interface NasFolderRestoreJobData extends NasFolderSyncJobBase {
+  action: 'restore';
+  /** 휴지통 경로 */
+  trashPath: string;
+  /** 복구 대상 경로 */
+  restorePath: string;
+  /** 휴지통 메타데이터 ID */
+  trashMetadataId: string;
+  /** 원본 부모 폴더 ID */
+  originalParentId?: string | null;
+}
+
+/**
+ * purge 액션 Job 데이터
+ * 휴지통에서 폴더 영구 삭제
+ */
+export interface NasFolderPurgeJobData extends NasFolderSyncJobBase {
+  action: 'purge';
+  /** 휴지통 경로 */
+  trashPath: string;
+  /** 휴지통 메타데이터 ID */
+  trashMetadataId: string;
+}
+
+/**
+ * NAS 폴더 동기화 통합 Job 데이터 타입 (Union)
  * 
  * 폴더 기반 큐 구조: NAS_FOLDER_SYNC:{folderId}
  * - 같은 폴더에 대한 작업은 순차 처리 보장
  * - 다른 폴더에 대한 작업은 병렬 처리 가능
  */
-export interface NasFolderSyncJobData {
-  /** 폴더 ID */
-  folderId: string;
-  /** 동기화 액션 타입 */
-  action: NasFolderAction;
-  /** SyncEvent 상태 추적용 (선택적) */
-  syncEventId?: string;
-
-  // === Action별 추가 데이터 ===
-
-  // mkdir 액션용
-  /** 생성할 폴더 경로 (mkdir) */
-  path?: string;
-
-  // rename/move 액션용
-  /** 기존 경로 (rename, move) */
-  oldPath?: string;
-  /** 새 경로 (rename, move) */
-  newPath?: string;
-
-  // move 액션용
-  /** 원본 부모 폴더 ID (move - 롤백용) */
-  originalParentId?: string | null;
-  /** 타겟 부모 폴더 ID (move) */
-  targetParentId?: string;
-
-  // trash 액션용
-  /** 현재 폴더 경로 (trash) */
-  currentPath?: string;
-  /** 휴지통 경로 (trash, restore, purge) */
-  trashPath?: string;
-
-  // restore 액션용
-  /** 복구 대상 경로 (restore) */
-  restorePath?: string;
-  /** 휴지통 메타데이터 ID (restore, purge) */
-  trashMetadataId?: string;
-}
+export type NasFolderSyncJobData =
+  | NasFolderMkdirJobData
+  | NasFolderRenameJobData
+  | NasFolderMoveJobData
+  | NasFolderTrashJobData
+  | NasFolderRestoreJobData
+  | NasFolderPurgeJobData;
 
 /**
  * NAS 폴더 동기화 큐 설정
@@ -98,17 +157,6 @@ export const NAS_FOLDER_SYNC_QUEUE_PREFIX = 'NAS_FOLDER_SYNC';
  */
 export const NAS_FOLDER_SYNC_CONCURRENCY = 5;
 
-/**
- * NAS 폴더 동기화 재시도 설정
- * - 최대 재시도 횟수: 3회
- * - 재시도 간격: 3초 (고정)
- */
-export const NAS_FOLDER_SYNC_MAX_ATTEMPTS = 3;
-export const NAS_FOLDER_SYNC_BACKOFF_MS = 3000;
-
-export function getNasFolderSyncQueueName(folderId: string): string {
-  return `${NAS_FOLDER_SYNC_QUEUE_PREFIX}:${folderId}`;
-}
 
 @Injectable()
 export class NasFolderSyncWorker implements OnModuleInit {
@@ -158,18 +206,40 @@ export class NasFolderSyncWorker implements OnModuleInit {
   }
 
   /**
-   * SyncEvent 최종 실패 처리 (FAILED 상태로 마킹 + 알림 로그)
-   * - 큐에서 최대 재시도 횟수를 모두 소진한 후 호출됨
+   * SyncEvent 재시도 처리
+   * - 재시도 가능: PENDING 상태로 롤백
+   * - 재시도 불가 (한도 초과): FAILED 상태로 마킹 + 알림
    */
-  private async handleSyncEventFailure(
+  private async handleSyncEventRetry(
     syncEvent: SyncEventEntity | null,
     error: Error,
     jobData: NasFolderSyncJobData,
   ): Promise<void> {
     if (!syncEvent) return;
-    syncEvent.fail(error.message);
+    
+    // 상세 에러 메시지 추출 (cause가 있으면 원본 에러 포함)
+    const detailMessage = this.extractDetailedErrorMessage(error);
+    
+    const shouldRetry = syncEvent.retry(detailMessage);
     await this.syncEventRepository.save(syncEvent);
-    this.logSyncFailureAlert(syncEvent, error, jobData);
+    if (!shouldRetry) {
+      syncEvent.fail(detailMessage);
+      await this.syncEventRepository.save(syncEvent);
+      this.logSyncFailureAlert(syncEvent, error, jobData);
+    }
+  }
+
+  /**
+   * 에러에서 상세 메시지 추출
+   * - cause가 있으면 원본 에러 메시지 포함
+   * - 사용자에게는 간략 메시지, DB에는 상세 메시지 저장
+   */
+  private extractDetailedErrorMessage(error: Error): string {
+    const cause = error.cause as Error | undefined;
+    if (cause?.message) {
+      return `${error.message}: ${cause.message}`;
+    }
+    return error.message;
   }
 
   /**
@@ -242,22 +312,22 @@ export class NasFolderSyncWorker implements OnModuleInit {
 
         switch (action) {
           case 'mkdir':
-            await this.handleMkdir(job);
+            await this.handleMkdir(job as Job<NasFolderMkdirJobData>);
             break;
           case 'rename':
-            await this.handleRename(job);
+            await this.handleRename(job as Job<NasFolderRenameJobData>);
             break;
           case 'move':
-            await this.handleMove(job);
+            await this.handleMove(job as Job<NasFolderMoveJobData>);
             break;
           case 'trash':
-            await this.handleTrash(job);
+            await this.handleTrash(job as Job<NasFolderTrashJobData>);
             break;
           case 'restore':
-            await this.handleRestore(job);
+            await this.handleRestore(job as Job<NasFolderRestoreJobData>);
             break;
           case 'purge':
-            await this.handlePurge(job);
+            await this.handlePurge(job as Job<NasFolderPurgeJobData>);
             break;
           default:
             this.logger.warn(`Unknown action: ${action}`);
@@ -272,7 +342,7 @@ export class NasFolderSyncWorker implements OnModuleInit {
           `actionTime=${actionDuration}ms | totalTime=${totalDuration}ms | lockWait=${lockWaitTime}ms`,
         );
       },
-      { ttl: 60000, waitTimeout: 30000 }, // 60초 TTL, 30초 대기
+      { ttl: 60000, waitTimeout: 30000, autoRenew: true, renewIntervalMs: 25000 }, // 60초 TTL, 30초 대기, 25초마다 자동 갱신
     );
   }
 
@@ -281,14 +351,9 @@ export class NasFolderSyncWorker implements OnModuleInit {
   /**
    * Mkdir 액션 처리
    */
-  private async handleMkdir(job: Job<NasFolderSyncJobData>): Promise<void> {
+  private async handleMkdir(job: Job<NasFolderMkdirJobData>): Promise<void> {
     const { folderId, path, syncEventId } = job.data;
     this.logger.debug(`Handling mkdir for folder: ${folderId}, path: ${path}`);
-
-    if (!path) {
-      this.logger.error(`Missing path for mkdir: ${folderId}`);
-      return;
-    }
 
     // SyncEvent 조회 (선택적)
     const syncEvent = await this.getSyncEvent(syncEventId);
@@ -313,8 +378,16 @@ export class NasFolderSyncWorker implements OnModuleInit {
         return;
       }
 
-      // 2. NAS에 폴더 생성
-      await this.nasStorage.폴더생성(path);
+      // 2. NAS에 폴더 생성 (멱등성 보장)
+      try {
+        await this.nasStorage.폴더생성(path);
+      } catch (nasError: any) {
+        // 이미 존재하는 경우 무시 (이전 시도에서 생성됨)
+        if (nasError.code !== 'EEXIST' && !nasError.message?.includes('already exists')) {
+          throw nasError;
+        }
+        this.logger.debug(`Folder already exists in NAS (idempotent): ${path}`);
+      }
 
       // 3. 상태 업데이트
       storageObject.updateStatus(FolderAvailabilityStatus.AVAILABLE);
@@ -327,10 +400,8 @@ export class NasFolderSyncWorker implements OnModuleInit {
       this.logger.log(`Successfully created folder in NAS: ${folderId} -> ${path}`);
     } catch (error) {
       this.logger.error(`Failed to create folder in NAS: ${folderId}`, error);
-      // 최종 시도일 때만 실패 처리 (이전 시도는 큐에서 자동 재시도)
-      if (job.attemptsMade && job.attemptsMade >= NAS_FOLDER_SYNC_MAX_ATTEMPTS) {
-        await this.handleSyncEventFailure(syncEvent, error as Error, job.data);
-      }
+      // SyncEvent 재시도 처리 (재시도 가능 시 PENDING으로 롤백)
+      await this.handleSyncEventRetry(syncEvent, error as Error, job.data);
       throw error;
     }
   }
@@ -338,14 +409,9 @@ export class NasFolderSyncWorker implements OnModuleInit {
   /**
    * Rename 액션 처리
    */
-  private async handleRename(job: Job<NasFolderSyncJobData>): Promise<void> {
+  private async handleRename(job: Job<NasFolderRenameJobData>): Promise<void> {
     const { folderId, oldPath, newPath, syncEventId } = job.data;
     this.logger.debug(`Handling rename for folder: ${folderId}, ${oldPath} -> ${newPath}`);
-
-    if (!oldPath || !newPath) {
-      this.logger.error(`Missing oldPath or newPath for rename: ${folderId}`);
-      return;
-    }
 
     // SyncEvent 조회 (선택적)
     const syncEvent = await this.getSyncEvent(syncEventId);
@@ -370,8 +436,17 @@ export class NasFolderSyncWorker implements OnModuleInit {
         return;
       }
 
-      // 2. NAS에서 폴더 이름 변경 (이동과 동일)
-      await this.nasStorage.폴더이동(oldPath, newPath);
+      // 2. NAS에서 폴더 이름 변경 (멱등성 보장)
+      try {
+        await this.nasStorage.폴더이동(oldPath, newPath);
+      } catch (nasError: any) {
+        // 소스가 없고 대상이 이미 존재하면 이전 시도에서 완료된 것 (멱등성)
+        if (nasError.code === 'ENOENT' || nasError.code === 'EEXIST') {
+          this.logger.debug(`Folder rename already completed (idempotent): ${oldPath} -> ${newPath}`);
+        } else {
+          throw nasError;
+        }
+      }
 
       // 3. 상태 업데이트
       storageObject.updateStatus(FolderAvailabilityStatus.AVAILABLE);
@@ -387,10 +462,8 @@ export class NasFolderSyncWorker implements OnModuleInit {
       this.logger.log(`Successfully renamed folder in NAS: ${folderId}, ${oldPath} -> ${newPath}`);
     } catch (error) {
       this.logger.error(`Failed to rename folder in NAS: ${folderId}`, error);
-      // 최종 시도일 때만 실패 처리 (이전 시도는 큐에서 자동 재시도)
-      if (job.attemptsMade && job.attemptsMade >= NAS_FOLDER_SYNC_MAX_ATTEMPTS) {
-        await this.handleSyncEventFailure(syncEvent, error as Error, job.data);
-      }
+      // SyncEvent 재시도 처리 (재시도 가능 시 PENDING으로 롤백)
+      await this.handleSyncEventRetry(syncEvent, error as Error, job.data);
       throw error;
     }
   }
@@ -400,14 +473,9 @@ export class NasFolderSyncWorker implements OnModuleInit {
    * 
    * 2차 방어: 대상 폴더가 삭제된 경우 원복 처리
    */
-  private async handleMove(job: Job<NasFolderSyncJobData>): Promise<void> {
+  private async handleMove(job: Job<NasFolderMoveJobData>): Promise<void> {
     const { folderId, oldPath, newPath, originalParentId, targetParentId, syncEventId } = job.data;
     this.logger.debug(`Handling move for folder: ${folderId}, ${oldPath} -> ${newPath}`);
-
-    if (!oldPath || !newPath || !targetParentId) {
-      this.logger.error(`Missing required fields for move: ${folderId}`);
-      return;
-    }
 
     // SyncEvent 조회 (선택적)
     const syncEvent = await this.getSyncEvent(syncEventId);
@@ -461,8 +529,17 @@ export class NasFolderSyncWorker implements OnModuleInit {
         return;
       }
 
-      // 3. NAS에서 폴더 이동
-      await this.nasStorage.폴더이동(oldPath, newPath);
+      // 3. NAS에서 폴더 이동 (멱등성 보장)
+      try {
+        await this.nasStorage.폴더이동(oldPath, newPath);
+      } catch (nasError: any) {
+        // 소스가 없고 대상이 이미 존재하면 이전 시도에서 완료된 것 (멱등성)
+        if (nasError.code === 'ENOENT' || nasError.code === 'EEXIST') {
+          this.logger.debug(`Folder move already completed (idempotent): ${oldPath} -> ${newPath}`);
+        } else {
+          throw nasError;
+        }
+      }
 
       // 4. 상태 업데이트
       storageObject.updateStatus(FolderAvailabilityStatus.AVAILABLE);
@@ -478,10 +555,8 @@ export class NasFolderSyncWorker implements OnModuleInit {
       this.logger.log(`Successfully moved folder in NAS: ${folderId}, ${oldPath} -> ${newPath}`);
     } catch (error) {
       this.logger.error(`Failed to move folder in NAS: ${folderId}`, error);
-      // 최종 시도일 때만 실패 처리 (이전 시도는 큐에서 자동 재시도)
-      if (job.attemptsMade && job.attemptsMade >= NAS_FOLDER_SYNC_MAX_ATTEMPTS) {
-        await this.handleSyncEventFailure(syncEvent, error as Error, job.data);
-      }
+      // SyncEvent 재시도 처리 (재시도 가능 시 PENDING으로 롤백)
+      await this.handleSyncEventRetry(syncEvent, error as Error, job.data);
       throw error;
     }
   }
@@ -489,14 +564,9 @@ export class NasFolderSyncWorker implements OnModuleInit {
   /**
    * Trash 액션 처리
    */
-  private async handleTrash(job: Job<NasFolderSyncJobData>): Promise<void> {
+  private async handleTrash(job: Job<NasFolderTrashJobData>): Promise<void> {
     const { folderId, currentPath, trashPath, syncEventId } = job.data;
     this.logger.debug(`Handling trash for folder: ${folderId}, ${currentPath} -> ${trashPath}`);
-
-    if (!currentPath || !trashPath) {
-      this.logger.error(`Missing currentPath or trashPath for trash: ${folderId}`);
-      return;
-    }
 
     // SyncEvent 조회 (선택적)
     const syncEvent = await this.getSyncEvent(syncEventId);
@@ -521,8 +591,17 @@ export class NasFolderSyncWorker implements OnModuleInit {
         return;
       }
 
-      // 2. NAS에서 휴지통으로 이동
-      await this.nasStorage.폴더이동(currentPath, trashPath);
+      // 2. NAS에서 휴지통으로 이동 (멱등성 보장)
+      try {
+        await this.nasStorage.폴더이동(currentPath, trashPath);
+      } catch (nasError: any) {
+        // 소스가 없고 대상이 이미 존재하면 이전 시도에서 완료된 것 (멱등성)
+        if (nasError.code === 'ENOENT' || nasError.code === 'EEXIST') {
+          this.logger.debug(`Folder trash already completed (idempotent): ${currentPath} -> ${trashPath}`);
+        } else {
+          throw nasError;
+        }
+      }
 
       // 3. 상태 업데이트
       storageObject.updateStatus(FolderAvailabilityStatus.AVAILABLE);
@@ -535,10 +614,8 @@ export class NasFolderSyncWorker implements OnModuleInit {
       this.logger.log(`Successfully moved folder to trash in NAS: ${folderId}, ${currentPath} -> ${trashPath}`);
     } catch (error) {
       this.logger.error(`Failed to move folder to trash in NAS: ${folderId}`, error);
-      // 최종 시도일 때만 실패 처리 (이전 시도는 큐에서 자동 재시도)
-      if (job.attemptsMade && job.attemptsMade >= NAS_FOLDER_SYNC_MAX_ATTEMPTS) {
-        await this.handleSyncEventFailure(syncEvent, error as Error, job.data);
-      }
+      // SyncEvent 재시도 처리 (재시도 가능 시 PENDING으로 롤백)
+      await this.handleSyncEventRetry(syncEvent, error as Error, job.data);
       throw error;
     }
   }
@@ -547,14 +624,9 @@ export class NasFolderSyncWorker implements OnModuleInit {
    * Restore 액션 처리
    * 휴지통에서 원래 경로로 폴더 복구
    */
-  private async handleRestore(job: Job<NasFolderSyncJobData>): Promise<void> {
+  private async handleRestore(job: Job<NasFolderRestoreJobData>): Promise<void> {
     const { folderId, trashPath, restorePath, trashMetadataId, originalParentId, syncEventId } = job.data;
     this.logger.debug(`Handling restore for folder: ${folderId}, ${trashPath} -> ${restorePath}`);
-
-    if (!trashPath || !restorePath || !trashMetadataId) {
-      this.logger.error(`Missing required fields for restore: ${folderId}`);
-      return;
-    }
 
     // SyncEvent 조회 (선택적)
     const syncEvent = await this.getSyncEvent(syncEventId);
@@ -587,13 +659,24 @@ export class NasFolderSyncWorker implements OnModuleInit {
         return;
       }
 
-      // 3. NAS에서 휴지통에서 원래 경로로 이동
-      await this.nasStorage.폴더이동(trashPath, restorePath);
+      // 3. NAS에서 휴지통에서 원래 경로로 이동 (멱등성 보장)
+      try {
+        await this.nasStorage.폴더이동(trashPath, restorePath);
+      } catch (nasError: any) {
+        // 소스가 없고 대상이 이미 존재하면 이전 시도에서 완료된 것 (멱등성)
+        if (nasError.code === 'ENOENT' || nasError.code === 'EEXIST') {
+          this.logger.debug(`Folder restore already completed (idempotent): ${trashPath} -> ${restorePath}`);
+        } else {
+          throw nasError;
+        }
+      }
 
-      // 4. 폴더 상태 복구 (TRASHED → ACTIVE)
-      folder.restore();
-      folder.moveTo(originalParentId || folder.parentId!, restorePath);
-      await this.folderRepository.save(folder);
+      // 4. 폴더 상태 복구 (Service에서 이미 처리된 경우 스킵)
+      if (folder.isTrashed()) {
+        folder.restore();
+        folder.moveTo(originalParentId || folder.parentId!, restorePath);
+        await this.folderRepository.save(folder);
+      }
 
       // 5. 스토리지 상태 업데이트
       storageObject.updateStatus(FolderAvailabilityStatus.AVAILABLE);
@@ -609,10 +692,8 @@ export class NasFolderSyncWorker implements OnModuleInit {
       this.logger.log(`Successfully restored folder from trash in NAS: ${folderId}, ${trashPath} -> ${restorePath}`);
     } catch (error) {
       this.logger.error(`Failed to restore folder from trash in NAS: ${folderId}`, error);
-      // 최종 시도일 때만 실패 처리 (이전 시도는 큐에서 자동 재시도)
-      if (job.attemptsMade && job.attemptsMade >= NAS_FOLDER_SYNC_MAX_ATTEMPTS) {
-        await this.handleSyncEventFailure(syncEvent, error as Error, job.data);
-      }
+      // SyncEvent 재시도 처리 (재시도 가능 시 PENDING으로 롤백)
+      await this.handleSyncEventRetry(syncEvent, error as Error, job.data);
       throw error;
     }
   }
@@ -621,14 +702,9 @@ export class NasFolderSyncWorker implements OnModuleInit {
    * Purge 액션 처리
    * 휴지통에서 폴더를 영구 삭제
    */
-  private async handlePurge(job: Job<NasFolderSyncJobData>): Promise<void> {
+  private async handlePurge(job: Job<NasFolderPurgeJobData>): Promise<void> {
     const { folderId, trashPath, trashMetadataId, syncEventId } = job.data;
     this.logger.debug(`Handling purge for folder: ${folderId}, trashPath: ${trashPath}`);
-
-    if (!trashPath || !trashMetadataId) {
-      this.logger.error(`Missing required fields for purge: ${folderId}`);
-      return;
-    }
 
     // SyncEvent 조회 (선택적)
     const syncEvent = await this.getSyncEvent(syncEventId);
@@ -675,29 +751,26 @@ export class NasFolderSyncWorker implements OnModuleInit {
       this.logger.log(`Successfully purged folder from NAS: ${folderId}, trashPath: ${trashPath}`);
     } catch (error) {
       this.logger.error(`Failed to purge folder from NAS: ${folderId}`, error);
-      // 최종 시도일 때만 실패 처리 (이전 시도는 큐에서 자동 재시도)
-      if (job.attemptsMade && job.attemptsMade >= NAS_FOLDER_SYNC_MAX_ATTEMPTS) {
-        await this.handleSyncEventFailure(syncEvent, error as Error, job.data);
-      }
+      // SyncEvent 재시도 처리 (재시도 가능 시 PENDING으로 롤백)
+      await this.handleSyncEventRetry(syncEvent, error as Error, job.data);
       throw error;
     }
   }
 
   /**
-   * 하위 폴더들의 storage objectKey 업데이트
+   * 하위 폴더들의 storage objectKey 일괄 업데이트
+   * 개별 업데이트 대신 SQL 일괄 업데이트로 원자성 보장
    */
   private async updateDescendantStorageKeys(oldPathPrefix: string, newPathPrefix: string): Promise<void> {
     try {
-      // 하위 폴더 스토리지 객체들 조회 및 업데이트
-      const descendants = await this.folderStorageObjectRepository.findByObjectKeyPrefix(oldPathPrefix + '/');
+      // 일괄 업데이트로 변경 (원자성 보장)
+      const updatedCount = await this.folderStorageObjectRepository.updateObjectKeyByPrefix(
+        oldPathPrefix + '/',
+        oldPathPrefix,
+        newPathPrefix,
+      );
 
-      for (const descendant of descendants) {
-        const newObjectKey = descendant.objectKey.replace(oldPathPrefix, newPathPrefix);
-        descendant.updateObjectKey(newObjectKey);
-        await this.folderStorageObjectRepository.save(descendant);
-      }
-
-      this.logger.debug(`Updated ${descendants.length} descendant folder storage keys`);
+      this.logger.debug(`Updated ${updatedCount} descendant folder storage keys: ${oldPathPrefix} -> ${newPathPrefix}`);
     } catch (error) {
       this.logger.warn(`Failed to update descendant storage keys: ${error}`);
       // 하위 폴더 업데이트 실패는 치명적이지 않으므로 에러를 던지지 않음

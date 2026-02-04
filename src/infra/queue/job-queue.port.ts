@@ -192,6 +192,25 @@ export interface IJobQueuePort {
    * @returns 큐 이름 목록
    */
   getAllQueueNames(): string[];
+
+  /**
+   * 상태별 작업 목록 조회
+   * @param queueName - 큐 이름
+   * @param limit - 각 상태별 최대 조회 수 (기본값: 50)
+   * @returns 상태별 작업 목록
+   */
+  getJobsByStatus<T = JobData>(queueName: string, limit?: number): Promise<JobsByStatusResult<T>>;
+}
+
+/**
+ * 상태별 작업 목록 결과
+ */
+export interface JobsByStatusResult<T = JobData> {
+  waiting: Job<T>[];
+  active: Job<T>[];
+  delayed: Job<T>[];
+  failed: Job<T>[];
+  completed: Job<T>[];
 }
 
 /**

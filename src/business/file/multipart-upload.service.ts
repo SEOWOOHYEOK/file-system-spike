@@ -9,7 +9,9 @@ import {
   NotFoundException,
   ConflictException,
   InternalServerErrorException,
+  Logger,
 } from '@nestjs/common';
+import { DataSource } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { createHash } from 'crypto';
 
@@ -17,6 +19,7 @@ import {
   UploadPartEntity,
   DEFAULT_PART_SIZE,
   MULTIPART_MIN_FILE_SIZE,
+  TransactionOptions,
 } from '../../domain/upload-session';
 
 import { InitiateMultipartRequest } from '../../domain/upload-session/dto/initiate-multipart.dto';
@@ -36,16 +39,14 @@ import {
 import { FolderAvailabilityStatus } from '../../domain/folder';
 import { SyncEventFactory } from '../../domain/sync-event';
 import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';
-import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
+import { JOB_QUEUE_PORT } from '../../infra/queue/job-queue.port';
 import {
   NAS_FILE_SYNC_QUEUE_PREFIX,
-  NAS_SYNC_MAX_ATTEMPTS,
-  NAS_SYNC_BACKOFF_MS,
-  type NasFileSyncJobData,
+  type NasFileUploadJobData,
 } from '../worker/nas-file-sync.worker';
 
 import type { ICacheStoragePort } from '../../domain/storage/ports/cache-storage.port';
-import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
+import type { IJobQueuePort } from '../../infra/queue/job-queue.port';
 
 import { UploadSessionDomainService } from '../../domain/upload-session/service/upload-session-domain.service';
 import { FileDomainService } from '../../domain/file/service/file-domain.service';
@@ -59,6 +60,8 @@ import { normalizeFileName } from '../../common/utils';
 
 @Injectable()
 export class MultipartUploadService {
+  private readonly logger = new Logger(MultipartUploadService.name);
+
   constructor(
     private readonly uploadSessionDomainService: UploadSessionDomainService,
     private readonly fileDomainService: FileDomainService,
@@ -71,6 +74,7 @@ export class MultipartUploadService {
     private readonly cacheStorage: ICacheStoragePort,
     @Inject(JOB_QUEUE_PORT)
     private readonly jobQueue: IJobQueuePort,
+    private readonly dataSource: DataSource,
   ) { }
 
   /**
@@ -78,7 +82,7 @@ export class MultipartUploadService {
    */
   async initiate(request: InitiateMultipartRequest): Promise<InitiateMultipartResponse> {
     const { fileName: rawFileName, folderId: rawFolderId, totalSize, mimeType, conflictStrategy } = request;
-    
+
     // 파일명 정규화 (인코딩 문제 해결)
     const fileName = normalizeFileName(rawFileName);
 
@@ -111,6 +115,7 @@ export class MultipartUploadService {
         message: '대상 폴더를 찾을 수 없습니다.',
       });
     }
+
 
     // 3. 폴더 NAS 상태 확인
     const folderStorage = await this.folderNasStorageObjectDomainService.조회(folderId);
@@ -235,11 +240,21 @@ export class MultipartUploadService {
 
   /**
    * 멀티파트 업로드 완료
+   * 
+   * 트랜잭션 처리:
+   * 1. 검증 단계 (트랜잭션 외부)
+   * 2. 파트 병합 (캐시 스토리지 - 트랜잭션 외부)
+   * 3. DB 작업 (트랜잭션 내부)
+   *    - 파일 엔티티 생성
+   *    - 스토리지 객체 생성
+   *    - SyncEvent 생성
+   *    - 세션 완료 처리
+   * 4. 큐 등록 (트랜잭션 외부 - 실패 시 스케줄러가 복구)
    */
   async complete(request: CompleteMultipartRequest): Promise<CompleteMultipartResponse> {
     const { sessionId } = request;
 
-    // 1. 세션 조회
+    // 1. 세션 조회 및 검증 (트랜잭션 외부)
     const session = await this.uploadSessionDomainService.세션조회(sessionId);
     if (!session) {
       throw new NotFoundException({
@@ -289,11 +304,11 @@ export class MultipartUploadService {
       });
     }
 
-    // 5. 파일 ID 생성
+    // 5. 파일 ID 및 기본 정보 생성
     const fileId = uuidv4();
     const uploadCreatedAt = new Date();
 
-    // 6. 파일명 충돌 처리
+    // 6. 파일명 충돌 처리 (트랜잭션 외부에서 먼저 확인)
     const finalFileName = await this.resolveFileName(
       session.folderId,
       session.fileName,
@@ -302,61 +317,102 @@ export class MultipartUploadService {
       uploadCreatedAt,
     );
 
-    // 7. 파트 병합 (캐시 스토리지)
+    // 7. 파트 병합 (캐시 스토리지 - 트랜잭션 외부)
     await this.mergeParts(fileId, parts);
 
-    // 8. 파일 엔티티 생성 (Domain Service 사용)
-    const fileEntity = await this.fileDomainService.생성({
-      id: fileId,
-      name: finalFileName,
-      folderId: session.folderId,
-      sizeBytes: session.totalSize,
-      mimeType: session.mimeType,
-      createdAt: uploadCreatedAt,
-    });
-
-    // 9. 스토리지 객체 생성
-    await this.createStorageObjects(fileId, uploadCreatedAt, finalFileName);
-
-    // 10. 폴더 경로 조회
+    // 8. 폴더 경로 조회 (트랜잭션 외부)
     const folder = await this.folderDomainService.조회(session.folderId);
     const folderPath = folder ? folder.path : '';
     const filePath = folderPath === '/' ? `/${finalFileName}` : `${folderPath}/${finalFileName}`;
     const nasObjectKey = FileStorageObjectEntity.buildNasObjectKey(uploadCreatedAt, finalFileName);
     const nasPath = folderPath === '/' ? `/${nasObjectKey}` : `${folderPath}/${nasObjectKey}`;
 
-    // 11. sync_events 생성
+    // 9. SyncEvent ID 미리 생성
     const syncEventId = uuidv4();
-    const syncEvent = SyncEventFactory.createFileCreateEvent({
-      id: syncEventId,
-      fileId,
-      sourcePath: fileId,
-      targetPath: nasPath,
-      fileName: finalFileName,
-      folderId: session.folderId,
-    });
-    await this.syncEventDomainService.저장(syncEvent);
 
-    // 12. Bull 큐 등록 - 파일 기반 통합 큐 사용
-    await this.jobQueue.addJob<NasFileSyncJobData>(
-      NAS_FILE_SYNC_QUEUE_PREFIX,
-      {
+    // 트랜잭션 시작
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+
+    let fileEntity;
+    let syncEvent;
+
+    try {
+      const txOptions: TransactionOptions = { queryRunner };
+
+      // 10. 파일 엔티티 생성 (트랜잭션 내부)
+      fileEntity = await this.fileDomainService.생성({
+        id: fileId,
+        name: finalFileName,
+        folderId: session.folderId,
+        sizeBytes: session.totalSize,
+        mimeType: session.mimeType,
+        createdAt: uploadCreatedAt,
+      }, txOptions);
+
+      // 11. 스토리지 객체 생성 (트랜잭션 내부)
+      await this.createStorageObjectsWithTx(fileId, uploadCreatedAt, finalFileName, txOptions);
+
+      // 12. sync_events 생성 (트랜잭션 내부)
+      syncEvent = SyncEventFactory.createFileCreateEvent({
+        id: syncEventId,
         fileId,
-        action: 'upload',
-        syncEventId,
-      },
-      {
-        attempts: NAS_SYNC_MAX_ATTEMPTS,
-        backoff: NAS_SYNC_BACKOFF_MS,
-      },
-    );
+        sourcePath: fileId,
+        targetPath: nasPath,
+        fileName: finalFileName,
+        folderId: session.folderId,
+      });
+      await this.syncEventDomainService.저장(syncEvent, txOptions);
 
-    // 13. 세션 완료 처리
-    await this.uploadSessionDomainService.엔티티세션완료(session, fileId);
+      // 13. 세션 완료 처리 (트랜잭션 내부)
+      await this.uploadSessionDomainService.엔티티세션완료(session, fileId, txOptions);
 
-    // 14. 파트 파일 정리 (비동기)
+      // 트랜잭션 커밋
+      await queryRunner.commitTransaction();
+      this.logger.debug(`Multipart upload completed: ${fileId}`);
+
+    } catch (error) {
+      // 트랜잭션 롤백
+      await queryRunner.rollbackTransaction();
+      this.logger.error(`Failed to complete multipart upload: ${sessionId}`, error);
+
+      // 병합된 캐시 파일 정리 (보상 트랜잭션)
+      try {
+        await this.cacheStorage.파일삭제(fileId);
+        this.logger.debug(`Cleaned up merged file after rollback: ${fileId}`);
+      } catch (cleanupError) {
+        this.logger.error(`Failed to cleanup merged file: ${fileId}`, cleanupError);
+      }
+
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+
+    // 14. Bull 큐 등록 (트랜잭션 외부 - 실패해도 스케줄러가 복구)
+    try {
+      await this.jobQueue.addJob<NasFileUploadJobData>(
+        NAS_FILE_SYNC_QUEUE_PREFIX,
+        {
+          fileId,
+          action: 'upload',
+          syncEventId,
+        }
+      );
+
+      // 15. 큐 등록 성공 시 QUEUED로 변경
+      syncEvent.markQueued();
+      await this.syncEventDomainService.저장(syncEvent);
+      this.logger.debug(`NAS_FILE_SYNC job added for file: ${fileId}`);
+    } catch (queueError) {
+      // 큐 등록 실패해도 PENDING 상태로 유지 - 스케줄러가 복구
+      this.logger.error(`Failed to add job to queue, scheduler will recover: ${fileId}`, queueError);
+    }
+
+    // 16. 파트 파일 정리 (비동기)
     this.cleanupParts(parts).catch((err) => {
-      console.error('Failed to cleanup parts:', err);
+      this.logger.error('Failed to cleanup parts:', err);
     });
 
     return {
@@ -567,25 +623,28 @@ export class MultipartUploadService {
     return newName;
   }
 
+
+
   /**
-   * 스토리지 객체 생성
+   * 스토리지 객체 생성 (트랜잭션 지원)
    */
-  private async createStorageObjects(
+  private async createStorageObjectsWithTx(
     fileId: string,
     createdAt: Date,
     fileName: string,
+    txOptions: TransactionOptions,
   ): Promise<void> {
     await Promise.all([
       this.fileCacheStorageDomainService.생성({
         id: uuidv4(),
         fileId,
-      }),
+      }, txOptions),
       this.fileNasStorageDomainService.생성({
         id: uuidv4(),
         fileId,
         createdAt,
         fileName,
-      }),
+      }, txOptions),
     ]);
   }
 }

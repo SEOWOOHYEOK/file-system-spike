@@ -16,14 +16,14 @@ import {
 import {
   SyncEventFactory,
 } from '../../domain/sync-event';
-import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
+import { JOB_QUEUE_PORT } from '../../infra/queue/job-queue.port';
 import {
   NAS_FILE_SYNC_QUEUE_PREFIX,
-  NAS_SYNC_MAX_ATTEMPTS,
-  NAS_SYNC_BACKOFF_MS,
-  type NasFileSyncJobData,
+  type NasFileRenameJobData,
+  type NasFileMoveJobData,
+  type NasFileTrashJobData,
 } from '../worker/nas-file-sync.worker';
-import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
+import type { IJobQueuePort } from '../../infra/queue/job-queue.port';
 import { FileDomainService } from '../../domain/file/service/file-domain.service';
 import { FolderDomainService } from '../../domain/folder/service/folder-domain.service';
 import { TrashDomainService } from '../../domain/trash/service/trash-domain.service';
@@ -137,6 +137,8 @@ export class FileManageService {
         targetPath: newObjectKey || '',
         oldName: oldObjectKey || '',
         newName: finalName,
+        oldObjectKey: oldObjectKey || '',
+        newObjectKey: newObjectKey || '',
       });
       await this.syncEventDomainService.저장(syncEvent);
 
@@ -145,7 +147,7 @@ export class FileManageService {
 
       // 8. Bull 큐 등록 (파일 기반 통합 큐) - 트랜잭션 커밋 후 실행
       if (oldObjectKey && newObjectKey) {
-        await this.jobQueue.addJob<NasFileSyncJobData>(
+        await this.jobQueue.addJob<NasFileRenameJobData>(
           NAS_FILE_SYNC_QUEUE_PREFIX,
           {
             fileId,
@@ -153,12 +155,13 @@ export class FileManageService {
             syncEventId,
             oldObjectKey,
             newObjectKey,
-          },
-          {
-            attempts: NAS_SYNC_MAX_ATTEMPTS,
-            backoff: NAS_SYNC_BACKOFF_MS,
-          },
+          }
         );
+
+        // 9. 큐 등록 성공 시 QUEUED로 변경
+        syncEvent.markQueued();
+        await this.syncEventDomainService.저장(syncEvent);
+
         this.logger.debug(`NAS_FILE_SYNC rename job added for file: ${fileId}`);
       }
 
@@ -305,7 +308,7 @@ export class FileManageService {
 
       // 8. Bull 큐 등록 (파일 기반 통합 큐) - 트랜잭션 커밋 후 실행
       if (sourcePath && targetPath && originalFolderId) {
-        await this.jobQueue.addJob<NasFileSyncJobData>(
+        await this.jobQueue.addJob<NasFileMoveJobData>(
           NAS_FILE_SYNC_QUEUE_PREFIX,
           {
             fileId,
@@ -315,12 +318,13 @@ export class FileManageService {
             targetPath,
             originalFolderId,
             targetFolderId,
-          },
-          {
-            attempts: NAS_SYNC_MAX_ATTEMPTS,
-            backoff: NAS_SYNC_BACKOFF_MS,
-          },
+          }
         );
+
+        // 9. 큐 등록 성공 시 QUEUED로 변경
+        syncEvent.markQueued();
+        await this.syncEventDomainService.저장(syncEvent);
+
         this.logger.debug(`NAS_FILE_SYNC move job added for file: ${fileId}`);
       }
 
@@ -445,6 +449,8 @@ export class FileManageService {
         targetPath: trashPath || '',
         originalPath,
         originalFolderId: file.folderId,
+        currentObjectKey: currentObjectKey || '',
+        trashPath: trashPath || '',
       });
       await this.syncEventDomainService.저장(syncEvent);
 
@@ -453,20 +459,21 @@ export class FileManageService {
 
       // 8. Bull 큐 등록 (파일 기반 통합 큐) - 트랜잭션 커밋 후 실행
       if (currentObjectKey && trashPath) {
-        await this.jobQueue.addJob<NasFileSyncJobData>(
+        await this.jobQueue.addJob<NasFileTrashJobData>(
           NAS_FILE_SYNC_QUEUE_PREFIX,
           {
             fileId,
-            action:'trash',
+            action: 'trash',
             syncEventId,
             currentObjectKey,
             trashPath,
-          },
-          {
-            attempts: NAS_SYNC_MAX_ATTEMPTS,
-            backoff: NAS_SYNC_BACKOFF_MS,
-          },
+          }
         );
+
+        // 9. 큐 등록 성공 시 QUEUED로 변경
+        syncEvent.markQueued();
+        await this.syncEventDomainService.저장(syncEvent);
+
         this.logger.debug(`NAS_FILE_SYNC trash job added for file: ${fileId}`);
       }
 

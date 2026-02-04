@@ -128,7 +128,7 @@ export class NfsNasAdapter implements INasStoragePort {
       this.logger.debug(`📝 파일 저장 완료: ${objectKey} (${data.length} bytes)`);
     } catch (error: any) {
       if (error instanceof InternalServerErrorException) throw error;
-      throw new InternalServerErrorException(`파일 저장 실패: ${error.message}`);
+      throw new InternalServerErrorException(`파일 저장 실패`, { cause: error });
     } finally {
       release();
     }
@@ -156,7 +156,7 @@ export class NfsNasAdapter implements INasStoragePort {
       this.logger.debug(`📝 파일 스트림 저장 완료: ${objectKey}`);
     } catch (error: any) {
       if (error instanceof InternalServerErrorException) throw error;
-      throw new InternalServerErrorException(`파일 스트림 저장 실패: ${error.message}`);
+      throw new InternalServerErrorException(`파일 스트림 저장 실패`, { cause: error });
     } finally {
       release();
     }
@@ -171,7 +171,7 @@ export class NfsNasAdapter implements INasStoragePort {
       if (error.code === 'ENOENT') {
         throw new NotFoundException(`파일을 찾을 수 없습니다: ${objectKey}`);
       }
-      throw new InternalServerErrorException(`파일 읽기 실패: ${error.message}`);
+      throw new InternalServerErrorException(`파일 읽기 실패`, { cause: error });
     } finally {
       release();
     }
@@ -183,7 +183,7 @@ export class NfsNasAdapter implements INasStoragePort {
 
     if (!fsSync.existsSync(filePath)) {
       release();
-      throw new NotFoundException(`파일을 찾을 수 없습니다: ${objectKey}`);
+      throw new NotFoundException(`파일을 찾을 수 없습니다`);
     }
 
     const stream = fsSync.createReadStream(filePath);
@@ -201,14 +201,14 @@ export class NfsNasAdapter implements INasStoragePort {
       try {
         await fs.access(filePath);
       } catch {
-        throw new NotFoundException(`파일을 찾을 수 없습니다: ${objectKey}`);
+        throw new NotFoundException(`파일을 찾을 수 없습니다`);
       }
 
       await fs.unlink(filePath);
       this.logger.log(`🗑️ 파일 삭제 완료: ${filePath}`);
     } catch (error: any) {
       if (error instanceof NotFoundException) throw error;
-      throw new InternalServerErrorException(`삭제 실패: ${error.message}`);
+      throw new InternalServerErrorException(`삭제 실패`, { cause: error });
     } finally {
       release();
     }
@@ -225,7 +225,7 @@ export class NfsNasAdapter implements INasStoragePort {
       try {
         await fs.access(oldPath);
       } catch {
-        throw new NotFoundException(`원본 파일을 찾을 수 없습니다: ${oldKey}`);
+        throw new NotFoundException(`원본 파일을 찾을 수 없습니다`);
       }
 
       // 대상 디렉토리 생성
@@ -242,12 +242,12 @@ export class NfsNasAdapter implements INasStoragePort {
           await fs.unlink(oldPath);
           this.logger.log(`📁 Moved (cross-device): ${oldKey} → ${newKey}`);
         } else {
-          throw new InternalServerErrorException(`이동 실패: ${error.message}`);
+          throw new InternalServerErrorException(`이동 실패`, { cause: error });
         }
       }
     } catch (error: any) {
       if (error instanceof NotFoundException || error instanceof InternalServerErrorException) throw error;
-      throw new InternalServerErrorException(`이동 실패: ${error.message}`);
+      throw new InternalServerErrorException(`이동 실패`, { cause: error });
     } finally {
       release();
     }
@@ -264,7 +264,7 @@ export class NfsNasAdapter implements INasStoragePort {
       try {
         await fs.access(sourcePath);
       } catch {
-        throw new NotFoundException(`원본 파일을 찾을 수 없습니다: ${sourceKey}`);
+        throw new NotFoundException(`원본 파일을 찾을 수 없습니다`);
       }
 
       await this.ensureDirectory(destPath);
@@ -273,7 +273,7 @@ export class NfsNasAdapter implements INasStoragePort {
       this.logger.debug(`📋 파일 복사 완료: ${sourceKey} → ${destKey}`);
     } catch (error: any) {
       if (error instanceof NotFoundException) throw error;
-      throw new InternalServerErrorException(`복사 실패: ${error.message}`);
+      throw new InternalServerErrorException(`복사 실패`, { cause: error });
     } finally {
       release();
     }
@@ -299,7 +299,7 @@ export class NfsNasAdapter implements INasStoragePort {
       await fs.mkdir(fullPath, { recursive: true });
       this.logger.log(`📁 디렉토리 생성 완료: ${fullPath}`);
     } catch (error: any) {
-      throw new InternalServerErrorException(`디렉토리 생성 실패: ${error.message}`);
+      throw new InternalServerErrorException(`디렉토리 생성 실패`, { cause: error });
     }
   }
 
@@ -318,7 +318,7 @@ export class NfsNasAdapter implements INasStoragePort {
       await fs.rm(fullPath, { recursive, force: true });
       this.logger.log(`🗑️ 디렉토리 삭제 완료: ${fullPath}`);
     } catch (error: any) {
-      throw new InternalServerErrorException(`디렉토리 삭제 실패: ${error.message}`);
+      throw new InternalServerErrorException(`디렉토리 삭제 실패`, { cause: error });
     }
   }
 
@@ -330,11 +330,11 @@ export class NfsNasAdapter implements INasStoragePort {
     try {
       const stats = await fs.stat(oldFullPath);
       if (!stats.isDirectory()) {
-        throw new InternalServerErrorException(`경로가 디렉토리가 아닙니다: ${oldPath}`);
+        throw new InternalServerErrorException(`경로가 디렉토리가 아닙니다`);
       }
     } catch (error: any) {
       if (error.code === 'ENOENT') {
-        throw new NotFoundException(`원본 디렉토리를 찾을 수 없습니다: ${oldPath}`);
+        throw new NotFoundException(`원본 디렉토리를 찾을 수 없습니다`);
       }
       throw error;
     }
@@ -353,7 +353,7 @@ export class NfsNasAdapter implements INasStoragePort {
         await fs.rm(oldFullPath, { recursive: true, force: true });
         this.logger.log(`📁 Moved directory (cross-device): ${oldPath} → ${newPath}`);
       } else {
-        throw new InternalServerErrorException(`이동 실패: ${error.message}`);
+        throw new InternalServerErrorException(`이동 실패`, { cause: error });
       }
     }
   }
@@ -401,7 +401,7 @@ export class NfsNasAdapter implements INasStoragePort {
       if (error.code === 'ENOENT') {
         throw new NotFoundException(`파일을 찾을 수 없습니다: ${objectKey}`);
       }
-      throw new InternalServerErrorException(`파일 정보 조회 실패: ${error.message}`);
+      throw new InternalServerErrorException(`파일 정보 조회 실패`, { cause: error });
     }
   }
 
@@ -415,7 +415,7 @@ export class NfsNasAdapter implements INasStoragePort {
       if (error.code === 'ENOENT') {
         throw new NotFoundException(`디렉토리를 찾을 수 없습니다: ${folderPath}`);
       }
-      throw new InternalServerErrorException(`목록 조회 실패: ${error.message}`);
+      throw new InternalServerErrorException(`목록 조회 실패`, { cause: error });
     }
   }
 
@@ -456,7 +456,7 @@ export class NfsNasAdapter implements INasStoragePort {
       if (error.code === 'ENOENT') {
         throw new NotFoundException(`파일을 찾을 수 없습니다: ${key}`);
       }
-      throw new InternalServerErrorException(`정보 조회 실패: ${error.message}`);
+      throw new InternalServerErrorException(`정보 조회 실패`, { cause: error });
     }
   }
 
@@ -473,7 +473,7 @@ export class NfsNasAdapter implements INasStoragePort {
       if (error.code === 'ENOENT') {
         throw new NotFoundException(`파일을 찾을 수 없습니다: ${key}`);
       }
-      throw new InternalServerErrorException(`파일 정보 조회 실패: ${error.message}`);
+      throw new InternalServerErrorException(`파일 정보 조회 실패`, { cause: error });
     }
   }
 
@@ -509,7 +509,7 @@ export class NfsNasAdapter implements INasStoragePort {
       if (error.code === 'ENOENT') {
         throw new NotFoundException(`파일을 찾을 수 없습니다: ${key}`);
       }
-      throw new InternalServerErrorException(`파일 읽기 실패: ${error.message}`);
+      throw new InternalServerErrorException(`파일 읽기 실패`, { cause: error });
     }
   }
 
@@ -537,7 +537,7 @@ export class NfsNasAdapter implements INasStoragePort {
         if (error.code === 'ENOENT') {
           reject(new NotFoundException(`파일을 찾을 수 없습니다: ${key}`));
         } else {
-          reject(new InternalServerErrorException(`파일 읽기 실패: ${error.message}`));
+          reject(new InternalServerErrorException(`파일 읽기 실패`, { cause: error }));
         }
       });
     });
@@ -556,7 +556,7 @@ export class NfsNasAdapter implements INasStoragePort {
       if (error.code === 'ENOENT') {
         throw new NotFoundException(`파일을 찾을 수 없습니다: ${key}`);
       }
-      throw new InternalServerErrorException(`해시 계산 실패: ${error.message}`);
+      throw new InternalServerErrorException(`해시 계산 실패`, { cause: error });
     } finally {
       release();
     }
@@ -644,7 +644,7 @@ export class NfsNasAdapter implements INasStoragePort {
       return newKey;
     } catch (error: any) {
       if (error instanceof NotFoundException || error instanceof InternalServerErrorException) throw error;
-      throw new InternalServerErrorException(`이름 변경 실패: ${error.message}`);
+      throw new InternalServerErrorException(`이름 변경 실패`, { cause: error });
     } finally {
       release();
     }

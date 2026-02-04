@@ -4,7 +4,7 @@
  */
 import { Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { LessThan, Repository } from 'typeorm';
+import { In, LessThan, Repository } from 'typeorm';
 import { UploadSessionOrmEntity } from '../entities/upload-session.orm-entity';
 import {
   IUploadSessionRepository,
@@ -96,12 +96,37 @@ export class UploadSessionRepository implements IUploadSessionRepository {
 
   async findMany(findOptions: FindSessionOptions, options?: TransactionOptions): Promise<UploadSessionEntity[]> {
     const repo = this.getRepository(options);
-    const where: any = {};
-    if (findOptions.folderId) where.folderId = findOptions.folderId;
-    if (findOptions.status) where.status = findOptions.status;
-    if (findOptions.fileId) where.fileId = findOptions.fileId;
 
-    const orms = await repo.find({ where, order: { createdAt: 'DESC' } });
+    // QueryBuilder를 사용하여 복잡한 조건 처리
+    const qb = repo.createQueryBuilder('session');
+
+    if (findOptions.folderId) {
+      qb.andWhere('session.folderId = :folderId', { folderId: findOptions.folderId });
+    }
+
+    if (findOptions.status) {
+      if (Array.isArray(findOptions.status)) {
+        qb.andWhere('session.status IN (:...statuses)', { statuses: findOptions.status });
+      } else {
+        qb.andWhere('session.status = :status', { status: findOptions.status });
+      }
+    }
+
+    if (findOptions.fileId) {
+      qb.andWhere('session.fileId = :fileId', { fileId: findOptions.fileId });
+    }
+
+    if (findOptions.updatedBefore) {
+      qb.andWhere('session.updatedAt < :updatedBefore', { updatedBefore: findOptions.updatedBefore });
+    }
+
+    qb.orderBy('session.createdAt', 'DESC');
+
+    if (findOptions.limit) {
+      qb.take(findOptions.limit);
+    }
+
+    const orms = await qb.getMany();
     return orms.map((orm) => this.toDomain(orm));
   }
 

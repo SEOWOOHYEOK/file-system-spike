@@ -6,8 +6,10 @@ import { Injectable, Inject } from '@nestjs/common';
 import {
   JOB_QUEUE_PORT,
   QueueStats,
-} from '../../domain/queue/ports/job-queue.port';
-import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
+  Job,
+  JobsByStatusResult,
+} from '../../infra/queue/job-queue.port';
+import type { IJobQueuePort } from '../../infra/queue/job-queue.port';
 
 /**
  * NAS 동기화 관련 큐 이름 목록
@@ -88,4 +90,92 @@ export class QueueStatusService {
       checkedAt: new Date(),
     };
   }
+
+  /**
+   * 특정 큐의 상태별 작업 목록 조회
+   * @param queueName 큐 이름
+   * @param limit 각 상태별 최대 조회 수
+   */
+  async getQueueJobs(queueName: string, limit: number = 50): Promise<QueueJobsResult> {
+    const jobsByStatus = await this.jobQueue.getJobsByStatus(queueName, limit);
+    const stats = await this.jobQueue.getQueueStats(queueName);
+
+    return {
+      queueName,
+      waiting: jobsByStatus.waiting.map(this.mapJobToDto),
+      active: jobsByStatus.active.map(this.mapJobToDto),
+      delayed: jobsByStatus.delayed.map(this.mapJobToDto),
+      failed: jobsByStatus.failed.map(this.mapJobToDto),
+      completed: jobsByStatus.completed.map(this.mapJobToDto),
+      summary: stats,
+      checkedAt: new Date(),
+    };
+  }
+
+  /**
+   * 모든 NAS 동기화 큐의 작업 목록 조회
+   * @param limit 각 상태별 최대 조회 수
+   */
+  async getAllQueueJobs(limit: number = 20): Promise<AllQueueJobsResult> {
+    const results: QueueJobsResult[] = [];
+
+    for (const queueName of NAS_SYNC_QUEUE_NAMES) {
+      const result = await this.getQueueJobs(queueName, limit);
+      results.push(result);
+    }
+
+    return {
+      queues: results,
+      checkedAt: new Date(),
+    };
+  }
+
+  private mapJobToDto(job: Job): QueueJobDto {
+    return {
+      jobId: job.id,
+      data: job.data,
+      status: job.status,
+      createdAt: job.createdAt,
+      processedAt: job.processedAt,
+      completedAt: job.completedAt,
+      failedReason: job.failedReason,
+      attemptsMade: job.attemptsMade,
+    };
+  }
+}
+
+/**
+ * 큐 작업 DTO
+ */
+export interface QueueJobDto {
+  jobId: string;
+  data: any;
+  status: string;
+  createdAt: Date;
+  processedAt?: Date;
+  completedAt?: Date;
+  failedReason?: string;
+  attemptsMade?: number;
+}
+
+/**
+ * 큐 작업 목록 조회 결과
+ */
+export interface QueueJobsResult {
+  queueName: string;
+  waiting: QueueJobDto[];
+  active: QueueJobDto[];
+  delayed: QueueJobDto[];
+  failed: QueueJobDto[];
+  completed: QueueJobDto[];
+  summary: QueueStats;
+  checkedAt: Date;
+}
+
+/**
+ * 모든 큐 작업 목록 조회 결과
+ */
+export interface AllQueueJobsResult {
+  queues: QueueJobsResult[];
+  checkedAt: Date;
 }

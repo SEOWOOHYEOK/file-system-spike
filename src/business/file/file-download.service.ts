@@ -16,10 +16,10 @@ import { FileCacheStorageDomainService } from '../../domain/storage/file/service
 import { FileNasStorageDomainService } from '../../domain/storage/file/service/file-nas-storage-domain.service';
 import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';
 import { NAS_STORAGE_PORT } from '../../domain/storage/ports/nas-storage.port';
-import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
+import { JOB_QUEUE_PORT } from '../../infra/queue/job-queue.port';
 import type { ICacheStoragePort } from '../../domain/storage/ports/cache-storage.port';
 import type { INasStoragePort } from '../../domain/storage/ports/nas-storage.port';
-import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
+import type { IJobQueuePort } from '../../infra/queue/job-queue.port';
 
 /**
  * 파일 다운로드 비즈니스 서비스
@@ -133,12 +133,34 @@ export class FileDownloadService {
     // 2. 캐시 상태 확인
     const cacheObject = await this.fileCacheStorageDomainService.조회(fileId);
 
+    // 캐시 서버에 캐시된 파일이 존재하는지 없는지 확인
+    const cacheFileExists = await this.cacheStorage.파일존재확인(fileId);
+
+
+    //캐시 상태에도 있고, 캐시 서버에도 있다면
+    //캐시 히트 처리
+
+    //캐시 상태에는 있지만 캐시 서버에는 없다면
+    //나스 동기화 진행
+    //캐시 서버에 복원 작업 등록(NAS 동기화 완료 후 캐시 서버에 복원)
+    //위 2가지 진행후 캐시 히트 처리
+
+    //캐시 상태에는 없지만 캐시 서버에는 있다면
+    //캐시 상태 업데이트
+    //캐시 히트 처리 
+
+
+    //캐시 서버에 캐시 파일 없다면    
+    //나스 동기화 진행
+    //캐시 서버에 복원 작업 등록(NAS 동기화 완료 후 캐시 서버에 복원)
+    //위 2가지 진행후 캐시 히트 처리
+
+
+
     // 3-A. 캐시 히트
     if (cacheObject && cacheObject.isAvailable()) {
       return this.downloadFromCache(file, cacheObject);
     }
-
-
 
     // 3-B-2. NAS 사용 가능 - 다운로드 진행
     if (nasObject && nasObject.isAvailable()) {

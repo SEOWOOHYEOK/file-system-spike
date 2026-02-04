@@ -109,4 +109,21 @@ export class FolderStorageObjectRepository implements IFolderStorageObjectReposi
       .execute();
     return result.affected || 0;
   }
+
+  async updateObjectKeyByPrefix(oldPrefix: string, oldPart: string, newPart: string): Promise<number> {
+    // SQL Injection 방지를 위해 특수문자 이스케이프
+    const escapedOldPart = oldPart.replace(/'/g, "''");
+    const escapedNewPart = newPart.replace(/'/g, "''");
+    
+    const result = await this.repository
+      .createQueryBuilder()
+      .update(FolderStorageObjectOrmEntity)
+      .set({
+        objectKey: () => `REPLACE(object_key, '${escapedOldPart}', '${escapedNewPart}')`,
+        updatedAt: new Date(),
+      })
+      .where('object_key LIKE :pattern', { pattern: `${oldPrefix}%` })
+      .execute();
+    return result.affected || 0;
+  }
 }

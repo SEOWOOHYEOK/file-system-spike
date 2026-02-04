@@ -51,6 +51,15 @@ export interface IFolderStorageObjectRepository {
    * 다수 폴더의 스토리지 상태 일괄 변경
    */
   updateStatusByFolderIds(folderIds: string[], status: string): Promise<number>;
+
+  /**
+   * objectKey prefix 기반 일괄 업데이트 (하위 폴더 경로 변경)
+   * @param oldPrefix 변경 대상 prefix (LIKE 패턴)
+   * @param oldPart 치환할 기존 문자열
+   * @param newPart 치환할 새 문자열
+   * @returns 업데이트된 행 수
+   */
+  updateObjectKeyByPrefix(oldPrefix: string, oldPart: string, newPart: string): Promise<number>;
 }
 
 /**

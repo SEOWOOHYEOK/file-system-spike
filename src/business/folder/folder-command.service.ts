@@ -21,10 +21,19 @@ import { SyncEventFactory } from '../../domain/sync-event';
 import { SyncEventDomainService } from '../../domain/sync-event/service/sync-event-domain.service';
 import { TrashDomainService } from '../../domain/trash/service/trash-domain.service';
 import { FolderNasStorageObjectDomainService } from '../../domain/storage/folder/service/folder-nas-storage-object-domain.service';
-import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
-import { NAS_FOLDER_SYNC_QUEUE_PREFIX, NAS_FOLDER_SYNC_MAX_ATTEMPTS, NAS_FOLDER_SYNC_BACKOFF_MS } from '../worker/nas-folder-sync.worker';
+import { JOB_QUEUE_PORT } from '../../infra/queue/job-queue.port';
+import { NAS_FOLDER_SYNC_QUEUE_PREFIX } from '../worker/nas-folder-sync.worker';
 
-import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
+import type { IJobQueuePort } from '../../infra/queue/job-queue.port';
+
+import {
+  type NasFolderMkdirJobData,
+  type NasFolderRenameJobData,
+  type NasFolderMoveJobData,
+  type NasFolderTrashJobData,
+  type NasFolderRestoreJobData,
+  type NasFolderPurgeJobData,
+} from '../worker/nas-folder-sync.worker';
 
 
 
@@ -56,12 +65,12 @@ export class FolderCommandService implements OnModuleInit {
   private async ensureRootFolderExists(): Promise<void> {
     try {
       const rootFolder = await this.folderDomainService.루트폴더조회();
-      
+
       if (!rootFolder) {
         this.logger.log('Root folder not found. Creating root folder...');
-        
+
         const folderId = uuidv4();
-        
+
         // FolderDomainService를 통해 루트 폴더 생성
         await this.folderDomainService.생성({
           id: folderId,
@@ -69,7 +78,7 @@ export class FolderCommandService implements OnModuleInit {
           parentId: null,
           path: '/',
         });
-        
+
         // FolderNasStorageObjectDomainService를 통해 스토리지 객체 생성
         await this.folderStorageService.생성({
           id: uuidv4(),
@@ -77,7 +86,7 @@ export class FolderCommandService implements OnModuleInit {
           objectKey: '/',
           availabilityStatus: FolderAvailabilityStatus.AVAILABLE, // 루트는 이미 존재한다고 가정
         });
-        
+
         this.logger.log(`Root folder created with ID: ${folderId}`);
       } else {
         this.logger.log(`Root folder already exists with ID: ${rootFolder.id}`);
@@ -144,17 +153,14 @@ export class FolderCommandService implements OnModuleInit {
     await this.syncEventDomainService.저장(syncEvent);
 
     // 7. Bull 큐 등록 (NAS_FOLDER_SYNC - mkdir)
-    await this.jobQueue.addJob(NAS_FOLDER_SYNC_QUEUE_PREFIX, {
+    await this.jobQueue.addJob<NasFolderMkdirJobData>(NAS_FOLDER_SYNC_QUEUE_PREFIX, {
       folderId,
       action: 'mkdir',
       path: folderPath,
       syncEventId,
-    }, {
-      attempts: NAS_FOLDER_SYNC_MAX_ATTEMPTS,
-      backoff: NAS_FOLDER_SYNC_BACKOFF_MS,
     });
 
-    
+
     this.logger.debug(`NAS_FOLDER_SYNC (mkdir) job added for folder: ${folderId}`);
 
     return {
@@ -246,23 +252,26 @@ export class FolderCommandService implements OnModuleInit {
         targetPath: newPath,
         oldName: folder.name,
         newName: finalName,
+        oldPath,
+        newPath,
       });
       await this.syncEventDomainService.저장(syncEvent);
 
+      // 트랜잭션 커밋
+      await queryRunner.commitTransaction();
+
       // 10. Bull 큐 등록 (NAS_FOLDER_SYNC - rename) - 커밋 후 등록
-      await this.jobQueue.addJob(NAS_FOLDER_SYNC_QUEUE_PREFIX, {
+      await this.jobQueue.addJob<NasFolderRenameJobData>(NAS_FOLDER_SYNC_QUEUE_PREFIX, {
         folderId,
         action: 'rename',
         oldPath,
         newPath,
         syncEventId,
-      }, {
-        attempts: NAS_FOLDER_SYNC_MAX_ATTEMPTS,
-        backoff: NAS_FOLDER_SYNC_BACKOFF_MS,
       });
 
-      // 트랜잭션 커밋
-      await queryRunner.commitTransaction();
+      // 11. 큐 등록 성공 시 QUEUED로 변경
+      syncEvent.markQueued();
+      await this.syncEventDomainService.저장(syncEvent);
 
       this.logger.debug(`NAS_FOLDER_SYNC (rename) job added for folder: ${folderId}`);
 
@@ -388,11 +397,16 @@ export class FolderCommandService implements OnModuleInit {
         targetPath: newPath,
         originalParentId,
         targetParentId,
+        oldPath,
+        newPath,
       });
       await this.syncEventDomainService.저장(syncEvent);
 
+      // 트랜잭션 커밋
+      await queryRunner.commitTransaction();
+
       // 11. Bull 큐 등록 (NAS_FOLDER_SYNC - move) - 커밋 후 등록
-      await this.jobQueue.addJob(NAS_FOLDER_SYNC_QUEUE_PREFIX, {
+      await this.jobQueue.addJob<NasFolderMoveJobData>(NAS_FOLDER_SYNC_QUEUE_PREFIX, {
         folderId,
         action: 'move',
         oldPath,
@@ -400,12 +414,7 @@ export class FolderCommandService implements OnModuleInit {
         originalParentId,
         targetParentId,
         syncEventId,
-      }, {
-        attempts: NAS_FOLDER_SYNC_MAX_ATTEMPTS,
-        backoff: NAS_FOLDER_SYNC_BACKOFF_MS,
       });
-
-      await queryRunner.commitTransaction();
 
       this.logger.debug(`NAS_FOLDER_SYNC (move) job added for folder: ${folderId}`);
 
@@ -520,25 +529,24 @@ export class FolderCommandService implements OnModuleInit {
         targetPath: trashPath,
         originalPath: currentPath,
         originalParentId: folder.parentId,
+        currentPath,
+        trashPath,
       });
 
       await this.syncEventDomainService.저장(syncEvent);
 
-      // 8. Bull 큐 등록 (NAS_FOLDER_SYNC - trash) 
-      await this.jobQueue.addJob(NAS_FOLDER_SYNC_QUEUE_PREFIX, {
+      // 트랜잭션 커밋
+      await queryRunner.commitTransaction();
+
+      // 8. Bull 큐 등록 (NAS_FOLDER_SYNC - trash) - 커밋 후 등록
+      await this.jobQueue.addJob<NasFolderTrashJobData>(NAS_FOLDER_SYNC_QUEUE_PREFIX, {
         folderId,
         action: 'trash',
         currentPath,
         trashPath,
         syncEventId,
-      }, {
-        attempts: NAS_FOLDER_SYNC_MAX_ATTEMPTS,
-        backoff: NAS_FOLDER_SYNC_BACKOFF_MS,
       });
       this.logger.debug(`NAS_FOLDER_SYNC (trash) job added for folder: ${folderId}`);
-
-      // 트랜잭션 커밋
-      await queryRunner.commitTransaction();
 
       return {
         id: folder.id,

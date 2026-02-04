@@ -2,9 +2,9 @@
  * Admin 컨트롤러
  * 스토리지 및 동기화 이벤트 문제 확인 API
  */
-import { Controller, Get, Post, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiOkResponse } from '@nestjs/swagger';
-import { AdminService, QueueStatusService } from '../../../business/admin';
+import { Controller, Get, Post, Query, Param } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiOkResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
+import { AdminService, QueueStatusService, SyncEventStatsService } from '../../../business/admin';
 import {
   CacheHealthCheckResponseDto,
   NasHealthCheckResponseDto,
@@ -23,6 +23,7 @@ export class AdminController {
   constructor(
     private readonly adminService: AdminService,
     private readonly queueStatusService: QueueStatusService,
+    private readonly syncEventStatsService: SyncEventStatsService,
   ) {}
 
   /**
@@ -98,7 +99,82 @@ export class AdminController {
       offset: query.offset ?? 0,
     });
   }
-  
+
+  /**
+   * GET /v1/admin/sync/events/by-file/:fileId - 파일별 동기화 이벤트 히스토리
+   */
+  @Get('sync/events/by-file/:fileId')
+  @ApiOperation({
+    summary: '파일별 동기화 이벤트 히스토리',
+    description: '특정 파일의 모든 동기화 이벤트를 조회합니다. 생성, 이름변경, 이동, 삭제 등 모든 작업 이력을 확인할 수 있습니다.',
+  })
+  @ApiParam({ name: 'fileId', description: '파일 ID' })
+  async getSyncEventsByFile(@Param('fileId') fileId: string) {
+    const events = await this.syncEventStatsService.findByFileId(fileId);
+    return {
+      fileId,
+      events: events.map((e) => ({
+        id: e.id,
+        eventType: e.eventType,
+        status: e.status,
+        retryCount: e.retryCount,
+        maxRetries: e.maxRetries,
+        errorMessage: e.errorMessage,
+        isStuck: e.isStuck,
+        ageHours: Math.round(e.ageHours * 100) / 100,
+        createdAt: e.createdAt,
+        updatedAt: e.updatedAt,
+        processedAt: e.processedAt,
+      })),
+      total: events.length,
+    };
+  }
+
+  /**
+   * GET /v1/admin/sync/events/by-folder/:folderId - 폴더별 동기화 이벤트 히스토리
+   */
+  @Get('sync/events/by-folder/:folderId')
+  @ApiOperation({
+    summary: '폴더별 동기화 이벤트 히스토리',
+    description: '특정 폴더의 모든 동기화 이벤트를 조회합니다. 생성, 이름변경, 이동, 삭제 등 모든 작업 이력을 확인할 수 있습니다.',
+  })
+  @ApiParam({ name: 'folderId', description: '폴더 ID' })
+  async getSyncEventsByFolder(@Param('folderId') folderId: string) {
+    const events = await this.syncEventStatsService.findByFolderId(folderId);
+    return {
+      folderId,
+      events: events.map((e) => ({
+        id: e.id,
+        eventType: e.eventType,
+        status: e.status,
+        retryCount: e.retryCount,
+        maxRetries: e.maxRetries,
+        errorMessage: e.errorMessage,
+        isStuck: e.isStuck,
+        ageHours: Math.round(e.ageHours * 100) / 100,
+        createdAt: e.createdAt,
+        updatedAt: e.updatedAt,
+        processedAt: e.processedAt,
+      })),
+      total: events.length,
+    };
+  }
+
+  /**
+   * GET /v1/admin/sync/dashboard - 동기화 대시보드
+   */
+  @Get('sync/dashboard')
+  @ApiOperation({
+    summary: '동기화 대시보드',
+    description:
+      '현재 진행 중인 동기화 작업 현황을 한눈에 볼 수 있습니다.\n\n' +
+      '**상태 요약:** PENDING, QUEUED, PROCESSING, RETRYING, DONE, FAILED 각 개수\n' +
+      '**진행 중 작업:** 현재 처리 중인 모든 작업 목록\n' +
+      '**최근 실패:** 최근 24시간 내 실패한 작업 목록',
+  })
+  async getSyncDashboard() {
+    return this.adminService.getSyncDashboard();
+  }
 
   /**
    * GET /v1/admin/queue/status - Bull 큐 현황 조회
@@ -124,6 +200,37 @@ export class AdminController {
   })
   async getQueueStatus(): Promise<QueueStatusResponseDto> {
     return this.queueStatusService.getQueueStatus();
+  }
+
+  /**
+   * GET /v1/admin/queue/jobs - 큐 작업 목록 조회 (상태별 그룹화)
+   */
+  @Get('queue/jobs')
+  @ApiOperation({
+    summary: '큐 작업 목록 조회',
+    description:
+      '큐의 상태별 작업 목록을 한번에 조회합니다.\n\n' +
+      '**상태별 작업:**\n' +
+      '- waiting: 대기 중인 작업\n' +
+      '- active: 처리 중인 작업\n' +
+      '- delayed: 재시도 대기 중인 작업\n' +
+      '- failed: 실패한 작업\n' +
+      '- completed: 완료된 작업\n\n' +
+      '**쿼리 파라미터:**\n' +
+      '- queueName: 특정 큐만 조회 (미지정 시 모든 큐)\n' +
+      '- limit: 각 상태별 최대 조회 수 (기본값: 20)',
+  })
+  @ApiQuery({ name: 'queueName', required: false, description: '큐 이름 (NAS_FILE_SYNC, NAS_FOLDER_SYNC)' })
+  @ApiQuery({ name: 'limit', required: false, description: '각 상태별 최대 조회 수', example: 20 })
+  async getQueueJobs(
+    @Query('queueName') queueName?: string,
+    @Query('limit') limit?: number,
+  ) {
+    const limitNum = limit ?? 20;
+    if (queueName) {
+      return this.queueStatusService.getQueueJobs(queueName, limitNum);
+    }
+    return this.queueStatusService.getAllQueueJobs(limitNum);
   }
 
   /**

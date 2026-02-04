@@ -3,4 +3,5 @@
  */
 
 export * from './sync-event-query.service';
+export * from './scheduler/sync-event-recovery.scheduler';
 export * from './sync-event.module';

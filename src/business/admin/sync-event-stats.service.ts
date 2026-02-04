@@ -164,6 +164,48 @@ export class SyncEventStatsService {
   }
 
   /**
+   * 파일 ID로 동기화 이벤트 히스토리 조회
+   * @param fileId 파일 ID
+   * @returns 해당 파일의 모든 동기화 이벤트 (최신순)
+   */
+  async findByFileId(fileId: string): Promise<EnrichedSyncEvent[]> {
+    const events = await this.syncEventDomainService.파일아이디조회(fileId);
+    return this.enrichEvents(events);
+  }
+
+  /**
+   * 폴더 ID로 동기화 이벤트 히스토리 조회
+   * @param folderId 폴더 ID
+   * @returns 해당 폴더의 모든 동기화 이벤트 (최신순)
+   */
+  async findByFolderId(folderId: string): Promise<EnrichedSyncEvent[]> {
+    const events = await this.syncEventDomainService.폴더아이디조회(folderId);
+    return this.enrichEvents(events);
+  }
+
+  /**
+   * 이벤트 목록에 stuck 정보 추가
+   */
+  private enrichEvents(events: SyncEventEntity[]): EnrichedSyncEvent[] {
+    const now = new Date();
+    return events.map((event) => {
+      const ageMs = now.getTime() - event.createdAt.getTime();
+      const ageHours = ageMs / (1000 * 60 * 60);
+
+      const isStuckPending =
+        event.status === SyncEventStatus.PENDING && ageHours >= STUCK_PENDING_HOURS;
+      const isStuckProcessing =
+        event.status === SyncEventStatus.PROCESSING && ageMs >= STUCK_PROCESSING_MS;
+
+      return {
+        ...event,
+        isStuck: isStuckPending || isStuckProcessing,
+        ageHours,
+      } as EnrichedSyncEvent;
+    });
+  }
+
+  /**
    * 요약 정보 계산
    */
   private calculateSummary(events: EnrichedSyncEvent[]): SyncEventSummary {

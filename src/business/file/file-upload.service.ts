@@ -1,4 +1,4 @@
-import { Injectable, Inject, BadRequestException, ConflictException, NotFoundException, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, Inject, BadRequestException, ConflictException, NotFoundException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import {
   FileEntity,
@@ -12,12 +12,10 @@ import {
 import { FolderAvailabilityStatus } from '../../domain/folder';
 import { SyncEventFactory } from '../../domain/sync-event';
 import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';
-import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
+import { JOB_QUEUE_PORT } from '../../infra/queue/job-queue.port';
 import {
   NAS_FILE_SYNC_QUEUE_PREFIX,
-  NAS_SYNC_MAX_ATTEMPTS,
-  NAS_SYNC_BACKOFF_MS,
-  type NasFileSyncJobData,
+  type NasFileUploadJobData,
 } from '../worker/nas-file-sync.worker';
 import { normalizeFileName } from '../../common/utils';
 
@@ -30,7 +28,7 @@ import { FileNasStorageDomainService } from '../../domain/storage/file/service/f
 import { FolderNasStorageObjectDomainService } from '../../domain/storage/folder/service/folder-nas-storage-object-domain.service';
 
 import type { ICacheStoragePort } from '../../domain/storage/ports/cache-storage.port';
-import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
+import type { IJobQueuePort } from '../../infra/queue/job-queue.port';
 
 /**
  * 파일 업로드 비즈니스 서비스
@@ -38,6 +36,8 @@ import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
  */
 @Injectable()
 export class FileUploadService {
+  private readonly logger = new Logger(FileUploadService.name);
+
   constructor(
     // Domain Services
     private readonly fileDomainService: FileDomainService,
@@ -80,6 +80,7 @@ export class FileUploadService {
       }
       folderId = rootFolder.id;
     }
+    
 
     // 1. 요청 검증
     await this.validateUploadRequest(file, folderId);
@@ -105,43 +106,56 @@ export class FileUploadService {
     // 5. SeaweedFS 저장 (infra 레이어에서 구현)
     await this.cacheStorage.파일쓰기(fileId, file.buffer);
 
-    // 6. DB 저장 (Domain Service 사용)
-    const fileEntity = await this.createFileEntity(fileId, finalFileName, folderId, file, uploadCreatedAt);
-    await this.createStorageObjects(fileId, uploadCreatedAt, finalFileName);
-
-    // 7. 폴더 경로 조회
+    // 6. 폴더 경로 조회 
     const folder = await this.folderDomainService.조회(folderId);
     const folderPath = folder ? folder.path : '';
     const filePath = folderPath === '/' ? `/${finalFileName}` : `${folderPath}/${finalFileName}`;
     const nasObjectKey = FileStorageObjectEntity.buildNasObjectKey(uploadCreatedAt, finalFileName);
     const nasPath = folderPath === '/' ? `/${nasObjectKey}` : `${folderPath}/${nasObjectKey}`;
 
-    // 8. sync_events 생성 (문서 요구사항)
-    const syncEventId = uuidv4();
-    
-    const syncEvent = SyncEventFactory.createFileCreateEvent({
-      id: syncEventId,
-      fileId,
-      sourcePath: fileId, // 캐시 objectKey
-      targetPath: nasPath, // NAS 경로
-      fileName: finalFileName,
-      folderId,
-    });
-    await this.syncEventDomainService.저장(syncEvent);
+    let fileEntity: FileEntity;
+    let syncEventId: string;
+    let syncEvent: ReturnType<typeof SyncEventFactory.createFileCreateEvent>;
 
-    // 9. Bull 큐 등록 (NAS 동기화) - 파일 기반 통합 큐 사용
-    await this.jobQueue.addJob<NasFileSyncJobData>(
+    try {
+      // 7. DB 저장 (Domain Service 사용)
+      fileEntity = await this.createFileEntity(fileId, finalFileName, folderId, file, uploadCreatedAt);
+      await this.createStorageObjects(fileId, uploadCreatedAt, finalFileName);
+
+      // 8. sync_events 생성 (문서 요구사항)
+      syncEventId = uuidv4();
+      
+      syncEvent = SyncEventFactory.createFileCreateEvent({
+        id: syncEventId,
+        fileId,
+        sourcePath: fileId, // 캐시 objectKey
+        targetPath: nasPath, // NAS 경로
+        fileName: finalFileName,
+        folderId,
+      });
+      await this.syncEventDomainService.저장(syncEvent);
+    } catch (dbError) {
+      // DB 저장 실패 시 SeaweedFS 파일 삭제 (보상 트랜잭션)
+      this.logger.warn(`DB save failed, cleaning up SeaweedFS file: ${fileId}`);
+      await this.cacheStorage.파일삭제(fileId).catch((cleanupError) => {
+        this.logger.error(`Failed to cleanup SeaweedFS file: ${fileId}`, cleanupError);
+      });
+      throw dbError;
+    }
+
+    // 9. Bull 큐 등록 (NAS 동기화) - DB 저장 성공 후 등록
+    await this.jobQueue.addJob<NasFileUploadJobData>(
       NAS_FILE_SYNC_QUEUE_PREFIX,
       {
         fileId,
         action: 'upload',
         syncEventId,
-      },
-      {
-        attempts: NAS_SYNC_MAX_ATTEMPTS,
-        backoff: NAS_SYNC_BACKOFF_MS,
-      },
+      }
     );
+
+    // 10. 큐 등록 성공 시 QUEUED로 변경
+    syncEvent.markQueued();
+    await this.syncEventDomainService.저장(syncEvent);
 
     return {
       id: fileEntity.id,

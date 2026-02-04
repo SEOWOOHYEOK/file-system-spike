@@ -35,6 +35,6 @@ import { WorkerModule } from '../worker/worker.module';
     SyncEventStatsService,
     QueueStatusService,
   ],
-  exports: [AdminService, QueueStatusService],
+  exports: [AdminService, QueueStatusService, SyncEventStatsService],
 })
 export class AdminBusinessModule {}

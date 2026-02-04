@@ -12,7 +12,7 @@ import type {
   IDistributedLockPort,
   LockResult,
   LockOptions,
-} from '../../../domain/queue/ports/distributed-lock.port';
+} from '../distributed-lock.port';
 
 const DEFAULT_TTL = 30000; // 30초
 const DEFAULT_WAIT_TIMEOUT = 10000; // 10초
@@ -82,6 +82,24 @@ export class RedisLockAdapter implements IDistributedLockPort, OnModuleDestroy {
             await this.redis.eval(script, 1, lockKey, lockValue);
             this.logger.debug(`Lock released: ${key}`);
           },
+          extend: async (extendTtl?: number) => {
+            // 소유권 확인 후 TTL 연장 (Lua 스크립트로 원자적 실행)
+            const newTtl = extendTtl ?? ttl;
+            const script = `
+              if redis.call("get", KEYS[1]) == ARGV[1] then
+                return redis.call("pexpire", KEYS[1], ARGV[2])
+              else
+                return 0
+              end
+            `;
+            const extended = await this.redis.eval(script, 1, lockKey, lockValue, newTtl);
+            if (extended === 1) {
+              this.logger.debug(`Lock extended: ${key} (ttl: ${newTtl}ms)`);
+              return true;
+            }
+            this.logger.warn(`Failed to extend lock (not owner): ${key}`);
+            return false;
+          },
         };
       }
 
@@ -91,6 +109,7 @@ export class RedisLockAdapter implements IDistributedLockPort, OnModuleDestroy {
         return {
           acquired: false,
           release: async () => { /* no-op */ },
+          extend: async () => false,
         };
       }
 
@@ -106,9 +125,28 @@ export class RedisLockAdapter implements IDistributedLockPort, OnModuleDestroy {
       throw new Error(`Failed to acquire lock: ${key}`);
     }
 
+    // 자동 갱신 설정
+    let renewTimer: NodeJS.Timeout | null = null;
+    if (options?.autoRenew) {
+      const ttl = options?.ttl ?? DEFAULT_TTL;
+      const renewInterval = options?.renewIntervalMs ?? Math.floor(ttl * 0.5);
+      
+      renewTimer = setInterval(async () => {
+        const extended = await lock.extend(ttl);
+        if (!extended) {
+          this.logger.error(`Auto-renew failed for lock: ${key}`);
+        }
+      }, renewInterval);
+      
+      this.logger.debug(`Auto-renew enabled for lock: ${key} (interval: ${renewInterval}ms)`);
+    }
+
     try {
       return await fn();
     } finally {
+      if (renewTimer) {
+        clearInterval(renewTimer);
+      }
       await lock.release();
     }
   }

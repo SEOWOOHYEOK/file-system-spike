@@ -13,6 +13,7 @@ import { FileUploadService } from './file-upload.service';
 import { FileDownloadService } from './file-download.service';
 import { FileManageService } from './file-manage.service';
 import { MultipartUploadService } from './multipart-upload.service';
+import { MultipartOrphanCleanupScheduler } from './scheduler/multipart-orphan-cleanup.scheduler';
 
 /**
  * 파일 비즈니스 모듈
@@ -31,7 +32,19 @@ import { MultipartUploadService } from './multipart-upload.service';
     UploadSessionDomainModule,
     AuditModule,
   ],
-  providers: [FileUploadService, FileDownloadService, FileManageService, MultipartUploadService],
-  exports: [FileUploadService, FileDownloadService, FileManageService, MultipartUploadService],
+  providers: [
+    FileUploadService,
+    FileDownloadService,
+    FileManageService,
+    MultipartUploadService,
+    MultipartOrphanCleanupScheduler,
+  ],
+  exports: [
+    FileUploadService,
+    FileDownloadService,
+    FileManageService,
+    MultipartUploadService,
+    MultipartOrphanCleanupScheduler,
+  ],
 })
 export class FileBusinessModule {}

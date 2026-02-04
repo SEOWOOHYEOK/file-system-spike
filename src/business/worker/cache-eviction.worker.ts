@@ -89,7 +89,7 @@ export class CacheEvictionWorker {
   }
 
   /**
-   * 10분마다 캐시 Eviction 실행
+   * 10분마다 캐시 Eviction 실행 scheduler
    */
   @Cron(CronExpression.EVERY_10_MINUTES)
   async runScheduledEviction(): Promise<void> {

@@ -25,8 +25,8 @@ jest.mock('uuid', () => ({
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { NasSyncWorker, NAS_FILE_SYNC_QUEUE_PREFIX } from './nas-file-sync.worker';
-import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
-import { DISTRIBUTED_LOCK_PORT } from '../../domain/queue/ports/distributed-lock.port';
+import { JOB_QUEUE_PORT } from '../../infra/queue/job-queue.port';
+import { DISTRIBUTED_LOCK_PORT } from '../../infra/queue/distributed-lock.port';
 import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';
 import { NAS_STORAGE_PORT } from '../../domain/storage/ports/nas-storage.port';
 import { FILE_REPOSITORY, StorageType, AvailabilityStatus } from '../../domain/file';

@@ -35,9 +35,13 @@ export enum SyncEventTargetType {
  * 이벤트 상태
  */
 export enum SyncEventStatus {
-  /** 트랜잭션 내 INSERT, Scheduler 대기 */
+  /** 트랜잭션 내 INSERT, 큐 미등록 */
   PENDING = 'PENDING',
-  /** Scheduler가 Bull에 발행 후 */
+  /** 큐에 등록됨 */
+  QUEUED = 'QUEUED',
+  /** 재시도 중 */
+  RETRYING = 'RETRYING',
+  /** Worker가 처리 중 */
   PROCESSING = 'PROCESSING',
   /** Worker 성공 완료 */
   DONE = 'DONE',
@@ -100,10 +104,17 @@ export class SyncEventEntity {
   }
 
   /**
-   * 대기 중인지 확인
+   * 대기 중인지 확인 (큐 미등록)
    */
   isPending(): boolean {
     return this.status === SyncEventStatus.PENDING;
+  }
+
+  /**
+   * 큐에 등록되었는지 확인
+   */
+  isQueued(): boolean {
+    return this.status === SyncEventStatus.QUEUED;
   }
 
   /**
@@ -132,6 +143,14 @@ export class SyncEventEntity {
    */
   isCompleted(): boolean {
     return this.isDone() || this.isFailed();
+  }
+
+  /**
+   * 큐에 등록됨 표시
+   */
+  markQueued(): void {
+    this.status = SyncEventStatus.QUEUED;
+    this.updatedAt = new Date();
   }
 
   /**
@@ -170,7 +189,7 @@ export class SyncEventEntity {
     }
     this.retryCount++;
     this.errorMessage = errorMessage;
-    this.status = SyncEventStatus.PENDING;
+    this.status = SyncEventStatus.RETRYING;
     this.updatedAt = new Date();
     return true;
   }
@@ -219,6 +238,8 @@ export class SyncEventFactory {
     targetPath: string;
     oldName: string;
     newName: string;
+    oldObjectKey: string;
+    newObjectKey: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -230,7 +251,12 @@ export class SyncEventFactory {
       status: SyncEventStatus.PENDING,
       retryCount: 0,
       maxRetries: 3,
-      metadata: { oldName: params.oldName, newName: params.newName },
+      metadata: {
+        oldName: params.oldName,
+        newName: params.newName,
+        oldObjectKey: params.oldObjectKey,
+        newObjectKey: params.newObjectKey,
+      },
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -273,6 +299,8 @@ export class SyncEventFactory {
     targetPath: string;
     originalPath: string;
     originalFolderId: string;
+    currentObjectKey: string;
+    trashPath: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -284,7 +312,12 @@ export class SyncEventFactory {
       status: SyncEventStatus.PENDING,
       retryCount: 0,
       maxRetries: 3,
-      metadata: { originalPath: params.originalPath, originalFolderId: params.originalFolderId },
+      metadata: {
+        originalPath: params.originalPath,
+        originalFolderId: params.originalFolderId,
+        currentObjectKey: params.currentObjectKey,
+        trashPath: params.trashPath,
+      },
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -297,7 +330,9 @@ export class SyncEventFactory {
     id: string;
     fileId: string;
     sourcePath: string;
-    targetPath: string;
+    targetFolderId: string;
+    trashMetadataId: string;
+    userId?: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -305,10 +340,15 @@ export class SyncEventFactory {
       targetType: SyncEventTargetType.FILE,
       fileId: params.fileId,
       sourcePath: params.sourcePath,
-      targetPath: params.targetPath,
+      targetPath: '',
       status: SyncEventStatus.PENDING,
       retryCount: 0,
       maxRetries: 3,
+      metadata: {
+        trashMetadataId: params.trashMetadataId,
+        restoreTargetFolderId: params.targetFolderId,
+        userId: params.userId,
+      },
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -321,6 +361,8 @@ export class SyncEventFactory {
     id: string;
     fileId: string;
     sourcePath: string;
+    trashMetadataId: string;
+    trashPath: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -332,6 +374,10 @@ export class SyncEventFactory {
       status: SyncEventStatus.PENDING,
       retryCount: 0,
       maxRetries: 3,
+      metadata: {
+        trashMetadataId: params.trashMetadataId,
+        trashPath: params.trashPath,
+      },
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -373,6 +419,8 @@ export class SyncEventFactory {
     targetPath: string;
     oldName: string;
     newName: string;
+    oldPath: string;
+    newPath: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -384,7 +432,12 @@ export class SyncEventFactory {
       status: SyncEventStatus.PENDING,
       retryCount: 0,
       maxRetries: 3,
-      metadata: { oldName: params.oldName, newName: params.newName },
+      metadata: {
+        oldName: params.oldName,
+        newName: params.newName,
+        oldPath: params.oldPath,
+        newPath: params.newPath,
+      },
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -400,6 +453,8 @@ export class SyncEventFactory {
     targetPath: string;
     originalParentId: string | null;
     targetParentId: string;
+    oldPath: string;
+    newPath: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -411,7 +466,12 @@ export class SyncEventFactory {
       status: SyncEventStatus.PENDING,
       retryCount: 0,
       maxRetries: 3,
-      metadata: { originalParentId: params.originalParentId, targetParentId: params.targetParentId },
+      metadata: {
+        originalParentId: params.originalParentId,
+        targetParentId: params.targetParentId,
+        oldPath: params.oldPath,
+        newPath: params.newPath,
+      },
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -427,6 +487,8 @@ export class SyncEventFactory {
     targetPath: string;
     originalPath: string;
     originalParentId: string | null;
+    currentPath: string;
+    trashPath: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -438,7 +500,12 @@ export class SyncEventFactory {
       status: SyncEventStatus.PENDING,
       retryCount: 0,
       maxRetries: 3,
-      metadata: { originalPath: params.originalPath, originalParentId: params.originalParentId },
+      metadata: {
+        originalPath: params.originalPath,
+        originalParentId: params.originalParentId,
+        currentPath: params.currentPath,
+        trashPath: params.trashPath,
+      },
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -452,6 +519,10 @@ export class SyncEventFactory {
     folderId: string;
     sourcePath: string;
     targetPath: string;
+    trashPath: string;
+    restorePath: string;
+    trashMetadataId: string;
+    originalParentId: string | null;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -463,6 +534,12 @@ export class SyncEventFactory {
       status: SyncEventStatus.PENDING,
       retryCount: 0,
       maxRetries: 3,
+      metadata: {
+        trashPath: params.trashPath,
+        restorePath: params.restorePath,
+        trashMetadataId: params.trashMetadataId,
+        originalParentId: params.originalParentId,
+      },
       createdAt: new Date(),
       updatedAt: new Date(),
     });
@@ -475,6 +552,8 @@ export class SyncEventFactory {
     id: string;
     folderId: string;
     sourcePath: string;
+    trashPath: string;
+    trashMetadataId: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -486,6 +565,10 @@ export class SyncEventFactory {
       status: SyncEventStatus.PENDING,
       retryCount: 0,
       maxRetries: 3,
+      metadata: {
+        trashPath: params.trashPath,
+        trashMetadataId: params.trashMetadataId,
+      },
       createdAt: new Date(),
       updatedAt: new Date(),
     });

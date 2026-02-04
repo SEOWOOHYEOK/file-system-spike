@@ -28,7 +28,8 @@ import type {
   JobStatus,
   QueueStats,
   ProcessorOptions,
-} from '../../../domain/queue/ports/job-queue.port';
+  JobsByStatusResult,
+} from '../job-queue.port';
 
 /**
  * 저장되는 작업 파일 구조
@@ -44,6 +45,8 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
   private readonly logger = new Logger(LocalFileQueueAdapter.name);
   private readonly basePath: string;
   private readonly pollingInterval: number;
+  private readonly defaultMaxAttempts: number;
+  private readonly defaultBackoffMs: number;
   private readonly processors: Map<string, JobProcessor> = new Map();
   private readonly concurrencyMap: Map<string, number> = new Map();
   private readonly activeJobsCount: Map<string, number> = new Map();
@@ -57,12 +60,165 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
       : path.join(process.cwd(), configuredPath);
       
     this.pollingInterval = this.configService.get<number>('QUEUE_POLLING_INTERVAL', 3000);
-    this.logger.log(`LocalFileQueueAdapter initialized - Path: ${this.basePath}`);
+    this.defaultMaxAttempts = this.configService.get<number>('QUEUE_DEFAULT_MAX_ATTEMPTS', 3);
+    this.defaultBackoffMs = this.configService.get<number>('QUEUE_DEFAULT_BACKOFF_MS', 5000);
+    this.logger.log(`LocalFileQueueAdapter initialized - Path: ${this.basePath}, maxAttempts: ${this.defaultMaxAttempts}, backoff: ${this.defaultBackoffMs}ms`);
   }
 
   async onModuleInit(): Promise<void> {
     // 기본 디렉토리 생성
     await fs.mkdir(this.basePath, { recursive: true });
+    
+    // 프로세스 재시작 시 stale active 작업 복구
+    await this.recoverStaleActiveJobs();
+    
+    // 주기적 정리 스케줄러 시작
+    this.startCleanupScheduler();
+  }
+
+  /**
+   * 오래된 completed/failed 파일 정리 스케줄러 시작
+   * - 1시간마다 7일 이상 된 파일 삭제
+   */
+  private startCleanupScheduler(): void {
+    const cleanupIntervalMs = 60 * 60 * 1000; // 1시간
+    const cleanupTimer = setInterval(() => {
+      this.cleanupOldJobs().catch((error) => {
+        this.logger.error(`Failed to cleanup old jobs: ${error}`);
+      });
+    }, cleanupIntervalMs);
+    
+    // 타이머 정리를 위해 저장 (onModuleDestroy에서 정리)
+    this.pollingTimers.set('__cleanup__', cleanupTimer);
+    this.logger.log('Cleanup scheduler started (interval: 1 hour)');
+  }
+
+  /**
+   * 오래된 completed/failed 작업 파일 삭제
+   * @param maxAgeMs 최대 보관 기간 (기본: 7일)
+   */
+  private async cleanupOldJobs(maxAgeMs: number = 7 * 24 * 60 * 60 * 1000): Promise<void> {
+    const queueDirs = await this.listQueueDirectories();
+    const now = Date.now();
+    let deletedCount = 0;
+    
+    for (const queueName of queueDirs) {
+      for (const status of ['completed', 'failed'] as const) {
+        const jobIds = await this.listJobFiles(queueName, status);
+        
+        for (const jobId of jobIds) {
+          try {
+            const jobFile = await this.readJobFile<JobData>(queueName, jobId, status);
+            if (!jobFile) continue;
+            
+            // 완료/실패 시간 기준으로 삭제 여부 결정
+            const completedAt = jobFile.job.completedAt
+              ? new Date(jobFile.job.completedAt).getTime()
+              : new Date(jobFile.job.createdAt).getTime();
+            
+            if (now - completedAt > maxAgeMs) {
+              await this.deleteJobFile(queueName, jobId, status);
+              deletedCount++;
+            }
+          } catch (error) {
+            // 개별 파일 삭제 실패는 무시
+          }
+        }
+      }
+    }
+    
+    if (deletedCount > 0) {
+      this.logger.log(`Cleanup completed: deleted ${deletedCount} old job files`);
+    }
+  }
+
+  /**
+   * 프로세스 재시작 시 active/ 폴더의 stale 작업들을 waiting/으로 복구
+   * 
+   * 프로세스가 갑자기 죽으면 처리 중이던 작업이 active/ 폴더에 남습니다.
+   * 재시작 시 이 작업들을 waiting/으로 이동하여 재처리될 수 있게 합니다.
+   */
+  private async recoverStaleActiveJobs(): Promise<void> {
+    try {
+      // 모든 큐 디렉토리 스캔
+      const queueDirs = await this.listQueueDirectories();
+      
+      for (const queueName of queueDirs) {
+        await this.recoverQueueActiveJobs(queueName);
+      }
+    } catch (error) {
+      this.logger.error(`Failed to recover stale active jobs: ${error}`);
+    }
+  }
+
+  /**
+   * 큐 디렉토리 목록 조회
+   */
+  private async listQueueDirectories(): Promise<string[]> {
+    try {
+      const entries = await fs.readdir(this.basePath, { withFileTypes: true });
+      return entries
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => entry.name);
+    } catch (error: any) {
+      if (error.code === 'ENOENT') return [];
+      throw error;
+    }
+  }
+
+  /**
+   * 특정 큐의 active 작업들을 waiting으로 복구
+   * 
+   * attemptsMade 롤백:
+   * - active로 이동 시 attemptsMade가 증가됨
+   * - 프로세스 크래시는 "실패한 시도"가 아니므로 롤백 필요
+   * - 롤백하지 않으면 크래시 1회당 재시도 기회 1회 소모됨
+   * 
+   * Race Condition 방지:
+   * - 여러 인스턴스가 동시에 복구 시도해도 안전
+   * - 파일이 이미 없으면 스킵 (다른 인스턴스가 먼저 처리)
+   */
+  private async recoverQueueActiveJobs(queueName: string): Promise<void> {
+    const activeJobIds = await this.listJobFiles(queueName, 'active');
+    
+    if (activeJobIds.length === 0) return;
+    
+    this.logger.warn(
+      `Recovering ${activeJobIds.length} stale active jobs in queue: ${queueName}`,
+    );
+    
+    for (const jobId of activeJobIds) {
+      try {
+        const jobFile = await this.readJobFile<JobData>(queueName, jobId, 'active');
+        if (!jobFile) {
+          // 다른 인스턴스가 이미 복구했거나 파일이 없음
+          this.logger.debug(`Job already recovered by another instance: ${jobId}`);
+          continue;
+        }
+        
+        // 상태를 waiting으로 변경
+        jobFile.job.status = 'waiting';
+        
+        // attemptsMade 롤백 (크래시는 시도 횟수에서 제외, 음수 방지)
+        if (jobFile.job.attemptsMade && jobFile.job.attemptsMade > 0) {
+          jobFile.job.attemptsMade -= 1;
+        }
+        
+        // active → waiting으로 이동 (실패해도 계속 진행)
+        await this.moveJobFile(queueName, jobFile, 'active', 'waiting');
+        
+        this.logger.log(
+          `Recovered stale job: ${jobId} (attempts: ${jobFile.job.attemptsMade})`,
+        );
+      } catch (error: any) {
+        // Race condition으로 인한 파일 없음 에러는 무시
+        if (error.code === 'ENOENT') {
+          this.logger.debug(`Job already recovered by another instance: ${jobId}`);
+          continue;
+        }
+        this.logger.error(`Failed to recover job ${jobId}: ${error.message}`);
+      }
+    }
   }
 
   async onModuleDestroy(): Promise<void> {
@@ -137,7 +293,16 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
   }
 
   /**
-   * 작업 파일 이동
+   * 작업 파일 이동 (Write-then-Delete 원자성 보장)
+   * 
+   * 순서가 중요:
+   * 1. 새 위치에 먼저 저장 (실패해도 기존 파일 유지)
+   * 2. 저장 성공 후 기존 파일 삭제
+   * 
+   * 이 순서를 지키면:
+   * - 중간에 프로세스가 죽어도 최소 하나의 위치에 파일 존재
+   * - 중복은 발생할 수 있지만, 유실은 방지됨
+   * - 재시작 시 복구 로직이 중복 처리 가능
    */
   private async moveJobFile<T>(
     queueName: string,
@@ -145,8 +310,10 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
     fromStatus: JobStatus | 'delayed',
     toStatus: JobStatus | 'delayed',
   ): Promise<void> {
-    await this.deleteJobFile(queueName, jobFile.job.id, fromStatus);
+    // 1. 먼저 새 위치에 저장 (원자성 보장)
     await this.saveJobFile(queueName, jobFile, toStatus);
+    // 2. 저장 성공 후 기존 파일 삭제
+    await this.deleteJobFile(queueName, jobFile.job.id, fromStatus);
   }
 
   /**
@@ -308,11 +475,11 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
         // 실패 처리
         jobFile.job.failedReason = error.message;
 
-        const maxAttempts = jobFile.options?.attempts || 1;
-        if (jobFile.job.attemptsMade! < maxAttempts) {
+        const maxAttempts = jobFile.options?.attempts || this.defaultMaxAttempts;
+        if (jobFile.job.attemptsMade! <= maxAttempts) {
           // 재시도: delayed로 이동
           jobFile.job.status = 'waiting';
-          const backoff = jobFile.options?.backoff || 1000;
+          const backoff = jobFile.options?.backoff || this.defaultBackoffMs;
           jobFile.scheduledAt = Date.now() + backoff * jobFile.job.attemptsMade!;
           await this.moveJobFile(queueName, jobFile, 'active', 'delayed');
           this.logger.warn(`Job ${jobId} failed, will retry (attempt ${jobFile.job.attemptsMade}/${maxAttempts})`);
@@ -419,5 +586,34 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
 
   getAllQueueNames(): string[] {
     return Array.from(this.processors.keys());
+  }
+
+  async getJobsByStatus<T = JobData>(queueName: string, limit: number = 50): Promise<JobsByStatusResult<T>> {
+    const statuses: JobStatus[] = ['waiting', 'active', 'delayed', 'failed', 'completed'];
+    const result: JobsByStatusResult<T> = {
+      waiting: [],
+      active: [],
+      delayed: [],
+      failed: [],
+      completed: [],
+    };
+
+    for (const status of statuses) {
+      const files = await this.listJobFiles(queueName, status);
+      const limitedFiles = files.slice(0, limit);
+
+      for (const fileName of limitedFiles) {
+        try {
+          const filePath = path.join(this.basePath, queueName, status, `${fileName}.json`);
+          const content = await fs.readFile(filePath, 'utf-8');
+          const jobFile: JobFile<T> = JSON.parse(content);
+          result[status].push(jobFile.job);
+        } catch {
+          // 파일 읽기 실패 시 스킵
+        }
+      }
+    }
+
+    return result;
   }
 }
