@@ -2,6 +2,7 @@ import { Injectable, Inject, NotFoundException, ConflictException, BadRequestExc
 import { DataSource } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { buildPath } from '../../common/utils';
+import { RequestContext } from '../../common/context/request-context';
 import {
   FolderEntity,
   FolderState,
@@ -35,6 +36,7 @@ import {
   type NasFolderPurgeJobData,
 } from '../worker/nas-folder-sync.worker';
 
+import { CreateFolderParams } from '../../domain/folder/service/folder-domain.service';
 
 
 /**
@@ -72,11 +74,12 @@ export class FolderCommandService implements OnModuleInit {
         const folderId = uuidv4();
 
         // FolderDomainService를 통해 루트 폴더 생성
-        await this.folderDomainService.생성({
+        await this.folderDomainService.생성<CreateFolderParams>({
           id: folderId,
           name: '',
           parentId: null,
           path: '/',
+          createdBy: 'system', // 루트 폴더는 시스템이 생성
         });
 
         // FolderNasStorageObjectDomainService를 통해 스토리지 객체 생성
@@ -124,12 +127,14 @@ export class FolderCommandService implements OnModuleInit {
     // 4. 폴더 생성
     const folderId = uuidv4();
     const folderPath = buildPath(parentPath, finalName);
+    const createdBy = RequestContext.getUserId() || 'unknown';
 
     const folder = await this.folderDomainService.생성({
       id: folderId,
       name: finalName,
       parentId,
       path: folderPath,
+      createdBy,
     });
 
     // 5. NAS 스토리지 객체 생성
@@ -148,6 +153,7 @@ export class FolderCommandService implements OnModuleInit {
       targetPath: folderPath,
       folderName: finalName,
       parentId,
+      userId: createdBy,
     });
 
     await this.syncEventDomainService.저장(syncEvent);
@@ -245,6 +251,7 @@ export class FolderCommandService implements OnModuleInit {
 
       // 9. sync_events 생성
       const syncEventId = uuidv4();
+      const userId = RequestContext.getUserId() || 'unknown';
       const syncEvent = SyncEventFactory.createFolderRenameEvent({
         id: syncEventId,
         folderId,
@@ -254,6 +261,7 @@ export class FolderCommandService implements OnModuleInit {
         newName: finalName,
         oldPath,
         newPath,
+        userId,
       });
       await this.syncEventDomainService.저장(syncEvent);
 
@@ -390,6 +398,7 @@ export class FolderCommandService implements OnModuleInit {
 
       // 10. sync_events 생성
       const syncEventId = uuidv4();
+      const userId = RequestContext.getUserId() || 'unknown';
       const syncEvent = SyncEventFactory.createFolderMoveEvent({
         id: syncEventId,
         folderId,
@@ -399,6 +408,7 @@ export class FolderCommandService implements OnModuleInit {
         targetParentId,
         oldPath,
         newPath,
+        userId,
       });
       await this.syncEventDomainService.저장(syncEvent);
 
@@ -531,6 +541,7 @@ export class FolderCommandService implements OnModuleInit {
         originalParentId: folder.parentId,
         currentPath,
         trashPath,
+        userId,
       });
 
       await this.syncEventDomainService.저장(syncEvent);

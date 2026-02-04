@@ -38,6 +38,11 @@ export class FileOrmEntity {
   @Index()
   state: string;
 
+  /** 파일 생성자 (업로더) ID */
+  @Column('uuid')
+  @Index()
+  createdBy: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

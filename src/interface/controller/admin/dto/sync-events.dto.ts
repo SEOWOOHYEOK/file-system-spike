@@ -139,6 +139,9 @@ export class SyncEventDetailDto {
 
   @ApiProperty({ description: '생성 후 경과 시간 (시간 단위)' })
   ageHours: number;
+
+  @ApiPropertyOptional({ description: '이벤트를 발생시킨 사용자 ID' })
+  userId?: string;
 }
 
 /**

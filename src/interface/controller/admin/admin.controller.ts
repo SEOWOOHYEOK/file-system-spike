@@ -125,6 +125,7 @@ export class AdminController {
         createdAt: e.createdAt,
         updatedAt: e.updatedAt,
         processedAt: e.processedAt,
+        userId: e.processBy,
       })),
       total: events.length,
     };
@@ -155,8 +156,71 @@ export class AdminController {
         createdAt: e.createdAt,
         updatedAt: e.updatedAt,
         processedAt: e.processedAt,
+        userId: e.processBy,
       })),
       total: events.length,
+    };
+  }
+
+  /**
+   * GET /v1/admin/sync/events/by-user/:userId - 사용자별 동기화 이벤트 히스토리
+   */
+  @Get('sync/events/by-user/:userId')
+  @ApiOperation({
+    summary: '사용자별 동기화 이벤트 히스토리',
+    description: '특정 사용자가 발생시킨 모든 동기화 이벤트를 조회합니다.',
+  })
+  @ApiParam({ name: 'userId', description: '사용자 ID' })
+  @ApiQuery({ name: 'status', required: false, description: '상태 필터 (PENDING, QUEUED, PROCESSING, RETRYING, DONE, FAILED)' })
+  async getSyncEventsByUser(
+    @Param('userId') userId: string,
+    @Query('status') status?: string,
+  ) {
+    const result = await this.syncEventStatsService.findSyncEvents({
+      hours: 24,
+      limit: 1000,
+      offset: 0,
+    });
+
+    // userId로 필터링
+    let filteredEvents = result.events.filter((e) => e.processBy === userId);
+
+    // 상태 필터 적용
+    if (status) {
+      filteredEvents = filteredEvents.filter((e) => e.status === status);
+    }
+
+    // 상태별 요약
+    const summary = {
+      total: filteredEvents.length,
+      pending: filteredEvents.filter((e) => e.status === 'PENDING').length,
+      queued: filteredEvents.filter((e) => e.status === 'QUEUED').length,
+      processing: filteredEvents.filter((e) => e.status === 'PROCESSING').length,
+      retrying: filteredEvents.filter((e) => e.status === 'RETRYING').length,
+      done: filteredEvents.filter((e) => e.status === 'DONE').length,
+      failed: filteredEvents.filter((e) => e.status === 'FAILED').length,
+      stuck: filteredEvents.filter((e) => e.isStuck).length,
+    };
+
+    return {
+      userId,
+      summary,
+      events: filteredEvents.map((e) => ({
+        id: e.id,
+        eventType: e.eventType,
+        targetType: e.targetType,
+        fileId: e.fileId,
+        folderId: e.folderId,
+        status: e.status,
+        retryCount: e.retryCount,
+        maxRetries: e.maxRetries,
+        errorMessage: e.errorMessage,
+        isStuck: e.isStuck,
+        ageHours: Math.round(e.ageHours * 100) / 100,
+        createdAt: e.createdAt,
+        updatedAt: e.updatedAt,
+        processedAt: e.processedAt,
+      })),
     };
   }
 
@@ -169,7 +233,8 @@ export class AdminController {
     description:
       '현재 진행 중인 동기화 작업 현황을 한눈에 볼 수 있습니다.\n\n' +
       '**상태 요약:** PENDING, QUEUED, PROCESSING, RETRYING, DONE, FAILED 각 개수\n' +
-      '**진행 중 작업:** 현재 처리 중인 모든 작업 목록\n' +
+      '**사용자별 현황:** 사용자별 대기/처리 중 작업 건수\n' +
+      '**진행 중 작업:** 현재 처리 중인 모든 작업 목록 (userId 포함)\n' +
       '**최근 실패:** 최근 24시간 내 실패한 작업 목록',
   })
   async getSyncDashboard() {

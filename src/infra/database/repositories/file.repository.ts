@@ -41,6 +41,7 @@ export class FileRepository implements IFileRepository {
       sizeBytes: Number(orm.sizeBytes),
       mimeType: orm.mimeType,
       state: orm.state as FileState,
+      createdBy: orm.createdBy,
       createdAt: orm.createdAt,
       updatedAt: orm.updatedAt,
     });
@@ -57,6 +58,7 @@ export class FileRepository implements IFileRepository {
     orm.sizeBytes = domain.sizeBytes;
     orm.mimeType = domain.mimeType;
     orm.state = domain.state;
+    orm.createdBy = domain.createdBy;
     orm.createdAt = domain.createdAt;
     orm.updatedAt = domain.updatedAt;
     return orm;

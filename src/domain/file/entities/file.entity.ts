@@ -19,6 +19,8 @@ export class FileEntity {
   sizeBytes: number;
   mimeType: string;
   state: FileState;
+  /** 파일 생성자 (업로더) ID */
+  createdBy: string;
   createdAt: Date;
   updatedAt: Date;
 

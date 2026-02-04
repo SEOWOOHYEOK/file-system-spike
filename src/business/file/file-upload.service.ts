@@ -18,6 +18,7 @@ import {
   type NasFileUploadJobData,
 } from '../worker/nas-file-sync.worker';
 import { normalizeFileName } from '../../common/utils';
+import { RequestContext } from '../../common/context/request-context';
 
 // Domain Services
 import { FileDomainService } from '../../domain/file/service/file-domain.service';
@@ -125,6 +126,7 @@ export class FileUploadService {
       // 8. sync_events 생성 (문서 요구사항)
       syncEventId = uuidv4();
       
+      const userId = RequestContext.getUserId() || 'unknown';
       syncEvent = SyncEventFactory.createFileCreateEvent({
         id: syncEventId,
         fileId,
@@ -132,6 +134,7 @@ export class FileUploadService {
         targetPath: nasPath, // NAS 경로
         fileName: finalFileName,
         folderId,
+        processBy: userId,
       });
       await this.syncEventDomainService.저장(syncEvent);
     } catch (dbError) {
@@ -319,6 +322,9 @@ export class FileUploadService {
     file: Express.Multer.File,
     createdAt: Date,
   ): Promise<FileEntity> {
+    // RequestContext에서 사용자 ID 조회
+    const createdBy = RequestContext.getUserId() || 'unknown';
+    
     // Domain Service 사용
     return this.fileDomainService.생성({
       id: fileId,
@@ -326,6 +332,7 @@ export class FileUploadService {
       folderId,
       sizeBytes: file.size,
       mimeType: file.mimetype,
+      createdBy,
       createdAt,
     });
   }

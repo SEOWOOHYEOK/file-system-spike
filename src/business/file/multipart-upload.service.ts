@@ -56,6 +56,7 @@ import { FileCacheStorageDomainService } from '../../domain/storage/file/service
 import { FileNasStorageDomainService } from '../../domain/storage/file/service/file-nas-storage-domain.service';
 import { FolderNasStorageObjectDomainService } from '../../domain/storage/folder/service/folder-nas-storage-object-domain.service';
 import { normalizeFileName } from '../../common/utils';
+import { RequestContext } from '../../common/context/request-context';
 
 
 @Injectable()
@@ -342,12 +343,14 @@ export class MultipartUploadService {
       const txOptions: TransactionOptions = { queryRunner };
 
       // 10. 파일 엔티티 생성 (트랜잭션 내부)
+      const createdBy = RequestContext.getUserId() || 'unknown';
       fileEntity = await this.fileDomainService.생성({
         id: fileId,
         name: finalFileName,
         folderId: session.folderId,
         sizeBytes: session.totalSize,
         mimeType: session.mimeType,
+        createdBy,
         createdAt: uploadCreatedAt,
       }, txOptions);
 
@@ -355,6 +358,7 @@ export class MultipartUploadService {
       await this.createStorageObjectsWithTx(fileId, uploadCreatedAt, finalFileName, txOptions);
 
       // 12. sync_events 생성 (트랜잭션 내부)
+      const userId = RequestContext.getUserId() || 'unknown';
       syncEvent = SyncEventFactory.createFileCreateEvent({
         id: syncEventId,
         fileId,
@@ -362,6 +366,7 @@ export class MultipartUploadService {
         targetPath: nasPath,
         fileName: finalFileName,
         folderId: session.folderId,
+        processBy: userId,
       });
       await this.syncEventDomainService.저장(syncEvent, txOptions);
 

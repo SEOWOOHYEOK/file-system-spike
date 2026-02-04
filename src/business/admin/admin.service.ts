@@ -29,7 +29,7 @@ export class AdminService {
     private readonly storageConsistencyService: StorageConsistencyService,
     private readonly syncEventStatsService: SyncEventStatsService,
     private readonly cacheEvictionWorker: CacheEvictionWorker,
-  ) {}
+  ) { }
 
   /**
    * 캐시 스토리지 연결 상태 확인
@@ -89,6 +89,7 @@ export class AdminService {
         updatedAt: event.updatedAt,
         isStuck: event.isStuck,
         ageHours: event.ageHours,
+        userId: event.processBy,
       })),
       pagination: {
         limit: params.limit,
@@ -165,10 +166,61 @@ export class AdminService {
       (e) => ['PENDING', 'QUEUED', 'PROCESSING', 'RETRYING'].includes(e.status),
     );
 
-    // 최근 실패한 작업 (최대 10개)
+    // 사용자별 대기 현황 집계
+    const userStatsMap = new Map<string, {
+      pendingCount: number;
+      queuedCount: number;
+      processingCount: number;
+      retryingCount: number;
+      stuckCount: number;
+      oldestJobAt?: Date;
+    }>();
+
+    for (const event of activeEvents) {
+      const userId = event.processBy || 'unknown';
+      const existing = userStatsMap.get(userId) || {
+        pendingCount: 0,
+        queuedCount: 0,
+        processingCount: 0,
+        retryingCount: 0,
+        stuckCount: 0,
+        oldestJobAt: undefined,
+      };
+
+      // 상태별 카운트
+      if (event.status === 'PENDING') existing.pendingCount++;
+      if (event.status === 'QUEUED') existing.queuedCount++;
+      if (event.status === 'PROCESSING') existing.processingCount++;
+      if (event.status === 'RETRYING') existing.retryingCount++;
+
+      // stuck 카운트
+      if (event.isStuck) existing.stuckCount++;
+
+      // 가장 오래된 작업 시간
+      if (!existing.oldestJobAt || event.createdAt < existing.oldestJobAt) {
+        existing.oldestJobAt = event.createdAt;
+      }
+
+      userStatsMap.set(userId, existing);
+    }
+
+    // 사용자별 통계를 배열로 변환하고 정렬
+    const byUser: UserPendingStats[] = Array.from(userStatsMap.entries())
+      .map(([userId, stats]) => ({
+        userId,
+        pendingCount: stats.pendingCount,
+        queuedCount: stats.queuedCount,
+        processingCount: stats.processingCount,
+        retryingCount: stats.retryingCount,
+        totalActiveCount: stats.pendingCount + stats.queuedCount + stats.processingCount + stats.retryingCount,
+        stuckCount: stats.stuckCount,
+        oldestJobAt: stats.oldestJobAt,
+      }))
+      .sort((a, b) => b.totalActiveCount - a.totalActiveCount);
+
+    // 최근 실패한 작업
     const recentFailed = syncEventsResult.events
       .filter((e) => e.status === 'FAILED')
-      .slice(0, 10);
 
     return {
       summary: {
@@ -180,6 +232,7 @@ export class AdminService {
         failed: syncEventsResult.summary.failed,
         stuckCount: syncEventsResult.summary.stuckPending + syncEventsResult.summary.stuckProcessing,
       },
+      byUser,
       activeJobs: activeEvents.map((e) => ({
         syncEventId: e.id,
         eventType: e.eventType,
@@ -193,6 +246,7 @@ export class AdminService {
         ageHours: Math.round(e.ageHours * 100) / 100,
         createdAt: e.createdAt,
         errorMessage: e.errorMessage,
+        userId: e.processBy || 'unknown',
       })),
       recentFailed: recentFailed.map((e) => ({
         syncEventId: e.id,
@@ -203,6 +257,7 @@ export class AdminService {
         errorMessage: e.errorMessage,
         retryCount: e.retryCount,
         createdAt: e.createdAt,
+        userId: e.processBy || 'unknown',
       })),
       checkedAt: new Date(),
     };
@@ -223,6 +278,20 @@ export class AdminService {
 }
 
 /**
+ * 사용자별 대기 현황
+ */
+export interface UserPendingStats {
+  userId: string;
+  pendingCount: number;
+  queuedCount: number;
+  processingCount: number;
+  retryingCount: number;
+  totalActiveCount: number;
+  stuckCount: number;
+  oldestJobAt?: Date;
+}
+
+/**
  * 동기화 대시보드 응답 DTO
  */
 export interface SyncDashboardResponseDto {
@@ -235,6 +304,8 @@ export interface SyncDashboardResponseDto {
     failed: number;
     stuckCount: number;
   };
+  /** 사용자별 대기 현황 (활성 작업 수 내림차순 정렬) */
+  byUser: UserPendingStats[];
   activeJobs: {
     syncEventId: string;
     eventType: string;
@@ -248,6 +319,7 @@ export interface SyncDashboardResponseDto {
     ageHours: number;
     createdAt: Date;
     errorMessage?: string;
+    userId: string;
   }[];
   recentFailed: {
     syncEventId: string;
@@ -258,6 +330,7 @@ export interface SyncDashboardResponseDto {
     errorMessage?: string;
     retryCount: number;
     createdAt: Date;
+    userId: string;
   }[];
   checkedAt: Date;
 }

@@ -76,6 +76,9 @@ export class SyncEventEntity {
   /** 상태 */
   status: SyncEventStatus;
 
+  /** 이벤트를 발생시킨 사용자 ID */
+  processBy: string;
+
   /** 재시도 횟수 */
   retryCount: number;
 
@@ -211,6 +214,7 @@ export class SyncEventFactory {
     targetPath: string;
     fileName: string;
     folderId: string;
+    processBy: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -220,6 +224,7 @@ export class SyncEventFactory {
       sourcePath: params.sourcePath,
       targetPath: params.targetPath,
       status: SyncEventStatus.PENDING,
+      processBy: params.processBy,
       retryCount: 0,
       maxRetries: 3,
       metadata: { fileName: params.fileName, folderId: params.folderId },
@@ -240,6 +245,7 @@ export class SyncEventFactory {
     newName: string;
     oldObjectKey: string;
     newObjectKey: string;
+    userId: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -249,6 +255,7 @@ export class SyncEventFactory {
       sourcePath: params.sourcePath,
       targetPath: params.targetPath,
       status: SyncEventStatus.PENDING,
+      processBy: params.userId,
       retryCount: 0,
       maxRetries: 3,
       metadata: {
@@ -272,6 +279,7 @@ export class SyncEventFactory {
     targetPath: string;
     originalFolderId: string;
     targetFolderId: string;
+    userId: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -281,6 +289,7 @@ export class SyncEventFactory {
       sourcePath: params.sourcePath,
       targetPath: params.targetPath,
       status: SyncEventStatus.PENDING,
+      processBy: params.userId,
       retryCount: 0,
       maxRetries: 3,
       metadata: { originalFolderId: params.originalFolderId, targetFolderId: params.targetFolderId },
@@ -301,6 +310,7 @@ export class SyncEventFactory {
     originalFolderId: string;
     currentObjectKey: string;
     trashPath: string;
+    userId: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -310,6 +320,7 @@ export class SyncEventFactory {
       sourcePath: params.sourcePath,
       targetPath: params.targetPath,
       status: SyncEventStatus.PENDING,
+      processBy: params.userId,
       retryCount: 0,
       maxRetries: 3,
       metadata: {
@@ -332,7 +343,7 @@ export class SyncEventFactory {
     sourcePath: string;
     targetFolderId: string;
     trashMetadataId: string;
-    userId?: string;
+    userId: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -342,12 +353,12 @@ export class SyncEventFactory {
       sourcePath: params.sourcePath,
       targetPath: '',
       status: SyncEventStatus.PENDING,
+      processBy: params.userId,
       retryCount: 0,
       maxRetries: 3,
       metadata: {
         trashMetadataId: params.trashMetadataId,
         restoreTargetFolderId: params.targetFolderId,
-        userId: params.userId,
       },
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -363,6 +374,7 @@ export class SyncEventFactory {
     sourcePath: string;
     trashMetadataId: string;
     trashPath: string;
+    userId: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -372,6 +384,7 @@ export class SyncEventFactory {
       sourcePath: params.sourcePath,
       targetPath: '',
       status: SyncEventStatus.PENDING,
+      processBy: params.userId,
       retryCount: 0,
       maxRetries: 3,
       metadata: {
@@ -392,6 +405,7 @@ export class SyncEventFactory {
     targetPath: string;
     folderName: string;
     parentId: string | null;
+    userId: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -401,6 +415,7 @@ export class SyncEventFactory {
       sourcePath: '',
       targetPath: params.targetPath,
       status: SyncEventStatus.PENDING,
+      processBy: params.userId,
       retryCount: 0,
       maxRetries: 3,
       metadata: { folderName: params.folderName, parentId: params.parentId },
@@ -421,6 +436,7 @@ export class SyncEventFactory {
     newName: string;
     oldPath: string;
     newPath: string;
+    userId: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -430,6 +446,7 @@ export class SyncEventFactory {
       sourcePath: params.sourcePath,
       targetPath: params.targetPath,
       status: SyncEventStatus.PENDING,
+      processBy: params.userId,
       retryCount: 0,
       maxRetries: 3,
       metadata: {
@@ -455,6 +472,7 @@ export class SyncEventFactory {
     targetParentId: string;
     oldPath: string;
     newPath: string;
+    userId: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -464,6 +482,7 @@ export class SyncEventFactory {
       sourcePath: params.sourcePath,
       targetPath: params.targetPath,
       status: SyncEventStatus.PENDING,
+      processBy: params.userId,
       retryCount: 0,
       maxRetries: 3,
       metadata: {
@@ -489,6 +508,7 @@ export class SyncEventFactory {
     originalParentId: string | null;
     currentPath: string;
     trashPath: string;
+    userId: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -498,6 +518,7 @@ export class SyncEventFactory {
       sourcePath: params.sourcePath,
       targetPath: params.targetPath,
       status: SyncEventStatus.PENDING,
+      processBy: params.userId,
       retryCount: 0,
       maxRetries: 3,
       metadata: {
@@ -523,6 +544,7 @@ export class SyncEventFactory {
     restorePath: string;
     trashMetadataId: string;
     originalParentId: string | null;
+    userId: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -532,6 +554,7 @@ export class SyncEventFactory {
       sourcePath: params.sourcePath,
       targetPath: params.targetPath,
       status: SyncEventStatus.PENDING,
+      processBy: params.userId,
       retryCount: 0,
       maxRetries: 3,
       metadata: {
@@ -554,6 +577,7 @@ export class SyncEventFactory {
     sourcePath: string;
     trashPath: string;
     trashMetadataId: string;
+    userId: string;
   }): SyncEventEntity {
     return new SyncEventEntity({
       id: params.id,
@@ -563,6 +587,7 @@ export class SyncEventFactory {
       sourcePath: params.sourcePath,
       targetPath: '',
       status: SyncEventStatus.PENDING,
+      processBy: params.userId,
       retryCount: 0,
       maxRetries: 3,
       metadata: {

@@ -28,6 +28,8 @@ export class FolderEntity {
   parentId: string | null;
   path: string;
   state: FolderState;
+  /** 폴더 생성자 ID (루트 폴더는 'system') */
+  createdBy: string;
   createdAt: Date;
   updatedAt: Date;
 

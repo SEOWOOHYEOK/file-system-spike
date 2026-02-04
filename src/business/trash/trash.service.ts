@@ -1,6 +1,7 @@
 import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { createPaginationInfo } from '../../common/types/pagination';
+import { RequestContext } from '../../common/context/request-context';
 import {
   TrashListResponse,
   TrashItem,
@@ -488,6 +489,7 @@ export class TrashService {
 
         // 8. SyncEvent 생성 (PENDING)
         const syncEventId = uuidv4();
+        const currentUserId = RequestContext.getUserId() || userId;
         const syncEvent = SyncEventFactory.createFolderRestoreEvent({
           id: syncEventId,
           folderId: folder.id,
@@ -497,6 +499,7 @@ export class TrashService {
           restorePath: originalPath,
           trashMetadataId: item.trashMetadataId,
           originalParentId: targetParentId,
+          userId: currentUserId,
         });
         await this.syncEventDomainService.저장(syncEvent);
 

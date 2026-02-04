@@ -25,6 +25,8 @@ export interface CreateFolderParams {
   parentId: string | null;
   /** 경로를 직접 지정 (비즈니스 레이어에서 충돌 처리 후 전달) */
   path?: string;
+  /** 폴더 생성자 ID (루트 폴더는 'system') */
+  createdBy: string;
 }
 
 @Injectable()
@@ -32,7 +34,7 @@ export class FolderDomainService {
   constructor(
     @Inject(FOLDER_REPOSITORY)
     private readonly folderRepository: IFolderRepository,
-  ) {}
+  ) { }
 
   // ============================================
   // 조회 메서드 (Query Methods)
@@ -130,7 +132,7 @@ export class FolderDomainService {
    * @param txOptions - 트랜잭션 옵션
    * @returns 생성된 폴더 엔티티
    */
-  async 생성(params: CreateFolderParams, txOptions?: TransactionOptions): Promise<FolderEntity> {
+  async 생성<T extends CreateFolderParams>(params: T, txOptions?: TransactionOptions): Promise<FolderEntity> {
     // 경로가 전달되지 않은 경우 직접 계산
     let folderPath = params.path;
     if (!folderPath) {
@@ -155,6 +157,7 @@ export class FolderDomainService {
       parentId: params.parentId,
       path: folderPath,
       state: FolderState.ACTIVE,
+      createdBy: params.createdBy,
       createdAt: new Date(),
       updatedAt: new Date(),
     });

@@ -68,6 +68,15 @@ export class SyncEventOrmEntity {
   })
   status: string;
 
+  /** 이벤트를 발생시킨 사용자 ID */
+  @Column({
+    type: 'varchar',
+    length: 255,
+    name: 'user_id',
+  })
+  @Index('IDX_sync_events_user_id')
+  userId: string;
+
   @Column({
     type: 'int',
     name: 'retry_count',

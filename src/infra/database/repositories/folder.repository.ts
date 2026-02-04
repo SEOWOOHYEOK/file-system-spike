@@ -33,6 +33,7 @@ export class FolderRepository implements IFolderRepository {
       parentId: orm.parentId,
       path: orm.path,
       state: orm.state as FolderState,
+      createdBy: orm.createdBy,
       createdAt: orm.createdAt,
       updatedAt: orm.updatedAt,
     });
@@ -48,6 +49,7 @@ export class FolderRepository implements IFolderRepository {
     orm.parentId = domain.parentId;
     orm.path = domain.path;
     orm.state = domain.state;
+    orm.createdBy = domain.createdBy;
     orm.createdAt = domain.createdAt;
     orm.updatedAt = domain.updatedAt;
     return orm;

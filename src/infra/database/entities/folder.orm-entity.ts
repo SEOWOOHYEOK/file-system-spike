@@ -36,6 +36,11 @@ export class FolderOrmEntity {
   @Index()
   state: string;
 
+  /** 폴더 생성자 ID (루트 폴더는 'system') */
+  @Column('uuid', { nullable: true })
+  @Index()
+  createdBy: string;
+
   @CreateDateColumn()
   createdAt: Date;
 

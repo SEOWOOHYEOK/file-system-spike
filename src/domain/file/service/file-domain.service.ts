@@ -27,6 +27,8 @@ export interface CreateFileParams {
     folderId: string;
     sizeBytes: number;
     mimeType: string;
+    /** 파일 생성자 (업로더) ID */
+    createdBy: string;
     createdAt?: Date;
 }
 
@@ -130,6 +132,7 @@ export class FileDomainService {
             sizeBytes: params.sizeBytes,
             mimeType: params.mimeType,
             state: FileState.ACTIVE,
+            createdBy: params.createdBy,
             createdAt: now,
             updatedAt: now,
         });

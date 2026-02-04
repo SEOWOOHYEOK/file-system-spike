@@ -131,6 +131,7 @@ export class SyncEventRepository implements ISyncEventRepository {
       sourcePath: orm.sourcePath,
       targetPath: orm.targetPath,
       status: orm.status as SyncEventStatus,
+      processBy: orm.userId,
       retryCount: orm.retryCount,
       maxRetries: orm.maxRetries,
       errorMessage: orm.errorMessage || undefined,
@@ -154,6 +155,7 @@ export class SyncEventRepository implements ISyncEventRepository {
     orm.sourcePath = domain.sourcePath;
     orm.targetPath = domain.targetPath;
     orm.status = domain.status;
+    orm.userId = domain.processBy;
     orm.retryCount = domain.retryCount;
     orm.maxRetries = domain.maxRetries;
     orm.errorMessage = domain.errorMessage || null;

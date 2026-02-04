@@ -21,6 +21,7 @@ import {
   SyncEventType,
 } from '../../domain/sync-event/entities/sync-event.entity';
 import { SyncEventDomainService } from '../../domain/sync-event';
+
 /**
  * 이벤트 조회 결과
  */

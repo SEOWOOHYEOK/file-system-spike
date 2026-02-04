@@ -2,6 +2,7 @@ import { Injectable, Inject, NotFoundException, ConflictException, BadRequestExc
 import { DataSource } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { buildPath, extractName } from '../../common/utils';
+import { RequestContext } from '../../common/context/request-context';
 import {
   AvailabilityStatus,
   RenameFileRequest,
@@ -130,6 +131,7 @@ export class FileManageService {
       const filePath = buildPath(folder?.path || '/', finalName);
 
       const syncEventId = uuidv4();
+      const userId = RequestContext.getUserId() || 'unknown';
       const syncEvent = SyncEventFactory.createFileRenameEvent({
         id: syncEventId,
         fileId,
@@ -139,6 +141,7 @@ export class FileManageService {
         newName: finalName,
         oldObjectKey: oldObjectKey || '',
         newObjectKey: newObjectKey || '',
+        userId,
       });
       await this.syncEventDomainService.저장(syncEvent);
 
@@ -293,6 +296,7 @@ export class FileManageService {
       const targetPathWithFolder = buildPath(targetFolder.path, targetPath ?? '');
 
       const syncEventId = uuidv4();
+      const userId = RequestContext.getUserId() || 'unknown';
       const syncEvent = SyncEventFactory.createFileMoveEvent({
         id: syncEventId,
         fileId,
@@ -300,6 +304,7 @@ export class FileManageService {
         targetPath: targetPathWithFolder,
         originalFolderId: originalFolderId || '',
         targetFolderId,
+        userId,
       });
       await this.syncEventDomainService.저장(syncEvent);
 
@@ -372,6 +377,7 @@ export class FileManageService {
 
     let currentObjectKey: string | null = null;
     let trashPath: string | null = null;
+    
 
     try {
       const txOptions: TransactionOptions = { queryRunner };
@@ -451,6 +457,7 @@ export class FileManageService {
         originalFolderId: file.folderId,
         currentObjectKey: currentObjectKey || '',
         trashPath: trashPath || '',
+        userId,
       });
       await this.syncEventDomainService.저장(syncEvent);
 
