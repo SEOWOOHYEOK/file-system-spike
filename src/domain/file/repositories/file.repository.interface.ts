@@ -25,6 +25,29 @@ export interface TransactionOptions {
 }
 
 /**
+ * 파일 검색 필터 옵션
+ */
+export interface FileSearchFilterOptions {
+  /** 파일 MIME 타입 필터 (부분 일치) */
+  mimeType?: string;
+  /** 등록자 이름 (Employee 테이블 조인, 부분 일치) */
+  createdByName?: string;
+  /** 검색 기간 시작일 (createdAt >= createdAtFrom) */
+  createdAtFrom?: Date;
+  /** 검색 기간 종료일 (createdAt <= createdAtTo) */
+  createdAtTo?: Date;
+}
+
+/**
+ * 검색 결과 아이템 (등록자 이름 포함)
+ */
+export interface FileSearchResultItem {
+  file: FileEntity;
+  /** 등록자 이름 (Employee 테이블에서 조회) */
+  createdByName?: string;
+}
+
+/**
  * 파일 리포지토리 인터페이스
  */
 export interface IFileRepository {
@@ -93,6 +116,23 @@ export interface IFileRepository {
     limit: number,
     offset: number,
   ): Promise<{ items: FileEntity[]; total: number }>;
+
+  /**
+   * 고급 검색: 이름 패턴 + 필터 옵션으로 파일 검색 (ACTIVE 상태만)
+   * Employee 테이블과 조인하여 등록자 이름 검색 지원
+   *
+   * @param namePattern 검색할 이름 패턴 (LIKE 검색)
+   * @param limit 최대 결과 수
+   * @param offset 오프셋
+   * @param filterOptions 추가 필터 옵션 (mimeType, createdByName, createdAt 범위)
+   * @returns 검색된 파일 목록(등록자 이름 포함)과 총 개수
+   */
+  searchWithFilters(
+    namePattern: string,
+    limit: number,
+    offset: number,
+    filterOptions?: FileSearchFilterOptions,
+  ): Promise<{ items: FileSearchResultItem[]; total: number }>;
 }
 
 /**

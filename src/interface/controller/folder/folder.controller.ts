@@ -90,6 +90,7 @@ export class FolderController {
    */
   @Get('search')
   @ApiFolderSearch()
+
   async search(@Query() query: SearchQuery): Promise<SearchResponse> {
     return this.searchService.search(query);
   }

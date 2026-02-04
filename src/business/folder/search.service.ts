@@ -19,6 +19,7 @@ import {
 } from '../../domain/folder';
 import { createPaginationInfo } from '../../common/types/pagination';
 import { FileDomainService } from '../../domain/file/service/file-domain.service';
+import type { FileSearchFilterOptions } from '../../domain/file/repositories/file.repository.interface';
 
 @Injectable()
 export class SearchService {
@@ -34,6 +35,10 @@ export class SearchService {
     const {
       keyword,
       type,
+      mimeType,
+      createdBy,
+      createdAtFrom,
+      createdAtTo,
       sortBy = SortBy.UPDATED_AT,
       sortOrder = SortOrder.DESC,
       page = 1,
@@ -42,17 +47,29 @@ export class SearchService {
 
     const offset = (page - 1) * pageSize;
 
+    // 파일 검색용 필터 옵션 구성
+    const fileFilterOptions: FileSearchFilterOptions = {
+      mimeType,
+      createdByName: createdBy,
+      createdAtFrom,
+      createdAtTo,
+    };
+
+    // 필터 옵션이 있는지 확인
+    const hasFileFilters = mimeType || createdBy || createdAtFrom || createdAtTo;
+
     // 검색 타입에 따른 분기 처리
     if (type === SearchResultType.FOLDER) {
+      // 폴더 검색 시 파일 전용 필터는 무시
       return this.searchFoldersOnly(keyword, sortBy, sortOrder, page, pageSize, offset);
     }
 
     if (type === SearchResultType.FILE) {
-      return this.searchFilesOnly(keyword, sortBy, sortOrder, page, pageSize, offset);
+      return this.searchFilesOnly(keyword, sortBy, sortOrder, page, pageSize, offset, fileFilterOptions);
     }
 
     // 전체 검색 (폴더 + 파일)
-    return this.searchAll(keyword, sortBy, sortOrder, page, pageSize, offset);
+    return this.searchAll(keyword, sortBy, sortOrder, page, pageSize, offset, hasFileFilters ? fileFilterOptions : undefined);
   }
 
   /**
@@ -100,16 +117,19 @@ export class SearchService {
     page: number,
     pageSize: number,
     offset: number,
+    filterOptions?: FileSearchFilterOptions,
   ): Promise<SearchResponse> {
-    const { items, total } = await this.fileDomainService.이름검색(
+    // 필터 옵션이 있으면 고급 검색 사용
+    const { items, total } = await this.fileDomainService.고급검색(
       keyword,
       pageSize,
       offset,
+      filterOptions,
     );
 
     // 파일의 경우 부모 폴더 경로 조회가 필요
     let results: SearchResultItem[] = [];
-    for (const file of items) {
+    for (const { file, createdByName } of items) {
       const folder = await this.folderDomainService.조회(file.folderId);
       results.push({
         id: file.id,
@@ -119,6 +139,9 @@ export class SearchService {
         folderId: file.folderId,
         size: file.sizeBytes,
         mimeType: file.mimeType,
+        createdBy: file.createdBy,
+        createdByName,
+        createdAt: file.createdAt.toISOString(),
         updatedAt: file.updatedAt.toISOString(),
       });
     }
@@ -142,11 +165,12 @@ export class SearchService {
     page: number,
     pageSize: number,
     offset: number,
+    fileFilterOptions?: FileSearchFilterOptions,
   ): Promise<SearchResponse> {
     // 폴더와 파일 동시 검색 (각각 충분한 수량 조회)
     const [folderResult, fileResult] = await Promise.all([
       this.folderDomainService.이름검색(keyword, pageSize * 2, 0),
-      this.fileDomainService.이름검색(keyword, pageSize * 2, 0),
+      this.fileDomainService.고급검색(keyword, pageSize * 2, 0, fileFilterOptions),
     ]);
 
     // 폴더 결과 변환
@@ -161,7 +185,7 @@ export class SearchService {
 
     // 파일 결과 변환 (부모 폴더 경로 조회)
     const fileItems: SearchFileItem[] = [];
-    for (const file of fileResult.items) {
+    for (const { file, createdByName } of fileResult.items) {
       const folder = await this.folderDomainService.조회(file.folderId);
       fileItems.push({
         id: file.id,
@@ -171,6 +195,9 @@ export class SearchService {
         folderId: file.folderId,
         size: file.sizeBytes,
         mimeType: file.mimeType,
+        createdBy: file.createdBy,
+        createdByName,
+        createdAt: file.createdAt.toISOString(),
         updatedAt: file.updatedAt.toISOString(),
       });
     }

@@ -16,6 +16,8 @@ import type {
     IFileRepository,
     FindFileOptions,
     TransactionOptions,
+    FileSearchFilterOptions,
+    FileSearchResultItem,
 } from '../repositories/file.repository.interface';
 
 /**
@@ -106,6 +108,25 @@ export class FileDomainService {
         offset: number,
     ): Promise<{ items: FileEntity[]; total: number }> {
         return this.fileRepository.searchByNamePattern(namePattern, limit, offset);
+    }
+
+    /**
+     * 고급 검색: 이름 패턴 + 필터 옵션으로 파일 검색 (ACTIVE 상태만)
+     * Employee 테이블과 조인하여 등록자 이름 검색 지원
+     *
+     * @param namePattern 검색할 이름 패턴 (LIKE 검색)
+     * @param limit 최대 결과 수
+     * @param offset 오프셋
+     * @param filterOptions 추가 필터 옵션 (mimeType, createdByName, createdAt 범위)
+     * @returns 검색된 파일 목록(등록자 이름 포함)과 총 개수
+     */
+    async 고급검색(
+        namePattern: string,
+        limit: number,
+        offset: number,
+        filterOptions?: FileSearchFilterOptions,
+    ): Promise<{ items: FileSearchResultItem[]; total: number }> {
+        return this.fileRepository.searchWithFilters(namePattern, limit, offset, filterOptions);
     }
 
     // ============================================

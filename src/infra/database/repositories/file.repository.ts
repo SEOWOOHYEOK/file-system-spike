@@ -10,9 +10,12 @@ import {
   IFileRepository,
   FindFileOptions,
   TransactionOptions,
+  FileSearchFilterOptions,
+  FileSearchResultItem,
 } from '../../../domain/file/repositories/file.repository.interface';
 import { FileEntity } from '../../../domain/file/entities/file.entity';
 import { FileState } from '../../../domain/file/type/file.type';
+import { Employee } from '../../../integrations/migration/organization/entities/employee.entity';
 
 @Injectable()
 export class FileRepository implements IFileRepository {
@@ -184,5 +187,108 @@ export class FileRepository implements IFileRepository {
       items: orms.map((orm) => this.toDomain(orm)),
       total,
     };
+  }
+
+  /**
+   * 고급 검색: 이름 패턴 + 필터 옵션으로 파일 검색 (ACTIVE 상태만)
+   * Employee 테이블과 조인하여 등록자 이름 검색 지원
+   */
+  async searchWithFilters(
+    namePattern: string,
+    limit: number,
+    offset: number,
+    filterOptions?: FileSearchFilterOptions,
+  ): Promise<{ items: FileSearchResultItem[]; total: number }> {
+    const qb = this.repository
+      .createQueryBuilder('file')
+      .leftJoin(
+        Employee,
+        'employee',
+        'file."createdBy" = employee.id::text',
+      )
+      .addSelect('employee.name', 'employeeName')
+      .where('file.name LIKE :pattern', { pattern: `%${namePattern}%` })
+      .andWhere('file.state = :state', { state: FileState.ACTIVE });
+
+    // mimeType 필터 (부분 일치)
+    if (filterOptions?.mimeType) {
+      qb.andWhere('file."mimeType" LIKE :mimeType', {
+        mimeType: `%${filterOptions.mimeType}%`,
+      });
+    }
+
+    // 등록자 이름 필터 (Employee 테이블 조인, 부분 일치)
+    if (filterOptions?.createdByName) {
+      qb.andWhere('employee.name LIKE :createdByName', {
+        createdByName: `%${filterOptions.createdByName}%`,
+      });
+    }
+
+    // 기간 필터 - 시작일
+    if (filterOptions?.createdAtFrom) {
+      qb.andWhere('file."createdAt" >= :createdAtFrom', {
+        createdAtFrom: filterOptions.createdAtFrom,
+      });
+    }
+
+    // 기간 필터 - 종료일 (해당일 자정까지 포함)
+    if (filterOptions?.createdAtTo) {
+      const endOfDay = new Date(filterOptions.createdAtTo);
+      endOfDay.setHours(23, 59, 59, 999);
+      qb.andWhere('file."createdAt" <= :createdAtTo', {
+        createdAtTo: endOfDay,
+      });
+    }
+
+    // 총 개수 조회를 위한 별도 쿼리 (조인 포함)
+    const countQb = this.repository
+      .createQueryBuilder('file')
+      .leftJoin(
+        Employee,
+        'employee',
+        'file."createdBy" = employee.id::text',
+      )
+      .where('file.name LIKE :pattern', { pattern: `%${namePattern}%` })
+      .andWhere('file.state = :state', { state: FileState.ACTIVE });
+
+    if (filterOptions?.mimeType) {
+      countQb.andWhere('file."mimeType" LIKE :mimeType', {
+        mimeType: `%${filterOptions.mimeType}%`,
+      });
+    }
+    if (filterOptions?.createdByName) {
+      countQb.andWhere('employee.name LIKE :createdByName', {
+        createdByName: `%${filterOptions.createdByName}%`,
+      });
+    }
+    if (filterOptions?.createdAtFrom) {
+      countQb.andWhere('file."createdAt" >= :createdAtFrom', {
+        createdAtFrom: filterOptions.createdAtFrom,
+      });
+    }
+    if (filterOptions?.createdAtTo) {
+      const endOfDay = new Date(filterOptions.createdAtTo);
+      endOfDay.setHours(23, 59, 59, 999);
+      countQb.andWhere('file."createdAt" <= :createdAtTo', {
+        createdAtTo: endOfDay,
+      });
+    }
+
+    const total = await countQb.getCount();
+
+    // 페이지네이션 적용하여 결과 조회
+    const rawResults = await qb
+      .orderBy('file.updatedAt', 'DESC')
+      .skip(offset)
+      .take(limit)
+      .getRawAndEntities();
+
+    // Raw 결과에서 employeeName 매핑
+    const items: FileSearchResultItem[] = rawResults.entities.map((orm, index) => ({
+      file: this.toDomain(orm),
+      createdByName: rawResults.raw[index]?.employeeName || undefined,
+    }));
+
+    return { items, total };
   }
 }

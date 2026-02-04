@@ -1,8 +1,9 @@
 /**
  * 검색 관련 DTO
  */
-import { Transform } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
+  IsDate,
   IsEnum,
   IsInt,
   IsOptional,
@@ -37,6 +38,28 @@ export class SearchQuery {
   })
   type?: SearchResultType;
 
+  /** 파일 MIME 타입 필터 (type=file일 때만 적용) */
+  @IsOptional()
+  @IsString()
+  mimeType?: string;
+
+  /** 등록자 이름으로 검색 (Employee 이름 부분 일치) */
+  @IsOptional()
+  @IsString()
+  createdBy?: string;
+
+  /** 검색 기간 시작일 (createdAt >= createdAtFrom) */
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate({ message: '시작일이 올바른 날짜 형식이 아닙니다.' })
+  createdAtFrom?: Date;
+
+  /** 검색 기간 종료일 (createdAt <= createdAtTo) */
+  @IsOptional()
+  @Type(() => Date)
+  @IsDate({ message: '종료일이 올바른 날짜 형식이 아닙니다.' })
+  createdAtTo?: Date;
+
   /** 정렬 기준 */
   @IsOptional()
   @IsEnum(SortBy, { message: '정렬 기준이 올바르지 않습니다.' })
@@ -61,6 +84,20 @@ export class SearchQuery {
   @Min(1, { message: '페이지 크기는 1 이상이어야 합니다.' })
   @Max(100, { message: '페이지 크기는 100 이하여야 합니다.' })
   pageSize?: number;
+}
+
+/**
+ * 검색 필터 옵션 (내부 사용)
+ */
+export interface SearchFilterOptions {
+  /** 파일 MIME 타입 필터 */
+  mimeType?: string;
+  /** 등록자 이름 (부분 일치) */
+  createdByName?: string;
+  /** 검색 기간 시작일 */
+  createdAtFrom?: Date;
+  /** 검색 기간 종료일 */
+  createdAtTo?: Date;
 }
 
 /**
@@ -92,6 +129,12 @@ export interface SearchFileItem {
   size: number;
   /** MIME 타입 */
   mimeType: string;
+  /** 등록자 ID */
+  createdBy?: string;
+  /** 등록자 이름 (Employee 테이블에서 조회) */
+  createdByName?: string;
+  /** 생성일 */
+  createdAt: string;
   updatedAt: string;
 }
 

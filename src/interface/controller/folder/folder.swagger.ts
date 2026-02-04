@@ -9,6 +9,7 @@ import {
   ApiResponse,
   ApiParam,
   ApiQuery,
+  ApiBearerAuth,
 } from '@nestjs/swagger';
 
 /**
@@ -460,6 +461,14 @@ export const ApiFolderSearch = () =>
 - \`keyword\`: 검색어 (필수, 최소 2자)
 - \`type\`: 검색 대상 (\`file\`, \`folder\`, 미지정 시 전체)
 
+### 고급 필터 (파일 검색 시 적용)
+- \`mimeType\`: 파일 유형 필터 (부분 일치, 예: \`image\`, \`application/pdf\`)
+- \`createdBy\`: 등록자 이름으로 검색 (부분 일치)
+- \`createdAtFrom\`: 등록 기간 시작일 (ISO 8601 형식)
+- \`createdAtTo\`: 등록 기간 종료일 (ISO 8601 형식)
+
+> **참고**: 위 고급 필터는 type=folder로 검색할 때는 적용되지 않습니다.
+
 ### 정렬 옵션 (sortBy)
 | 값 | 설명 |
 |---|---|
@@ -482,8 +491,10 @@ export const ApiFolderSearch = () =>
 - 검색 결과에는 해당 항목의 위치(path) 정보가 포함됩니다.
 - **폴더**: path 필드에 해당 폴더의 전체 경로, parentId로 상위 폴더 이동 가능
 - **파일**: path 필드에 해당 파일이 위치한 폴더의 경로, folderId로 해당 폴더 이동 가능
+- **파일**: createdByName 필드에 등록자 이름 포함
       `,
     }),
+    ApiBearerAuth(),
     ApiQuery({
       name: 'keyword',
       required: true,
@@ -496,6 +507,34 @@ export const ApiFolderSearch = () =>
       required: false,
       enum: ['file', 'folder'],
       description: '검색 대상 타입 (미지정 시 전체 검색)',
+    }),
+    ApiQuery({
+      name: 'mimeType',
+      required: false,
+      type: String,
+      description: '파일 유형 필터 (부분 일치, 예: image, application/pdf)',
+      example: 'image',
+    }),
+    ApiQuery({
+      name: 'createdBy',
+      required: false,
+      type: String,
+      description: '등록자 이름으로 검색 (부분 일치)',
+      example: '홍길동',
+    }),
+    ApiQuery({
+      name: 'createdAtFrom',
+      required: false,
+      type: String,
+      description: '등록 기간 시작일 (ISO 8601 형식)',
+      example: '2024-01-01',
+    }),
+    ApiQuery({
+      name: 'createdAtTo',
+      required: false,
+      type: String,
+      description: '등록 기간 종료일 (ISO 8601 형식)',
+      example: '2024-12-31',
     }),
     ApiQuery({
       name: 'sortBy',
@@ -544,6 +583,9 @@ export const ApiFolderSearch = () =>
                 parentId: { type: 'string', example: 'parent-uuid', description: '폴더인 경우: 상위 폴더 ID' },
                 size: { type: 'number', example: 102400, description: '파일인 경우: 파일 크기 (bytes)' },
                 mimeType: { type: 'string', example: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', description: '파일인 경우: MIME 타입' },
+                createdBy: { type: 'string', example: 'user-uuid', description: '파일인 경우: 등록자 ID' },
+                createdByName: { type: 'string', example: '홍길동', description: '파일인 경우: 등록자 이름' },
+                createdAt: { type: 'string', example: '2024-01-20T09:00:00.000Z', description: '생성일' },
                 updatedAt: { type: 'string', example: '2024-01-23T10:00:00.000Z' },
               },
             },
