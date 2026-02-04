@@ -291,17 +291,16 @@ export class FileManageService {
       }
 
       // 7. sync_events 생성 (문서 요구사항)
-      const filePath = buildPath(targetFolder.path, finalName);
-      const sourcePathWithFolder = sourceFolderPath ? buildPath(sourceFolderPath, targetPath ?? '') : targetPath ?? '';
-      const targetPathWithFolder = buildPath(targetFolder.path, targetPath ?? '');
-
+      // sourcePath: nasObject.objectKey - NAS에서의 원본 파일 전체 경로
+      // targetPath: buildPath(targetFolder.path, objectKeyFileName) - NAS에서의 대상 파일 전체 경로
+      const filePath = buildPath(targetFolder.path, finalName); // 응답용 파일 경로
       const syncEventId = uuidv4();
       const userId = RequestContext.getUserId() || 'unknown';
       const syncEvent = SyncEventFactory.createFileMoveEvent({
         id: syncEventId,
         fileId,
-        sourcePath: sourcePathWithFolder,
-        targetPath: targetPathWithFolder,
+        sourcePath: sourcePath || '',
+        targetPath: targetPath || '',
         originalFolderId: originalFolderId || '',
         targetFolderId,
         userId,

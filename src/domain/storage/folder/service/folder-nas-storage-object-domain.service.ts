@@ -159,6 +159,7 @@ export class FolderNasStorageObjectDomainService {
     return this.repository.delete(id);
   }
 
+  
   /**
    * 폴더 ID로 스토리지 객체 삭제
    *

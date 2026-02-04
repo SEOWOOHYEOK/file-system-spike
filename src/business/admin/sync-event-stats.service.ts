@@ -110,14 +110,16 @@ export class SyncEventStatsService {
       // 특정 상태만 조회
       events = await this.syncEventDomainService.상태별조회(params.status);
     } else {
-      // 모든 상태 조회 (PENDING, PROCESSING, FAILED, DONE)
-      const [pending, processing, failed, done] = await Promise.all([
+      // 모든 상태 조회 (PENDING, QUEUED, PROCESSING, RETRYING, FAILED, DONE)
+      const [pending, queued, processing, retrying, failed, done] = await Promise.all([
         this.syncEventDomainService.상태별조회(SyncEventStatus.PENDING),
+        this.syncEventDomainService.상태별조회(SyncEventStatus.QUEUED),
         this.syncEventDomainService.상태별조회(SyncEventStatus.PROCESSING),
+        this.syncEventDomainService.상태별조회(SyncEventStatus.RETRYING),
         this.syncEventDomainService.상태별조회(SyncEventStatus.FAILED),
         this.syncEventDomainService.상태별조회(SyncEventStatus.DONE),
       ]);
-      events = [...pending, ...processing, ...failed, ...done];
+      events = [...pending, ...queued, ...processing, ...retrying, ...failed, ...done];
     }
 
     // 시간 범위 필터링

@@ -66,12 +66,14 @@ export class FolderCommandService implements OnModuleInit {
    */
   private async ensureRootFolderExists(): Promise<void> {
     try {
+
       const rootFolder = await this.folderDomainService.루트폴더조회();
 
       if (!rootFolder) {
         this.logger.log('Root folder not found. Creating root folder...');
 
         const folderId = uuidv4();
+        const createdBy = 'system';
 
         // FolderDomainService를 통해 루트 폴더 생성
         await this.folderDomainService.생성<CreateFolderParams>({
@@ -79,7 +81,7 @@ export class FolderCommandService implements OnModuleInit {
           name: '',
           parentId: null,
           path: '/',
-          createdBy: 'system', // 루트 폴더는 시스템이 생성
+          createdBy: createdBy, // 루트 폴더는 시스템이 생성
         });
 
         // FolderNasStorageObjectDomainService를 통해 스토리지 객체 생성

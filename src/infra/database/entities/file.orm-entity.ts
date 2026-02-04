@@ -39,7 +39,7 @@ export class FileOrmEntity {
   state: string;
 
   /** 파일 생성자 (업로더) ID */
-  @Column('uuid')
+  @Column('varchar', { nullable: true })
   @Index()
   createdBy: string;
 
