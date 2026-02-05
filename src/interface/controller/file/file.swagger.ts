@@ -425,3 +425,69 @@ export const ApiFileDelete = () =>
     }),
     ApiResponse({ status: 404, description: '파일을 찾을 수 없음' }),
   );
+
+/**
+ * NAS 동기화 진행률 조회 API 문서
+ */
+export const ApiFileSyncProgress = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: 'NAS 동기화 진행률 조회',
+      description: `
+동기화 이벤트의 NAS 동기화 진행률을 조회합니다.
+
+파일 업로드 응답에 포함된 \`syncEventId\`를 사용하여 해당 업로드 작업의 
+NAS 동기화 진행 상황을 실시간으로 조회할 수 있습니다.
+
+### 상태 (status)
+- \`IDLE\`: 진행 중인 동기화 작업 없음
+- \`QUEUED\`: 큐에 등록됨 (대기 중)
+- \`PROCESSING\`: 동기화 진행 중
+- \`DONE\`: 동기화 완료
+- \`FAILED\`: 동기화 실패
+
+### 진행률 정보 (progress)
+- \`percent\`: 백분율 (0-100)
+- \`completedChunks\`: 완료된 청크 수
+- \`totalChunks\`: 전체 청크 수
+- \`bytesTransferred\`: 전송된 바이트
+- \`totalBytes\`: 전체 바이트
+
+### 클라이언트 권장사항
+- 폴링 간격: 2-3초
+- 완료 조건: status가 IDLE, DONE, FAILED 중 하나일 때 폴링 중단
+      `,
+    }),
+    ApiParam({
+      name: 'syncEventId',
+      description: '동기화 이벤트 ID (파일 업로드 응답에서 반환됨)',
+      example: '660e8400-e29b-41d4-a716-446655440001',
+    }),
+    ApiResponse({
+      status: 200,
+      description: '진행률 조회 성공',
+      schema: {
+        type: 'object',
+        properties: {
+          syncEventId: { type: 'string', example: '660e8400-e29b-41d4-a716-446655440001' },
+          fileId: { type: 'string', example: '550e8400-e29b-41d4-a716-446655440000', nullable: true },
+          eventType: { type: 'string', enum: ['CREATE', 'MOVE', 'RENAME', 'TRASH', 'RESTORE', 'PURGE'], example: 'CREATE' },
+          status: { type: 'string', enum: ['IDLE', 'QUEUED', 'PROCESSING', 'DONE', 'FAILED'], example: 'PROCESSING' },
+          progress: {
+            type: 'object',
+            properties: {
+              percent: { type: 'number', example: 45 },
+              completedChunks: { type: 'number', example: 9 },
+              totalChunks: { type: 'number', example: 20 },
+              bytesTransferred: { type: 'number', example: 94371840 },
+              totalBytes: { type: 'number', example: 209715200 },
+            },
+          },
+          startedAt: { type: 'string', example: '2024-01-23T10:30:00.000Z' },
+          updatedAt: { type: 'string', example: '2024-01-23T10:30:15.000Z' },
+          errorMessage: { type: 'string', example: null, nullable: true },
+          message: { type: 'string', example: '현재 진행 중인 동기화 작업이 없습니다.', nullable: true },
+        },
+      },
+    }),
+  );

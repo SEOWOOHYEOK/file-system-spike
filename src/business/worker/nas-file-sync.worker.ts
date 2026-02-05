@@ -9,6 +9,11 @@ import {
   DISTRIBUTED_LOCK_PORT,
 } from '../../infra/queue/distributed-lock.port';
 import {
+  PROGRESS_STORAGE_PORT,
+  type IProgressStoragePort,
+  type SyncProgress,
+} from '../../infra/queue/progress-storage.port';
+import {
   CACHE_STORAGE_PORT,
 } from '../../domain/storage/ports/cache-storage.port';
 import {
@@ -195,6 +200,8 @@ export class NasSyncWorker implements OnModuleInit {
     private readonly trashRepository: ITrashRepository,
     @Inject(SYNC_EVENT_REPOSITORY)
     private readonly syncEventRepository: ISyncEventRepository,
+    @Inject(PROGRESS_STORAGE_PORT)
+    private readonly progressStorage: IProgressStoragePort,
   ) { }
 
   /**
@@ -408,6 +415,26 @@ export class NasSyncWorker implements OnModuleInit {
       const objectKey = syncEvent?.targetPath || fileId;
       const fileSize = file.sizeBytes;
       const shortFileId = fileId.substring(0, 8);
+      const totalChunks = Math.ceil(fileSize / PARALLEL_UPLOAD_CONFIG.CHUNK_SIZE);
+
+      // 진행률 초기화 (syncEventId가 있는 경우에만)
+      if (syncEventId) {
+        await this.progressStorage.set(syncEventId, {
+          fileId,
+          syncEventId,
+          eventType: 'CREATE',
+          status: 'PROCESSING',
+          progress: {
+            percent: 0,
+            completedChunks: 0,
+            totalChunks,
+            bytesTransferred: 0,
+            totalBytes: fileSize,
+          },
+          startedAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        });
+      }
 
       // 파일 크기에 따른 전략 분기
       if (fileSize >= PARALLEL_UPLOAD_CONFIG.THRESHOLD_BYTES) {
@@ -416,7 +443,7 @@ export class NasSyncWorker implements OnModuleInit {
           `[PARALLEL_UPLOAD] 🚀 Starting parallel upload | file=${shortFileId}... | ` +
           `size=${formatBytes(fileSize)} | chunks=${Math.ceil(fileSize / PARALLEL_UPLOAD_CONFIG.CHUNK_SIZE)}`,
         );
-        await this.parallelUploadToNas(fileId, objectKey, fileSize);
+        await this.parallelUploadToNas(fileId, objectKey, fileSize, syncEventId);
       } else {
         // 소용량 파일: 스트림 방식 + 진행률 로깅
         await this.streamUploadToNas(fileId, objectKey, fileSize);
@@ -426,6 +453,20 @@ export class NasSyncWorker implements OnModuleInit {
       nasObject.updateObjectKey(objectKey);
       await this.fileStorageObjectRepository.save(nasObject);
 
+      // 진행률 완료 업데이트 (syncEventId가 있는 경우에만)
+      if (syncEventId) {
+        await this.progressStorage.update(syncEventId, {
+          status: 'DONE',
+          progress: {
+            percent: 100,
+            completedChunks: totalChunks,
+            totalChunks,
+            bytesTransferred: fileSize,
+            totalBytes: fileSize,
+          },
+        });
+      }
+
       await this.markSyncEventDone(syncEvent);
       this.logger.log(
         `[SYNC_COMPLETE] ✅ Successfully synced to NAS | file=${shortFileId}... | ` +
@@ -433,12 +474,22 @@ export class NasSyncWorker implements OnModuleInit {
       );
     } catch (error) {
       this.logger.error(`Failed to sync file to NAS: ${fileId}`, error);
+      
+      // 진행률 실패 업데이트 (syncEventId가 있는 경우에만)
+      if (syncEventId) {
+        await this.progressStorage.update(syncEventId, {
+          status: 'FAILED',
+          error: (error as Error).message,
+        });
+      }
+      
       // SyncEvent 재시도 처리 (재시도 가능 시 PENDING으로 롤백)
       await this.handleSyncEventRetry(syncEvent, error as Error, job.data);
       throw error;
     }
   }
 
+  
   /**
    * 스트림 방식 업로드 (소용량 파일용)
    * 진행률 로깅 포함
@@ -477,6 +528,7 @@ export class NasSyncWorker implements OnModuleInit {
     fileId: string,
     objectKey: string,
     fileSize: number,
+    syncEventId?: string,
   ): Promise<void> {
     const { CHUNK_SIZE, PARALLEL_CHUNKS, PROGRESS_LOG_INTERVAL } = PARALLEL_UPLOAD_CONFIG;
     const shortFileId = fileId.substring(0, 8);
@@ -519,8 +571,23 @@ export class NasSyncWorker implements OnModuleInit {
       // 진행률 업데이트
       completedChunks++;
       const percent = Math.round((completedChunks / totalChunks) * 100);
+      const bytesTransferred = Math.min(completedChunks * CHUNK_SIZE, fileSize);
       
       if (percent >= lastLoggedPercent + PROGRESS_LOG_INTERVAL || percent === 100) {
+        // Progress Storage에 진행률 저장 (클라이언트 조회용, syncEventId가 있는 경우에만)
+        if (syncEventId) {
+          await this.progressStorage.update(syncEventId, {
+            status: 'PROCESSING',
+            progress: {
+              percent,
+              completedChunks,
+              totalChunks,
+              bytesTransferred,
+              totalBytes: fileSize,
+            },
+          });
+        }
+        
         this.logger.log(
           `[PARALLEL_UPLOAD] 📊 Progress | file=${shortFileId}... | ${percent}% | ` +
           `chunks=${completedChunks}/${totalChunks}`,

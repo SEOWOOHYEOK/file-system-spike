@@ -15,6 +15,7 @@ import { FileDownloadService } from './file-download.service';
 import { FileManageService } from './file-manage.service';
 import { MultipartUploadService } from './multipart-upload.service';
 import { MultipartOrphanCleanupScheduler } from './scheduler/multipart-orphan-cleanup.scheduler';
+import { SyncProgressService } from './sync-progress.service';
 
 /**
  * 파일 비즈니스 모듈
@@ -40,6 +41,7 @@ import { MultipartOrphanCleanupScheduler } from './scheduler/multipart-orphan-cl
     FileManageService,
     MultipartUploadService,
     MultipartOrphanCleanupScheduler,
+    SyncProgressService,
   ],
   exports: [
     FileQueryService,
@@ -48,6 +50,7 @@ import { MultipartOrphanCleanupScheduler } from './scheduler/multipart-orphan-cl
     FileManageService,
     MultipartUploadService,
     MultipartOrphanCleanupScheduler,
+    SyncProgressService,
   ],
 })
 export class FileBusinessModule {}

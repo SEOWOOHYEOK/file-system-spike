@@ -19,10 +19,13 @@ import { Module, Logger } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { JOB_QUEUE_PORT } from './job-queue.port';
 import { DISTRIBUTED_LOCK_PORT } from './distributed-lock.port';
+import { PROGRESS_STORAGE_PORT } from './progress-storage.port';
 import { BullQueueAdapter } from './redis/bull-queue.adapter';
 import { RedisLockAdapter } from './redis/redis-lock.adapter';
+import { RedisProgressAdapter } from './redis/redis-progress.adapter';
 import { LocalFileQueueAdapter } from './local/local-file-queue.adapter';
 import { InMemoryLockAdapter } from './local/in-memory-lock.adapter';
+import { FileProgressAdapter } from './local/file-progress.adapter';
 
 /**
  * 큐 타입
@@ -68,7 +71,25 @@ export type QueueType = 'redis' | 'local';
       },
       inject: [ConfigService],
     },
+    {
+      provide: PROGRESS_STORAGE_PORT,
+      useFactory: (configService: ConfigService) => {
+        const logger = new Logger('QueueInfraModule');
+        const queueType = configService.get<QueueType>('QUEUE_TYPE', 'local');
+
+        logger.log(`Initializing progress adapter: ${queueType}`);
+
+        switch (queueType) {
+          case 'redis':
+            return new RedisProgressAdapter(configService);
+          case 'local':
+          default:
+            return new FileProgressAdapter(configService);
+        }
+      },
+      inject: [ConfigService],
+    },
   ],
-  exports: [JOB_QUEUE_PORT, DISTRIBUTED_LOCK_PORT],
+  exports: [JOB_QUEUE_PORT, DISTRIBUTED_LOCK_PORT, PROGRESS_STORAGE_PORT],
 })
 export class QueueInfraModule {}

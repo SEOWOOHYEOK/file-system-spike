@@ -22,6 +22,9 @@ export interface CompleteMultipartRequest {
 
   /** 완료된 파트 목록 (선택적, 검증용) */
   parts?: PartInfo[];
+
+  /** 파일 생성자 ID */
+  createdBy?: string;
 }
 
 /**

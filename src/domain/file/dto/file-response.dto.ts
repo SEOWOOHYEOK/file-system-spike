@@ -25,6 +25,8 @@ export interface FileInfoResponse {
   mimeType: string;
   state: FileState;
   storageStatus: StorageStatusDto;
+  /** 파일 생성자 (업로더) ID */
+  createdBy: string;
   createdAt: string;
   updatedAt: string;
   /** 파일 체크섬 (SHA-256) - 병렬 다운로드 후 무결성 검증용 */

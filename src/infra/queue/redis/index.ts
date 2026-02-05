@@ -3,3 +3,4 @@
  */
 export * from './bull-queue.adapter';
 export * from './redis-lock.adapter';
+export * from './redis-progress.adapter';

@@ -12,18 +12,17 @@ import {
   Body,
   HttpCode,
   HttpStatus,
+  UseGuards,
   Req,
 } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { MultipartUploadService } from '../../../business/file';
-
-
 import { InitiateMultipartResponse } from '../../../domain/upload-session/dto/initiate-multipart.dto';
 import { UploadPartResponse } from '../../../domain/upload-session/dto/upload-part.dto';
 import { SessionStatusResponse } from '../../../domain/upload-session/dto/session-status.dto';
 import { AbortSessionResponse } from '../../../domain/upload-session/dto/session-status.dto';
-
+import { RequestContext } from '../../../common/context/request-context';
 import {
   CompleteMultipartResponse,
   PartInfo,
@@ -35,6 +34,8 @@ import {
   ApiMultipartStatus,
   ApiMultipartAbort,
 } from './multipart.swagger';
+
+import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 
 /**
  * 초기화 요청 DTO
@@ -58,6 +59,8 @@ interface CompleteRequestBody {
  * 멀티파트 업로드 컨트롤러
  */
 @ApiTags('201.파일-멀티파트')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard)
 @Controller('v1/files/multipart')
 export class MultipartController {
   constructor(
@@ -117,9 +120,11 @@ export class MultipartController {
     @Param('sessionId') sessionId: string,
     @Body() body?: CompleteRequestBody,
   ): Promise<CompleteMultipartResponse> {
+    const userId = RequestContext.getUserId();
     return this.multipartUploadService.complete({
       sessionId,
       parts: body?.parts,
+      createdBy: userId,
     });
   }
 

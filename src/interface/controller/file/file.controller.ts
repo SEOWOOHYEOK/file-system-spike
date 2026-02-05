@@ -21,7 +21,8 @@ import {
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import type { Response } from 'express';
-import { FileQueryService, FileUploadService, FileDownloadService, FileManageService } from '../../../business/file';
+import { FileQueryService, FileUploadService, FileDownloadService, FileManageService, SyncProgressService } from '../../../business/file';
+import { SyncProgressResponseDto } from './dto/sync-progress-response.dto';
 import {
   UploadFileResponse,
   FileInfoResponse,
@@ -40,6 +41,7 @@ import {
   ApiFileRename,
   ApiFileMove,
   ApiFileDelete,
+  ApiFileSyncProgress,
 } from './file.swagger';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { RequestContext } from '../../../common/context/request-context';
@@ -66,6 +68,7 @@ export class FileController {
     private readonly fileUploadService: FileUploadService,
     private readonly fileDownloadService: FileDownloadService,
     private readonly fileManageService: FileManageService,
+    private readonly syncProgressService: SyncProgressService,
   ) {}
 
   /**
@@ -265,7 +268,6 @@ export class FileController {
 
   /**
    * DELETE /files/:fileId - 파일 삭제 (휴지통 이동)
-   *
    * 문서: docs/000.FLOW/파일/005-1.파일_처리_FLOW.md
    * 응답: 200 OK (id, name, state=TRASHED, syncEventId)
    */
@@ -279,5 +281,19 @@ export class FileController {
   async delete(@Param('fileId') fileId: string): Promise<DeleteFileResponse> {
     const userId = RequestContext.getUserId() || 'unknown';
     return this.fileManageService.delete(fileId, userId);
+  }
+
+  /**
+   * GET /files/sync-events/:syncEventId/progress - NAS 동기화 진행률 조회
+   *
+   * 클라이언트가 파일 업로드 후 NAS 동기화 진행률을 폴링하는 데 사용합니다.
+   * 업로드 응답에 포함된 syncEventId를 사용하여 조회합니다.
+   */
+  @Get('sync-events/:syncEventId/progress')
+  @ApiFileSyncProgress()
+  async getSyncProgress(
+    @Param('syncEventId', ParseUUIDPipe) syncEventId: string,
+  ): Promise<SyncProgressResponseDto> {
+    return this.syncProgressService.getProgress(syncEventId);
   }
 }

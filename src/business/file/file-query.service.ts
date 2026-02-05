@@ -63,6 +63,7 @@ export class FileQueryService {
         cache: cacheStatus?.availabilityStatus ?? null,
         nas: nasStatus?.availabilityStatus ?? null,
       },
+      createdBy: file.createdBy,
       createdAt: file.createdAt.toISOString(),
       updatedAt: file.updatedAt.toISOString(),
       checksum,

@@ -17,7 +17,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { HttpStatus } from '@nestjs/common';
 import { PassThrough, Writable } from 'stream';
 import { FileController } from './file.controller';
-import { FileQueryService, FileUploadService, FileDownloadService, FileManageService } from '../../../business/file';
+import { FileQueryService, FileUploadService, FileDownloadService, FileManageService, SyncProgressService } from '../../../business/file';
 import { ConflictStrategy, FileState } from '../../../domain/file';
 
 /**
@@ -41,6 +41,7 @@ describe('FileController', () => {
   let fileUploadService: jest.Mocked<FileUploadService>;
   let fileDownloadService: jest.Mocked<FileDownloadService>;
   let fileManageService: jest.Mocked<FileManageService>;
+  let syncProgressService: jest.Mocked<SyncProgressService>;
 
   beforeEach(async () => {
     const mockFileQueryService = {
@@ -66,6 +67,10 @@ describe('FileController', () => {
       delete: jest.fn(),
     };
 
+    const mockSyncProgressService = {
+      getProgress: jest.fn(),
+    };
+
     const module: TestingModule = await Test.createTestingModule({
       controllers: [FileController],
       providers: [
@@ -73,6 +78,7 @@ describe('FileController', () => {
         { provide: FileUploadService, useValue: mockFileUploadService },
         { provide: FileDownloadService, useValue: mockFileDownloadService },
         { provide: FileManageService, useValue: mockFileManageService },
+        { provide: SyncProgressService, useValue: mockSyncProgressService },
       ],
     }).compile();
 
@@ -81,6 +87,7 @@ describe('FileController', () => {
     fileUploadService = module.get(FileUploadService);
     fileDownloadService = module.get(FileDownloadService);
     fileManageService = module.get(FileManageService);
+    syncProgressService = module.get(SyncProgressService);
   });
 
   /**

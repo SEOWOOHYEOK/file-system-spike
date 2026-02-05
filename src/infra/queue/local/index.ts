@@ -3,3 +3,4 @@
  */
 export * from './local-file-queue.adapter';
 export * from './in-memory-lock.adapter';
+export * from './file-progress.adapter';
