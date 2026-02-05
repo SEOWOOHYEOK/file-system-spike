@@ -31,6 +31,8 @@ export interface CreateFileNasStorageParams {
   /** objectKey 직접 지정 (선택) - 지정시 createdAt/fileName 무시 */
   objectKey?: string;
   availabilityStatus?: AvailabilityStatus;
+  /** SHA-256 체크섬 */
+  checksum?: string;
 }
 
 @Injectable()
@@ -105,6 +107,11 @@ export class FileNasStorageDomainService {
     // 상태 오버라이드가 필요한 경우
     if (params.availabilityStatus && params.availabilityStatus !== AvailabilityStatus.SYNCING) {
       storageObject.updateStatus(params.availabilityStatus);
+    }
+
+    // 체크섬 설정
+    if (params.checksum) {
+      storageObject.updateChecksum(params.checksum);
     }
 
     return this.repository.save(storageObject, txOptions);

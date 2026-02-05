@@ -8,6 +8,7 @@ import {
   Headers,
   Ip,
   UseGuards,
+  Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { ExternalJwtAuthGuard } from '../../../common/guards';
@@ -28,6 +29,7 @@ import {
   ShareDetailResponseDto,
 } from './dto/external-share-access.dto';
 import { PaginationQueryDto, PaginatedResponseDto } from '../../common/dto';
+import { createByteCountingStream, formatContentRange } from '../../../common/utils';
 
 /**
  * 외부 사용자 파일 접근 컨트롤러
@@ -43,6 +45,8 @@ import { PaginationQueryDto, PaginatedResponseDto } from '../../common/dto';
 @ApiBearerAuth()
 @UseGuards(ExternalJwtAuthGuard)
 export class ExternalShareController {
+  private readonly logger = new Logger(ExternalShareController.name);
+
   constructor(private readonly accessService: ExternalShareAccessService) {}
 
   /**
@@ -81,6 +85,8 @@ export class ExternalShareController {
    * 파일 콘텐츠 (뷰어용)
    *
    * inline Content-Disposition으로 브라우저 뷰어에서 파일 표시
+   * HTTP Range Requests (RFC 7233) 지원
+   * - If-Range + ETag: 파일 변경 감지하여 이어받기 무결성 보장
    */
   @Get(':shareId/content')
   @ApiGetContent()
@@ -89,12 +95,14 @@ export class ExternalShareController {
     @Param('shareId', ParseUUIDPipe) shareId: string,
     @Query() tokenQuery: ContentTokenQueryDto,
     @Headers('user-agent') userAgent: string,
+    @Headers('range') rangeHeader: string,
+    @Headers('if-range') ifRangeHeader: string,
     @Ip() ipAddress: string,
     @Res() res: Response,
   ): Promise<void> {
     const deviceType = this.detectDeviceType(userAgent);
 
-    // 접근 검증 + 파일 다운로드 (서비스에서 통합 처리)
+    // 1. 접근 검증 + 파일 다운로드 (Range/If-Range 서비스에서 처리)
     const result = await this.accessService.accessContent({
       externalUserId: user.id,
       shareId,
@@ -103,30 +111,71 @@ export class ExternalShareController {
       ipAddress,
       userAgent,
       deviceType,
+      rangeHeader,
+      ifRangeHeader,
     });
 
-    const { file, stream } = result;
+    const { file, storageObject, stream, isPartial, range, isRangeInvalid } = result;
+
+    // 2. Range 요청이 유효하지 않은 경우 (416 Range Not Satisfiable)
+    if (isRangeInvalid) {
+      res.status(416);
+      res.set({ 'Content-Range': `bytes */${file.sizeBytes}` });
+      res.end();
+      return;
+    }
 
     // 응답 헤더 설정 (inline - 뷰어 표시용)
-    res.set({
+    const contentHeaders: Record<string, string | number> = {
       'Content-Type': file.mimeType,
       'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(file.name)}`,
-      'Content-Length': file.sizeBytes,
+      'Accept-Ranges': 'bytes',
       'Cache-Control': 'no-store, no-cache, must-revalidate',
-    });
+    };
+
+    // ETag 헤더 (체크섬 기반)
+    if (storageObject.checksum) {
+      contentHeaders['ETag'] = `"${storageObject.checksum}"`;
+    }
+
+    // Last-Modified 헤더
+    contentHeaders['Last-Modified'] = file.updatedAt.toUTCString();
+
+    // 체크섬 커스텀 헤더 (전체 파일에만 의미 있음)
+    if (storageObject.checksum && !isPartial && !range) {
+      contentHeaders['X-Checksum-SHA256'] = storageObject.checksum;
+    }
+
+    if (isPartial && range) {
+      // 206 Partial Content
+      res.status(206);
+      contentHeaders['Content-Range'] = formatContentRange(range.start, range.end, file.sizeBytes);
+      contentHeaders['Content-Length'] = range.end - range.start + 1;
+    } else {
+      // 200 OK (전체 파일)
+      contentHeaders['Content-Length'] = file.sizeBytes;
+    }
+
+    res.set(contentHeaders);
 
     // 스트림 파이프
     if (stream) {
-      stream.pipe(res);
-
-      // 스트림 종료 시 lease 해제
-      const releaseLease = async () => {
+      // 중복 해제 방지 플래그
+      let leaseReleased = false;
+      const safeReleaseLease = async () => {
+        if (leaseReleased) return;
+        leaseReleased = true;
         await this.accessService.releaseLease(file.id);
       };
 
-      stream.on('end', releaseLease);
-      stream.on('error', releaseLease);
-      stream.on('close', releaseLease);
+      // 바이트 카운팅 스트림 생성 및 파이프
+      const expectedSize = isPartial && range ? range.end - range.start + 1 : file.sizeBytes;
+      const countingStream = createByteCountingStream(expectedSize, this.logger, file.id);
+      stream.pipe(countingStream).pipe(res);
+
+      stream.on('end', safeReleaseLease);
+      stream.on('error', safeReleaseLease);
+      stream.on('close', safeReleaseLease);
     } else {
       // 스트림이 없는 경우 빈 응답
       res.end();
@@ -137,6 +186,8 @@ export class ExternalShareController {
    * 파일 다운로드
    *
    * attachment Content-Disposition으로 파일 다운로드
+   * HTTP Range Requests (RFC 7233) 지원
+   * - If-Range + ETag: 파일 변경 감지하여 이어받기 무결성 보장
    */
   @Get(':shareId/download')
   @ApiDownloadFile()
@@ -145,12 +196,14 @@ export class ExternalShareController {
     @Param('shareId', ParseUUIDPipe) shareId: string,
     @Query() tokenQuery: ContentTokenQueryDto,
     @Headers('user-agent') userAgent: string,
+    @Headers('range') rangeHeader: string,
+    @Headers('if-range') ifRangeHeader: string,
     @Ip() ipAddress: string,
     @Res() res: Response,
   ): Promise<void> {
     const deviceType = this.detectDeviceType(userAgent);
 
-    // 접근 검증 + 파일 다운로드 (서비스에서 통합 처리)
+    // 1. 접근 검증 + 파일 다운로드 (Range/If-Range 서비스에서 처리)
     const result = await this.accessService.accessContent({
       externalUserId: user.id,
       shareId,
@@ -159,30 +212,71 @@ export class ExternalShareController {
       ipAddress,
       userAgent,
       deviceType,
+      rangeHeader,
+      ifRangeHeader,
     });
 
-    const { file, stream } = result;
+    const { file, storageObject, stream, isPartial, range, isRangeInvalid } = result;
+
+    // 2. Range 요청이 유효하지 않은 경우 (416 Range Not Satisfiable)
+    if (isRangeInvalid) {
+      res.status(416);
+      res.set({ 'Content-Range': `bytes */${file.sizeBytes}` });
+      res.end();
+      return;
+    }
 
     // 응답 헤더 설정 (attachment - 다운로드용)
-    res.set({
+    const downloadHeaders: Record<string, string | number> = {
       'Content-Type': file.mimeType,
       'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
-      'Content-Length': file.sizeBytes,
+      'Accept-Ranges': 'bytes',
       'Cache-Control': 'no-store, no-cache, must-revalidate',
-    });
+    };
+
+    // ETag 헤더 (체크섬 기반)
+    if (storageObject.checksum) {
+      downloadHeaders['ETag'] = `"${storageObject.checksum}"`;
+    }
+
+    // Last-Modified 헤더
+    downloadHeaders['Last-Modified'] = file.updatedAt.toUTCString();
+
+    // 체크섬 커스텀 헤더 (전체 파일에만 의미 있음)
+    if (storageObject.checksum && !isPartial && !range) {
+      downloadHeaders['X-Checksum-SHA256'] = storageObject.checksum;
+    }
+
+    if (isPartial && range) {
+      // 206 Partial Content
+      res.status(206);
+      downloadHeaders['Content-Range'] = formatContentRange(range.start, range.end, file.sizeBytes);
+      downloadHeaders['Content-Length'] = range.end - range.start + 1;
+    } else {
+      // 200 OK (전체 파일)
+      downloadHeaders['Content-Length'] = file.sizeBytes;
+    }
+
+    res.set(downloadHeaders);
 
     // 스트림 파이프
     if (stream) {
-      stream.pipe(res);
-
-      // 스트림 종료 시 lease 해제
-      const releaseLease = async () => {
+      // 중복 해제 방지 플래그
+      let leaseReleased = false;
+      const safeReleaseLease = async () => {
+        if (leaseReleased) return;
+        leaseReleased = true;
         await this.accessService.releaseLease(file.id);
       };
 
-      stream.on('end', releaseLease);
-      stream.on('error', releaseLease);
-      stream.on('close', releaseLease);
+      // 바이트 카운팅 스트림 생성 및 파이프
+      const expectedSize = isPartial && range ? range.end - range.start + 1 : file.sizeBytes;
+      const countingStream = createByteCountingStream(expectedSize, this.logger, file.id);
+      stream.pipe(countingStream).pipe(res);
+
+      stream.on('end', safeReleaseLease);
+      stream.on('error', safeReleaseLease);
+      stream.on('close', safeReleaseLease);
     } else {
       // 스트림이 없는 경우 빈 응답
       res.end();

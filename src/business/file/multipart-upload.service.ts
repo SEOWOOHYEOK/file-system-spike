@@ -318,8 +318,8 @@ export class MultipartUploadService {
       uploadCreatedAt,
     );
 
-    // 7. 파트 병합 (캐시 스토리지 - 트랜잭션 외부)
-    await this.mergeParts(fileId, parts);
+    // 7. 파트 병합 및 체크섬 계산 (캐시 스토리지 - 트랜잭션 외부)
+    const checksum = await this.mergeParts(fileId, parts);
 
     // 8. 폴더 경로 조회 (트랜잭션 외부)
     const folder = await this.folderDomainService.조회(session.folderId);
@@ -355,7 +355,7 @@ export class MultipartUploadService {
       }, txOptions);
 
       // 11. 스토리지 객체 생성 (트랜잭션 내부)
-      await this.createStorageObjectsWithTx(fileId, uploadCreatedAt, finalFileName, txOptions);
+      await this.createStorageObjectsWithTx(fileId, uploadCreatedAt, finalFileName, checksum, txOptions);
 
       // 12. sync_events 생성 (트랜잭션 내부)
       const userId = RequestContext.getUserId() || 'unknown';
@@ -526,8 +526,9 @@ export class MultipartUploadService {
 
   /**
    * 파트 병합
+   * @returns SHA-256 체크섬
    */
-  private async mergeParts(fileId: string, parts: UploadPartEntity[]): Promise<void> {
+  private async mergeParts(fileId: string, parts: UploadPartEntity[]): Promise<string> {
     // 파트를 순서대로 읽어서 병합
     const sortedParts = parts.sort((a, b) => a.partNumber - b.partNumber);
     const buffers: Buffer[] = [];
@@ -545,7 +546,13 @@ export class MultipartUploadService {
 
     // 병합된 파일 저장
     const mergedBuffer = Buffer.concat(buffers);
+
+    // SHA-256 체크섬 계산
+    const checksum = createHash('sha256').update(mergedBuffer).digest('hex');
+
     await this.cacheStorage.파일쓰기(fileId, mergedBuffer);
+
+    return checksum;
   }
 
   /**
@@ -637,18 +644,21 @@ export class MultipartUploadService {
     fileId: string,
     createdAt: Date,
     fileName: string,
+    checksum: string,
     txOptions: TransactionOptions,
   ): Promise<void> {
     await Promise.all([
       this.fileCacheStorageDomainService.생성({
         id: uuidv4(),
         fileId,
+        checksum,
       }, txOptions),
       this.fileNasStorageDomainService.생성({
         id: uuidv4(),
         fileId,
         createdAt,
         fileName,
+        checksum,
       }, txOptions),
     ]);
   }

@@ -116,6 +116,33 @@ export class SeaweedFSCacheAdapter implements ICacheStoragePort {
     return Readable.fromWeb(webStream as any);
   }
 
+  async 파일범위스트림읽기(objectKey: string, start: number, end: number): Promise<Readable> {
+    const url = this.getFilerPath(objectKey);
+
+    // HTTP Range 헤더로 부분 요청
+    const response = await fetch(url, {
+      headers: {
+        Range: `bytes=${start}-${end}`,
+      },
+    });
+
+    // 206 Partial Content 또는 200 OK (서버가 Range를 지원하지 않는 경우)
+    if (!response.ok && response.status !== 206) {
+      if (response.status === 404) {
+        throw new Error(`File not found in SeaweedFS: ${objectKey}`);
+      }
+      throw new Error(`SeaweedFS range read failed: ${response.status} ${response.statusText}`);
+    }
+
+    // Web ReadableStream을 Node.js Readable로 변환
+    const webStream = response.body;
+    if (!webStream) {
+      throw new Error('Response body is null');
+    }
+
+    return Readable.fromWeb(webStream as any);
+  }
+
   async 파일삭제(objectKey: string): Promise<void> {
     const url = this.getFilerPath(objectKey);
 

@@ -51,6 +51,8 @@ export class FileStorageObjectEntity {
   lastAccessed?: Date;
   accessCount: number;
   leaseCount: number;
+  /** SHA-256 체크섬 (업로드 시 계산) */
+  checksum?: string;
   createdAt: Date;
   updatedAt?: Date;
 
@@ -116,6 +118,14 @@ export class FileStorageObjectEntity {
    */
   updateObjectKey(newKey: string): void {
     this.objectKey = newKey;
+    this.updatedAt = new Date();
+  }
+
+  /**
+   * 체크섬 설정
+   */
+  updateChecksum(checksum: string): void {
+    this.checksum = checksum;
     this.updatedAt = new Date();
   }
 

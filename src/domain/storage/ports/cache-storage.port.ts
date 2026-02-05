@@ -42,6 +42,15 @@ export interface ICacheStoragePort {
   파일스트림읽기(objectKey: string): Promise<Readable>;
 
   /**
+   * 파일 부분 읽기 (Range Request 지원)
+   * @param objectKey - 저장 경로/키
+   * @param start - 시작 바이트 위치 (inclusive)
+   * @param end - 끝 바이트 위치 (inclusive)
+   * @returns 부분 파일 스트림
+   */
+  파일범위스트림읽기(objectKey: string, start: number, end: number): Promise<Readable>;
+
+  /**
    * 파일 삭제
    * @param objectKey - 저장 경로/키
    */

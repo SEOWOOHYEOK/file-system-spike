@@ -26,6 +26,8 @@ export interface CreateFileCacheStorageParams {
   fileId: string;
   objectKey?: string;
   availabilityStatus?: AvailabilityStatus;
+  /** SHA-256 체크섬 */
+  checksum?: string;
 }
 
 @Injectable()
@@ -91,6 +93,11 @@ export class FileCacheStorageDomainService {
     // objectKey 오버라이드가 필요한 경우
     if (params.objectKey && params.objectKey !== params.fileId) {
       storageObject.updateObjectKey(params.objectKey);
+    }
+
+    // 체크섬 설정
+    if (params.checksum) {
+      storageObject.updateChecksum(params.checksum);
     }
 
     return this.repository.save(storageObject, txOptions);

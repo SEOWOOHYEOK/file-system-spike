@@ -17,7 +17,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { HttpStatus } from '@nestjs/common';
 import { PassThrough, Writable } from 'stream';
 import { FileController } from './file.controller';
-import { FileUploadService, FileDownloadService, FileManageService } from '../../../business/file';
+import { FileQueryService, FileUploadService, FileDownloadService, FileManageService } from '../../../business/file';
 import { ConflictStrategy, FileState } from '../../../domain/file';
 
 /**
@@ -37,17 +37,25 @@ import { ConflictStrategy, FileState } from '../../../domain/file';
  */
 describe('FileController', () => {
   let controller: FileController;
+  let fileQueryService: jest.Mocked<FileQueryService>;
   let fileUploadService: jest.Mocked<FileUploadService>;
   let fileDownloadService: jest.Mocked<FileDownloadService>;
   let fileManageService: jest.Mocked<FileManageService>;
 
   beforeEach(async () => {
+    const mockFileQueryService = {
+      getFileInfo: jest.fn(),
+      exists: jest.fn(),
+      getFileSize: jest.fn(),
+      getChecksum: jest.fn(),
+    };
+
     const mockFileUploadService = {
       upload: jest.fn(),
     };
 
     const mockFileDownloadService = {
-      getFileInfo: jest.fn(),
+      getFileInfo: jest.fn(), // deprecated, delegates to FileQueryService
       download: jest.fn(),
       releaseLease: jest.fn(),
     };
@@ -61,6 +69,7 @@ describe('FileController', () => {
     const module: TestingModule = await Test.createTestingModule({
       controllers: [FileController],
       providers: [
+        { provide: FileQueryService, useValue: mockFileQueryService },
         { provide: FileUploadService, useValue: mockFileUploadService },
         { provide: FileDownloadService, useValue: mockFileDownloadService },
         { provide: FileManageService, useValue: mockFileManageService },
@@ -68,6 +77,7 @@ describe('FileController', () => {
     }).compile();
 
     controller = module.get<FileController>(FileController);
+    fileQueryService = module.get(FileQueryService);
     fileUploadService = module.get(FileUploadService);
     fileDownloadService = module.get(FileDownloadService);
     fileManageService = module.get(FileManageService);

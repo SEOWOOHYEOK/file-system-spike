@@ -110,6 +110,24 @@ export class LocalCacheAdapter implements ICacheStoragePort {
     return stream;
   }
 
+  async 파일범위스트림읽기(objectKey: string, start: number, end: number): Promise<Readable> {
+    const lockKey = `cache:${objectKey}`;
+    const release = await this.lockManager.acquireRead(lockKey);
+    const filePath = this.getFullPath(objectKey);
+
+    if (!existsSync(filePath)) {
+      release();
+      throw new Error(`File not found: ${objectKey}`);
+    }
+
+    // Range 요청: start와 end는 inclusive
+    const stream = createReadStream(filePath, { start, end });
+    // 스트림 종료 시 lock 해제
+    stream.on('close', release);
+    stream.on('error', release);
+    return stream;
+  }
+
   async 파일삭제(objectKey: string): Promise<void> {
     const lockKey = `cache:${objectKey}`;
     const release = await this.lockManager.acquireWrite(lockKey);

@@ -1,5 +1,6 @@
 import { Injectable, Inject, OnModuleInit, Logger } from '@nestjs/common';
 import * as path from 'path';
+import { pipeline } from 'stream/promises';
 import {
   JOB_QUEUE_PORT,
   Job,
@@ -23,6 +24,7 @@ import { FOLDER_REPOSITORY } from '../../domain/folder';
 import { TRASH_REPOSITORY } from '../../domain/trash';
 import { SYNC_EVENT_REPOSITORY } from '../../domain/sync-event/repositories/sync-event.repository.interface';
 import { SyncEventEntity } from '../../domain/sync-event/entities/sync-event.entity';
+import { createProgressStream, createProgressLogger, formatBytes } from '../../common/utils';
 
 import type { IJobQueuePort } from '../../infra/queue/job-queue.port';
 import type { IDistributedLockPort } from '../../infra/queue/distributed-lock.port';
@@ -154,6 +156,20 @@ export const NAS_FILE_SYNC_QUEUE_PREFIX = 'NAS_FILE_SYNC';
  * - 환경에 따라 조정 가능 (기본값: 5)
  */
 export const NAS_FILE_SYNC_CONCURRENCY = 5;
+
+/**
+ * 대용량 파일 병렬 업로드 설정
+ */
+export const PARALLEL_UPLOAD_CONFIG = {
+  /** 병렬 업로드 활성화 임계값 (100MB 이상) */
+  THRESHOLD_BYTES: 100 * 1024 * 1024,
+  /** 청크 크기 (50MB) */
+  CHUNK_SIZE: 50 * 1024 * 1024,
+  /** 동시 청크 업로드 수 */
+  PARALLEL_CHUNKS: 4,
+  /** 진행률 로그 출력 간격 (%) */
+  PROGRESS_LOG_INTERVAL: 10,
+};
 
 
 @Injectable()
@@ -351,6 +367,10 @@ export class NasSyncWorker implements OnModuleInit {
 
   /**
    * Upload 액션 처리
+   * 
+   * 파일 크기에 따라 전략 분기:
+   * - 소용량 (< 100MB): 스트림 방식 + 진행률 로깅
+   * - 대용량 (>= 100MB): 청크 병렬 업로드 + 진행률 로깅
    */
   private async handleUpload(job: Job<NasFileUploadJobData>): Promise<void> {
     const { fileId, syncEventId } = job.data;
@@ -385,22 +405,144 @@ export class NasSyncWorker implements OnModuleInit {
         return;
       }
 
-      const readStream = await this.cacheStorage.파일스트림읽기(fileId);
       const objectKey = syncEvent?.targetPath || fileId;
-      await this.nasStorage.파일스트림쓰기(objectKey, readStream);
+      const fileSize = file.sizeBytes;
+      const shortFileId = fileId.substring(0, 8);
+
+      // 파일 크기에 따른 전략 분기
+      if (fileSize >= PARALLEL_UPLOAD_CONFIG.THRESHOLD_BYTES) {
+        // 대용량 파일: 청크 병렬 업로드
+        this.logger.log(
+          `[PARALLEL_UPLOAD] 🚀 Starting parallel upload | file=${shortFileId}... | ` +
+          `size=${formatBytes(fileSize)} | chunks=${Math.ceil(fileSize / PARALLEL_UPLOAD_CONFIG.CHUNK_SIZE)}`,
+        );
+        await this.parallelUploadToNas(fileId, objectKey, fileSize);
+      } else {
+        // 소용량 파일: 스트림 방식 + 진행률 로깅
+        await this.streamUploadToNas(fileId, objectKey, fileSize);
+      }
 
       nasObject.updateStatus(AvailabilityStatus.AVAILABLE);
       nasObject.updateObjectKey(objectKey);
       await this.fileStorageObjectRepository.save(nasObject);
 
       await this.markSyncEventDone(syncEvent);
-      this.logger.log(`Successfully synced file to NAS: ${fileId} -> ${objectKey}`);
+      this.logger.log(
+        `[SYNC_COMPLETE] ✅ Successfully synced to NAS | file=${shortFileId}... | ` +
+        `size=${formatBytes(fileSize)} | path=${objectKey}`,
+      );
     } catch (error) {
       this.logger.error(`Failed to sync file to NAS: ${fileId}`, error);
       // SyncEvent 재시도 처리 (재시도 가능 시 PENDING으로 롤백)
       await this.handleSyncEventRetry(syncEvent, error as Error, job.data);
       throw error;
     }
+  }
+
+  /**
+   * 스트림 방식 업로드 (소용량 파일용)
+   * 진행률 로깅 포함
+   */
+  private async streamUploadToNas(
+    fileId: string,
+    objectKey: string,
+    fileSize: number,
+  ): Promise<void> {
+    const readStream = await this.cacheStorage.파일스트림읽기(fileId);
+    
+    // 진행률 로거 생성
+    const { callback: progressCallback } = createProgressLogger(
+      this.logger,
+      fileId,
+      'NAS_SYNC',
+      PARALLEL_UPLOAD_CONFIG.PROGRESS_LOG_INTERVAL,
+    );
+    
+    // 진행률 모니터링 스트림 생성
+    const progressStream = createProgressStream(fileSize, progressCallback);
+    
+    // 파이프라인: 캐시 → 진행률 모니터링 → NAS
+    await this.nasStorage.파일스트림쓰기(objectKey, readStream.pipe(progressStream));
+  }
+
+  /**
+   * 청크 병렬 업로드 (대용량 파일용)
+   * 
+   * 처리 순서:
+   * 1. NAS에 파일 사전 할당 (truncate)
+   * 2. 캐시에서 청크 단위로 읽기
+   * 3. 각 청크를 병렬로 NAS에 쓰기 (pwrite)
+   */
+  private async parallelUploadToNas(
+    fileId: string,
+    objectKey: string,
+    fileSize: number,
+  ): Promise<void> {
+    const { CHUNK_SIZE, PARALLEL_CHUNKS, PROGRESS_LOG_INTERVAL } = PARALLEL_UPLOAD_CONFIG;
+    const shortFileId = fileId.substring(0, 8);
+
+    // 1. NAS에 파일 사전 할당
+    await this.nasStorage.파일사전할당(objectKey, fileSize);
+
+    // 2. 청크 정보 계산
+    const totalChunks = Math.ceil(fileSize / CHUNK_SIZE);
+    const chunks: Array<{ index: number; start: number; end: number }> = [];
+    
+    for (let i = 0; i < totalChunks; i++) {
+      const start = i * CHUNK_SIZE;
+      const end = Math.min(start + CHUNK_SIZE - 1, fileSize - 1);
+      chunks.push({ index: i, start, end });
+    }
+
+    // 3. 진행률 추적
+    let completedChunks = 0;
+    let lastLoggedPercent = 0;
+
+    // 4. 청크 병렬 처리 (동시 실행 수 제한)
+    const processChunk = async (chunk: { index: number; start: number; end: number }) => {
+      const { index, start, end } = chunk;
+      const chunkSize = end - start + 1;
+
+      // 캐시에서 청크 범위 읽기
+      const chunkStream = await this.cacheStorage.파일범위스트림읽기(fileId, start, end);
+      
+      // 스트림을 버퍼로 변환
+      const buffers: Buffer[] = [];
+      for await (const data of chunkStream) {
+        buffers.push(data);
+      }
+      const chunkBuffer = Buffer.concat(buffers);
+
+      // NAS에 청크 쓰기
+      await this.nasStorage.청크쓰기(objectKey, chunkBuffer, start);
+
+      // 진행률 업데이트
+      completedChunks++;
+      const percent = Math.round((completedChunks / totalChunks) * 100);
+      
+      if (percent >= lastLoggedPercent + PROGRESS_LOG_INTERVAL || percent === 100) {
+        this.logger.log(
+          `[PARALLEL_UPLOAD] 📊 Progress | file=${shortFileId}... | ${percent}% | ` +
+          `chunks=${completedChunks}/${totalChunks}`,
+        );
+        lastLoggedPercent = Math.floor(percent / PROGRESS_LOG_INTERVAL) * PROGRESS_LOG_INTERVAL;
+      }
+    };
+
+    // 5. 병렬 실행 (동시 실행 수 제한)
+    const executeInBatches = async () => {
+      for (let i = 0; i < chunks.length; i += PARALLEL_CHUNKS) {
+        const batch = chunks.slice(i, i + PARALLEL_CHUNKS);
+        await Promise.all(batch.map(processChunk));
+      }
+    };
+
+    await executeInBatches();
+
+    this.logger.log(
+      `[PARALLEL_UPLOAD] ✅ All chunks uploaded | file=${shortFileId}... | ` +
+      `totalChunks=${totalChunks}`,
+    );
   }
 
   /**

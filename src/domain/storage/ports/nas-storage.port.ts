@@ -31,6 +31,25 @@ export interface INasStoragePort {
   파일스트림쓰기(objectKey: string, stream: Readable): Promise<void>;
 
   /**
+   * 청크 쓰기 (대용량 파일 병렬 업로드용)
+   * 파일의 특정 위치(offset)에 데이터를 씁니다.
+   * 
+   * @param objectKey - 저장 경로/키
+   * @param data - 청크 데이터
+   * @param offset - 파일 내 시작 위치 (bytes)
+   */
+  청크쓰기(objectKey: string, data: Buffer, offset: number): Promise<void>;
+
+  /**
+   * 파일 사전 할당 (대용량 파일 병렬 업로드 전 호출)
+   * 지정된 크기의 빈 파일을 미리 생성합니다.
+   * 
+   * @param objectKey - 저장 경로/키
+   * @param totalSize - 전체 파일 크기 (bytes)
+   */
+  파일사전할당(objectKey: string, totalSize: number): Promise<void>;
+
+  /**
    * 파일 읽기 (Buffer)
    * @param objectKey - 저장 경로/키
    * @returns 파일 데이터
@@ -43,6 +62,15 @@ export interface INasStoragePort {
    * @returns 파일 스트림
    */
   파일스트림읽기(objectKey: string): Promise<Readable>;
+
+  /**
+   * 파일 부분 읽기 (Range Request 지원)
+   * @param objectKey - 저장 경로/키
+   * @param start - 시작 바이트 위치 (inclusive)
+   * @param end - 끝 바이트 위치 (inclusive)
+   * @returns 부분 파일 스트림
+   */
+  파일범위스트림읽기(objectKey: string, start: number, end: number): Promise<Readable>;
 
   /**
    * 파일 삭제

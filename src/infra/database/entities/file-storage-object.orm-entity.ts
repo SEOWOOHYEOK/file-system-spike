@@ -45,6 +45,9 @@ export class FileStorageObjectOrmEntity {
   @Column('int', { default: 0 })
   leaseCount: number;
 
+  @Column({ type: 'varchar', length: 64, nullable: true })
+  checksum: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

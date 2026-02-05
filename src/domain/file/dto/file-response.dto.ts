@@ -27,6 +27,8 @@ export interface FileInfoResponse {
   storageStatus: StorageStatusDto;
   createdAt: string;
   updatedAt: string;
+  /** 파일 체크섬 (SHA-256) - 병렬 다운로드 후 무결성 검증용 */
+  checksum: string | null;
 }
 
 /**

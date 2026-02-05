@@ -162,6 +162,69 @@ export class NfsNasAdapter implements INasStoragePort {
     }
   }
 
+  /**
+   * 청크 쓰기 (대용량 파일 병렬 업로드용)
+   * pwrite 방식으로 파일의 특정 위치에 데이터를 씁니다.
+   * 
+   * 락을 사용하지 않음 - 각 청크가 다른 offset에 쓰므로 충돌 없음
+   * 단, 파일사전할당이 먼저 호출되어야 함
+   */
+  async 청크쓰기(objectKey: string, data: Buffer, offset: number): Promise<void> {
+    const filePath = this.clientProvider.validateAndCreatePath(objectKey);
+    
+    let fileHandle: Awaited<ReturnType<typeof fs.open>> | null = null;
+    try {
+      // 쓰기 모드로 파일 열기 (r+ = 읽기/쓰기, 파일 존재해야 함)
+      fileHandle = await fs.open(filePath, 'r+');
+      
+      // FileHandle.write with position (pwrite 동작)
+      await fileHandle.write(data, 0, data.length, offset);
+
+      this.logger.debug(
+        `📝 청크 쓰기 완료: ${objectKey} | offset=${offset} | size=${data.length}`,
+      );
+    } catch (error: any) {
+      throw new InternalServerErrorException(
+        `청크 쓰기 실패: offset=${offset}`,
+        { cause: error },
+      );
+    } finally {
+      if (fileHandle) {
+        await fileHandle.close();
+      }
+    }
+  }
+
+  /**
+   * 파일 사전 할당 (대용량 파일 병렬 업로드 전 호출)
+   * 지정된 크기의 빈 파일을 미리 생성합니다.
+   * 
+   * fallocate 또는 truncate를 사용하여 디스크 공간을 미리 확보합니다.
+   */
+  async 파일사전할당(objectKey: string, totalSize: number): Promise<void> {
+    const release = await this.lockManager.acquireWrite(objectKey);
+    try {
+      const filePath = this.clientProvider.validateAndCreatePath(objectKey);
+      await this.ensureDirectory(filePath);
+
+      // truncate로 파일 크기 설정 (sparse file 생성)
+      const fd = await fs.open(filePath, 'w');
+      await fd.truncate(totalSize);
+      await fd.close();
+
+      this.logger.debug(
+        `📦 파일 사전 할당 완료: ${objectKey} | size=${totalSize} bytes`,
+      );
+    } catch (error: any) {
+      throw new InternalServerErrorException(
+        `파일 사전 할당 실패`,
+        { cause: error },
+      );
+    } finally {
+      release();
+    }
+  }
+
   async 파일읽기(objectKey: string): Promise<Buffer> {
     const release = await this.lockManager.acquireRead(objectKey);
     try {
@@ -187,6 +250,23 @@ export class NfsNasAdapter implements INasStoragePort {
     }
 
     const stream = fsSync.createReadStream(filePath);
+    // 스트림 종료 시 lock 해제
+    stream.on('close', release);
+    stream.on('error', release);
+    return stream;
+  }
+
+  async 파일범위스트림읽기(objectKey: string, start: number, end: number): Promise<Readable> {
+    const release = await this.lockManager.acquireRead(objectKey);
+    const filePath = this.clientProvider.validateAndCreatePath(objectKey);
+
+    if (!fsSync.existsSync(filePath)) {
+      release();
+      throw new NotFoundException(`파일을 찾을 수 없습니다`);
+    }
+
+    // Range 요청: start와 end는 inclusive
+    const stream = fsSync.createReadStream(filePath, { start, end });
     // 스트림 종료 시 lock 해제
     stream.on('close', release);
     stream.on('error', release);

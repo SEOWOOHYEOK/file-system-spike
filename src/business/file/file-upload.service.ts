@@ -1,5 +1,6 @@
 import { Injectable, Inject, BadRequestException, ConflictException, NotFoundException, InternalServerErrorException, Logger } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
+import { createHash } from 'crypto';
 import {
   FileEntity,
   FileStorageObjectEntity,
@@ -104,6 +105,9 @@ export class FileUploadService {
     // 4. UUID 미리 생성
     const fileId = uuidv4();
 
+    // 4.5. SHA-256 체크섬 계산
+    const checksum = createHash('sha256').update(file.buffer).digest('hex');
+
     // 5. SeaweedFS 저장 (infra 레이어에서 구현)
     await this.cacheStorage.파일쓰기(fileId, file.buffer);
 
@@ -121,7 +125,7 @@ export class FileUploadService {
     try {
       // 7. DB 저장 (Domain Service 사용)
       fileEntity = await this.createFileEntity(fileId, finalFileName, folderId, file, uploadCreatedAt);
-      await this.createStorageObjects(fileId, uploadCreatedAt, finalFileName);
+      await this.createStorageObjects(fileId, uploadCreatedAt, finalFileName, checksum);
 
       // 8. sync_events 생성 (문서 요구사항)
       syncEventId = uuidv4();
@@ -344,18 +348,21 @@ export class FileUploadService {
     fileId: string,
     createdAt: Date,
     fileName: string,
+    checksum: string,
   ): Promise<void> {
     // Domain Service 사용
     await Promise.all([
       this.fileCacheStorageDomainService.생성({
         id: uuidv4(),
         fileId,
+        checksum,
       }),
       this.fileNasStorageDomainService.생성({
         id: uuidv4(),
         fileId,
         createdAt,
         fileName,
+        checksum,
       }),
     ]);
   }

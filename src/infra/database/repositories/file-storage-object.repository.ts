@@ -43,6 +43,7 @@ export class FileStorageObjectRepository implements IFileStorageObjectRepository
       lastAccessed: orm.lastAccessed ?? undefined,
       accessCount: orm.accessCount,
       leaseCount: orm.leaseCount,
+      checksum: orm.checksum ?? undefined,
       createdAt: orm.createdAt,
       updatedAt: orm.updatedAt ?? undefined,
     });
@@ -61,6 +62,7 @@ export class FileStorageObjectRepository implements IFileStorageObjectRepository
     orm.lastAccessed = domain.lastAccessed ?? null;
     orm.accessCount = domain.accessCount;
     orm.leaseCount = domain.leaseCount;
+    orm.checksum = domain.checksum ?? null;
     orm.createdAt = domain.createdAt;
     orm.updatedAt = domain.updatedAt ?? new Date();
     return orm;

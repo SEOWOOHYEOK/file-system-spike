@@ -1,5 +1,5 @@
 import { Injectable, Inject, NotFoundException, BadRequestException, Logger, InternalServerErrorException, ConflictException } from '@nestjs/common';
-import { buildPath } from '../../common/utils';
+import { parseRangeHeader, type RangeInfo } from '../../common/utils';
 import {
   StorageType,
   AvailabilityStatus,
@@ -10,8 +10,32 @@ import type {
   FileStorageObjectEntity,
   FileInfoResponse,
 } from '../../domain/file';
+
+/**
+ * Range 다운로드 옵션
+ */
+export interface DownloadWithRangeOptions {
+  /** HTTP Range 헤더 값 (예: "bytes=0-1023") */
+  rangeHeader?: string;
+  /** HTTP If-Range 헤더 값 (ETag) */
+  ifRangeHeader?: string;
+}
+
+/**
+ * Range 다운로드 결과
+ */
+export interface DownloadWithRangeResult {
+  file: FileEntity;
+  storageObject: FileStorageObjectEntity;
+  stream: NodeJS.ReadableStream | null;
+  /** 부분 응답 여부 (206 Partial Content) */
+  isPartial: boolean;
+  /** 적용된 Range 정보 */
+  range?: RangeInfo;
+  /** Range 파싱 실패 (416 Range Not Satisfiable 응답 필요) */
+  isRangeInvalid?: boolean;
+}
 import { FileDomainService } from '../../domain/file/service/file-domain.service';
-import { FolderDomainService } from '../../domain/folder/service/folder-domain.service';
 import { FileCacheStorageDomainService } from '../../domain/storage/file/service/file-cache-storage-domain.service';
 import { FileNasStorageDomainService } from '../../domain/storage/file/service/file-nas-storage-domain.service';
 import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';
@@ -20,10 +44,14 @@ import { JOB_QUEUE_PORT } from '../../infra/queue/job-queue.port';
 import type { ICacheStoragePort } from '../../domain/storage/ports/cache-storage.port';
 import type { INasStoragePort } from '../../domain/storage/ports/nas-storage.port';
 import type { IJobQueuePort } from '../../infra/queue/job-queue.port';
+import { v4 as uuidv4 } from 'uuid';
+import { FileQueryService } from './file-query.service';
 
 /**
  * 파일 다운로드 비즈니스 서비스
- * 파일 조회 및 다운로드 처리 (캐시 히트/미스 포함)
+ * 파일 다운로드 처리 (캐시 히트/미스 포함)
+ * 
+ * 파일 정보 조회는 FileQueryService를 사용합니다.
  */
 @Injectable()
 export class FileDownloadService {
@@ -31,7 +59,7 @@ export class FileDownloadService {
 
   constructor(
     private readonly fileDomainService: FileDomainService,
-    private readonly folderDomainService: FolderDomainService,
+    private readonly fileQueryService: FileQueryService,
     private readonly fileCacheStorageDomainService: FileCacheStorageDomainService,
     private readonly fileNasStorageDomainService: FileNasStorageDomainService,
     @Inject(CACHE_STORAGE_PORT)
@@ -40,42 +68,15 @@ export class FileDownloadService {
     private readonly nasStorage: INasStoragePort,
     @Inject(JOB_QUEUE_PORT)
     private readonly jobQueue: IJobQueuePort,
-  ) { }
+  ) {}
 
   /**
-   * 파일 정보 조회
+   * 파일 정보 조회 (FileQueryService 위임)
+   * 
+   * @deprecated FileQueryService.getFileInfo()를 직접 사용하세요.
    */
   async getFileInfo(fileId: string): Promise<FileInfoResponse> {
-    const file = await this.fileDomainService.조회(fileId);
-    if (!file) {
-      throw new NotFoundException({
-        code: 'FILE_NOT_FOUND',
-        message: '파일을 찾을 수 없습니다.',
-      });
-    }
-
-    const cacheStatus = await this.fileCacheStorageDomainService.조회(fileId);
-    const nasStatus = await this.fileNasStorageDomainService.조회(fileId);
-    const folder = await this.folderDomainService.조회(file.folderId);
-
-    // folder.path '/'인 경우(루트) 처리 포함
-    const filePath = buildPath(folder?.path || '/', file.name);
-
-    return {
-      id: file.id,
-      name: file.name,
-      folderId: file.folderId,
-      path: filePath,
-      size: file.sizeBytes,
-      mimeType: file.mimeType,
-      state: file.state,
-      storageStatus: {
-        cache: cacheStatus?.availabilityStatus ?? null,
-        nas: nasStatus?.availabilityStatus ?? null,
-      },
-      createdAt: file.createdAt.toISOString(),
-      updatedAt: file.updatedAt.toISOString(),
-    };
+    return this.fileQueryService.getFileInfo(fileId);
   }
 
   /**
@@ -131,34 +132,41 @@ export class FileDownloadService {
 
 
     // 2. 캐시 상태 확인
-    const cacheObject = await this.fileCacheStorageDomainService.조회(fileId);
+    let cacheObject = await this.fileCacheStorageDomainService.조회(fileId);
 
     // 캐시 서버에 캐시된 파일이 존재하는지 없는지 확인
     const cacheFileExists = await this.cacheStorage.파일존재확인(fileId);
 
+    // 케이스 1: DB 상태 AVAILABLE인데 실제 파일 없음 → 상태 보정 후 NAS 폴백
+    if (cacheObject && cacheObject.isAvailable() && !cacheFileExists) {
+      this.logger.warn(`Cache inconsistency: DB=AVAILABLE, file missing: ${fileId}`);
+      cacheObject.updateStatus(AvailabilityStatus.MISSING);
+      await this.fileCacheStorageDomainService.저장(cacheObject);
+      // cacheObject를 null로 처리하여 아래 NAS 폴백 로직으로 진행
+      cacheObject = null;
+    }
 
-    //캐시 상태에도 있고, 캐시 서버에도 있다면
-    //캐시 히트 처리
+    // 케이스 2: DB에 없거나 MISSING인데 실제 파일 있음 → 상태 복원
+    if ((!cacheObject || !cacheObject.isAvailable()) && cacheFileExists) {
+      this.logger.log(`Cache inconsistency: DB=MISSING/NULL, file exists: ${fileId}`);
+      if (cacheObject) {
+        // 기존 캐시 객체가 있으면 상태만 복원
+        cacheObject.updateStatus(AvailabilityStatus.AVAILABLE);
+        await this.fileCacheStorageDomainService.저장(cacheObject);
+      } else {
+        // 캐시 객체가 없으면 새로 생성 (uuidv4로 ID 생성)
+        const newId = uuidv4();
+        cacheObject = await this.fileCacheStorageDomainService.생성({
+          id: newId,
+          fileId: file.id,
+          objectKey: file.id,
+        });
+        this.logger.debug(`Created new cache object for existing file: ${fileId}`);
+      }
+    }
 
-    //캐시 상태에는 있지만 캐시 서버에는 없다면
-    //나스 동기화 진행
-    //캐시 서버에 복원 작업 등록(NAS 동기화 완료 후 캐시 서버에 복원)
-    //위 2가지 진행후 캐시 히트 처리
-
-    //캐시 상태에는 없지만 캐시 서버에는 있다면
-    //캐시 상태 업데이트
-    //캐시 히트 처리 
-
-
-    //캐시 서버에 캐시 파일 없다면    
-    //나스 동기화 진행
-    //캐시 서버에 복원 작업 등록(NAS 동기화 완료 후 캐시 서버에 복원)
-    //위 2가지 진행후 캐시 히트 처리
-
-
-
-    // 3-A. 캐시 히트
-    if (cacheObject && cacheObject.isAvailable()) {
+    // 3-A. 캐시 히트 (DB와 실제 파일 모두 정상인 경우)
+    if (cacheObject && cacheObject.isAvailable() && cacheFileExists) {
       return this.downloadFromCache(file, cacheObject);
     }
 
@@ -278,6 +286,261 @@ export class FileDownloadService {
       };
     } catch (error) {
       // 스트림 획득 실패 시 lease 해제
+      nasObject.releaseLease();
+      await this.fileNasStorageDomainService.저장(nasObject);
+
+      this.logger.error(`Failed to read from NAS: ${file.id}`, error);
+      throw new InternalServerErrorException({
+        code: 'NAS_READ_FAILED',
+        message: 'NAS에서 파일을 읽는 데 실패했습니다.',
+      });
+    }
+  }
+
+  /**
+   * 파일 다운로드 (Range 지원)
+   * 
+   * HTTP Range Requests (RFC 7233) 지원
+   * - Range 헤더 파싱, If-Range 검증을 내부에서 처리
+   * - Range가 있으면 부분 스트림 반환 (206)
+   * - Range가 없거나 If-Range 불일치 시 전체 스트림 반환 (200)
+   * 
+   * @param fileId - 파일 ID
+   * @param options - Range 헤더, If-Range 헤더 (optional)
+   * @returns 파일, 스토리지 객체, 스트림, 부분 요청 여부, Range 정보, 유효성
+   */
+  async downloadWithRange(
+    fileId: string,
+    options?: DownloadWithRangeOptions,
+  ): Promise<DownloadWithRangeResult> {
+    // 1. 파일 조회 및 상태 점검
+    const file = await this.fileDomainService.조회(fileId);
+    if (!file) {
+      throw new NotFoundException({
+        code: 'FILE_NOT_FOUND',
+        message: '파일을 찾을 수 없습니다.',
+      });
+    }
+
+    if (file.isTrashed()) {
+      throw new BadRequestException({
+        code: 'FILE_IN_TRASH',
+        message: '휴지통에 있는 파일입니다.',
+      });
+    }
+
+    if (file.isDeleted()) {
+      throw new NotFoundException({
+        code: 'FILE_DELETED',
+        message: '삭제된 파일입니다.',
+      });
+    }
+
+    // 2. Range 헤더 파싱 (파일 크기 필요)
+    let range: RangeInfo | null = null;
+    let isRangeInvalid = false;
+
+    if (options?.rangeHeader) {
+      range = parseRangeHeader(options.rangeHeader, file.sizeBytes);
+      if (!range) {
+        // Range 파싱 실패 → 416 응답 필요
+        isRangeInvalid = true;
+      }
+    }
+
+    // 3. NAS 상태 확인
+    const nasObject = await this.fileNasStorageDomainService.조회(fileId);
+
+    if (nasObject && nasObject.isSyncing()) {
+      this.logger.warn(`File is syncing to NAS: ${fileId}`);
+      throw new ConflictException({
+        code: 'FILE_SYNCING',
+        message: '파일이 NAS에 동기화 중입니다. 잠시 후 다시 시도해주세요.',
+      });
+    }
+
+    // 4. 캐시 상태 확인 및 보정
+    let cacheObject = await this.fileCacheStorageDomainService.조회(fileId);
+    const cacheFileExists = await this.cacheStorage.파일존재확인(fileId);
+
+    // 케이스 1: DB 상태 AVAILABLE인데 실제 파일 없음
+    if (cacheObject && cacheObject.isAvailable() && !cacheFileExists) {
+      this.logger.warn(`Cache inconsistency: DB=AVAILABLE, file missing: ${fileId}`);
+      cacheObject.updateStatus(AvailabilityStatus.MISSING);
+      await this.fileCacheStorageDomainService.저장(cacheObject);
+      cacheObject = null;
+    }
+
+    // 케이스 2: DB에 없거나 MISSING인데 실제 파일 있음
+    if ((!cacheObject || !cacheObject.isAvailable()) && cacheFileExists) {
+      this.logger.log(`Cache inconsistency: DB=MISSING/NULL, file exists: ${fileId}`);
+      if (cacheObject) {
+        cacheObject.updateStatus(AvailabilityStatus.AVAILABLE);
+        await this.fileCacheStorageDomainService.저장(cacheObject);
+      } else {
+        const newId = uuidv4();
+        cacheObject = await this.fileCacheStorageDomainService.생성({
+          id: newId,
+          fileId: file.id,
+          objectKey: file.id,
+        });
+        this.logger.debug(`Created new cache object for existing file: ${fileId}`);
+      }
+    }
+
+    // 5. 다운로드 실행 (캐시 또는 NAS)
+    let result: DownloadWithRangeResult;
+
+    if (cacheObject && cacheObject.isAvailable() && cacheFileExists) {
+      result = await this.downloadFromCacheWithRange(file, cacheObject, range || undefined);
+    } else if (nasObject && nasObject.isAvailable()) {
+      result = await this.downloadFromNasWithRange(file, nasObject, range || undefined);
+    } else if (nasObject && !nasObject.isAvailable()) {
+      this.logger.error(
+        `NAS storage not available for file: ${fileId}, status: ${nasObject.availabilityStatus}`,
+      );
+      throw new InternalServerErrorException({
+        code: 'FILE_STORAGE_UNAVAILABLE',
+        message: '파일 스토리지가 현재 사용할 수 없는 상태입니다. 관리자에게 문의하세요.',
+      });
+    } else {
+      this.logger.error(`No storage found for file: ${fileId}`);
+      throw new InternalServerErrorException({
+        code: 'FILE_NOT_FOUND_IN_STORAGE',
+        message: '파일 스토리지를 찾을 수 없습니다. 관리자에게 문의하세요.',
+      });
+    }
+
+    // 6. If-Range 검증: ETag 불일치 시 전체 파일로 변경
+    if (options?.ifRangeHeader && range && result.storageObject.checksum) {
+      const expectedEtag = `"${result.storageObject.checksum}"`;
+      if (options.ifRangeHeader !== expectedEtag) {
+        this.logger.debug(
+          `If-Range ETag mismatch for file ${fileId}: expected=${expectedEtag}, received=${options.ifRangeHeader}`,
+        );
+
+        // 기존 lease 해제 후 전체 파일로 다시 요청
+        await this.releaseLease(fileId);
+
+        if (cacheObject && cacheObject.isAvailable() && cacheFileExists) {
+          result = await this.downloadFromCacheWithRange(file, cacheObject, undefined);
+        } else if (nasObject && nasObject.isAvailable()) {
+          result = await this.downloadFromNasWithRange(file, nasObject, undefined);
+        }
+
+        // 전체 파일 응답으로 변경
+        result.isPartial = false;
+        result.range = undefined;
+      }
+    }
+
+    // Range 유효성 정보 추가
+    result.isRangeInvalid = isRangeInvalid;
+
+    return result;
+  }
+
+  /**
+   * 캐시에서 다운로드 (Range 지원)
+   */
+  private async downloadFromCacheWithRange(
+    file: FileEntity,
+    cacheObject: FileStorageObjectEntity,
+    range?: RangeInfo,
+  ): Promise<{
+    file: FileEntity;
+    storageObject: FileStorageObjectEntity;
+    stream: NodeJS.ReadableStream | null;
+    isPartial: boolean;
+    range?: RangeInfo;
+  }> {
+    cacheObject.acquireLease();
+    await this.fileCacheStorageDomainService.저장(cacheObject);
+
+    const rangeStr = range ? `${range.start}-${range.end} (${range.end - range.start + 1} bytes)` : 'full';
+    this.logger.log(`[CACHE_DOWNLOAD] 📥 file=${file.id.substring(0, 8)}... | range=${rangeStr} | objectKey=${cacheObject.objectKey}`);
+
+    try {
+      let stream: NodeJS.ReadableStream;
+
+      if (range) {
+        // Range 요청: 부분 스트림
+        stream = await this.cacheStorage.파일범위스트림읽기(cacheObject.objectKey, range.start, range.end);
+      } else {
+        // 전체 스트림
+        stream = await this.cacheStorage.파일스트림읽기(cacheObject.objectKey);
+      }
+
+      return {
+        file,
+        storageObject: cacheObject,
+        stream,
+        isPartial: !!range,
+        range,
+      };
+    } catch (error) {
+      cacheObject.releaseLease();
+      await this.fileCacheStorageDomainService.저장(cacheObject);
+
+      this.logger.error(`Failed to read from cache: ${file.id}`, error);
+      throw new InternalServerErrorException({
+        code: 'CACHE_READ_FAILED',
+        message: '캐시에서 파일을 읽는 데 실패했습니다.',
+      });
+    }
+  }
+
+  /**
+   * NAS에서 다운로드 (Range 지원)
+   */
+  private async downloadFromNasWithRange(
+    file: FileEntity,
+    nasObject: FileStorageObjectEntity,
+    range?: RangeInfo,
+  ): Promise<{
+    file: FileEntity;
+    storageObject: FileStorageObjectEntity;
+    stream: NodeJS.ReadableStream | null;
+    isPartial: boolean;
+    range?: RangeInfo;
+  }> {
+    nasObject.acquireLease();
+    await this.fileNasStorageDomainService.저장(nasObject);
+
+    const rangeStr = range ? `${range.start}-${range.end} (${range.end - range.start + 1} bytes)` : 'full';
+    this.logger.log(`[NAS_DOWNLOAD] 📥 file=${file.id.substring(0, 8)}... | range=${rangeStr} | objectKey=${nasObject.objectKey}`);
+
+    try {
+      let stream: NodeJS.ReadableStream;
+
+      if (range) {
+        // Range 요청: 부분 스트림
+        stream = await this.nasStorage.파일범위스트림읽기(nasObject.objectKey, range.start, range.end);
+      } else {
+        // 전체 스트림
+        stream = await this.nasStorage.파일스트림읽기(nasObject.objectKey);
+      }
+
+      // 캐시 복원 작업 등록 (전체 다운로드 시에만)
+      if (!range) {
+        const cacheObject = await this.fileCacheStorageDomainService.조회(file.id);
+        if (!cacheObject || cacheObject.availabilityStatus === AvailabilityStatus.MISSING) {
+          await this.jobQueue.addJob('CACHE_RESTORE', {
+            fileId: file.id,
+            nasObjectKey: nasObject.objectKey,
+          });
+          this.logger.debug(`Cache restore job registered for file: ${file.id}`);
+        }
+      }
+
+      return {
+        file,
+        storageObject: nasObject,
+        stream,
+        isPartial: !!range,
+        range,
+      };
+    } catch (error) {
       nasObject.releaseLease();
       await this.fileNasStorageDomainService.저장(nasObject);
 

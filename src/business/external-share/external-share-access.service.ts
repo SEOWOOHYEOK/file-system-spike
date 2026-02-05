@@ -10,6 +10,7 @@ import {
 } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import type { PaginationParams, PaginatedResult } from '../../common/types/pagination';
+import type { RangeInfo } from '../../common/utils';
 import {
   CONTENT_TOKEN_STORE,
   type IContentTokenStore,
@@ -27,7 +28,7 @@ import {
 } from '../../domain/external-share';
 import { PublicShareDomainService } from './public-share-domain.service';
 import { FileDownloadService } from '../file/file-download.service';
-import type { FileEntity } from '../../domain/file';
+import type { FileEntity, FileStorageObjectEntity } from '../../domain/file';
 
 
 /**
@@ -50,6 +51,10 @@ export interface AccessContentParams {
   ipAddress: string;
   userAgent: string;
   deviceType: string;
+  /** HTTP Range 헤더 원본 (예: "bytes=0-1023") - 서비스 내부에서 파싱 */
+  rangeHeader?: string;
+  /** HTTP If-Range 헤더 (ETag 값) - 이어받기 시 파일 변경 감지 */
+  ifRangeHeader?: string;
 }
 
 /**
@@ -61,7 +66,14 @@ export interface AccessResult {
   success: boolean;
   share: PublicShare;
   file: FileEntity;
+  storageObject: FileStorageObjectEntity;
   stream: NodeJS.ReadableStream | null;
+  /** Range 요청에 대한 부분 응답 여부 */
+  isPartial: boolean;
+  /** 적용된 Range 정보 */
+  range?: RangeInfo;
+  /** Range 요청이 유효하지 않음 (416 응답 필요) */
+  isRangeInvalid?: boolean;
 }
 
 /**
@@ -285,9 +297,17 @@ export class ExternalShareAccessService {
         );
       }
 
-      // 7. 파일 다운로드 - FileDownloadService 연동
+      // 7. 파일 다운로드 - FileDownloadService 연동 (Range/If-Range 처리 서비스에서 수행)
       // 중요: 다운로드 성공 후에만 카운트를 증가시킴 (실패 시 카운트 차감 방지)
-      const downloadResult = await this.fileDownloadService.download(share.fileId);
+      const downloadResult = await this.fileDownloadService.downloadWithRange(
+        share.fileId,
+        {
+          rangeHeader: params.rangeHeader,
+          ifRangeHeader: params.ifRangeHeader,
+        },
+      );
+      
+      const { range, isRangeInvalid } = downloadResult;
 
       // 8. 파일 메타데이터를 share에 채움 (비즈니스 레이어에서 처리)
       share.fileName = downloadResult.file.name;
@@ -318,7 +338,11 @@ export class ExternalShareAccessService {
         success: true,
         share,
         file: downloadResult.file,
+        storageObject: downloadResult.storageObject,
         stream: downloadResult.stream,
+        isPartial: downloadResult.isPartial,
+        range: downloadResult.range,
+        isRangeInvalid,
       };
     } catch (error) {
       // 실패 로그 기록 (HttpException의 경우 메시지 추출)

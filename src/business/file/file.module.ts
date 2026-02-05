@@ -9,6 +9,7 @@ import { SyncEventDomainModule } from '../../domain/sync-event/sync-event.module
 import { StorageDomainModule } from '../../domain/storage/storage.module';
 import { UploadSessionDomainModule } from '../../domain/upload-session/upload-session.module';
 import { AuditModule } from '../audit/audit.module';
+import { FileQueryService } from './file-query.service';
 import { FileUploadService } from './file-upload.service';
 import { FileDownloadService } from './file-download.service';
 import { FileManageService } from './file-manage.service';
@@ -17,7 +18,7 @@ import { MultipartOrphanCleanupScheduler } from './scheduler/multipart-orphan-cl
 
 /**
  * 파일 비즈니스 모듈
- * 파일 업로드, 다운로드, 관리 서비스를 제공합니다.
+ * 파일 조회, 업로드, 다운로드, 관리 서비스를 제공합니다.
  */
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { MultipartOrphanCleanupScheduler } from './scheduler/multipart-orphan-cl
     AuditModule,
   ],
   providers: [
+    FileQueryService,
     FileUploadService,
     FileDownloadService,
     FileManageService,
@@ -40,6 +42,7 @@ import { MultipartOrphanCleanupScheduler } from './scheduler/multipart-orphan-cl
     MultipartOrphanCleanupScheduler,
   ],
   exports: [
+    FileQueryService,
     FileUploadService,
     FileDownloadService,
     FileManageService,
