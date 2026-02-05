@@ -158,22 +158,38 @@ export const NAS_FILE_SYNC_QUEUE_PREFIX = 'NAS_FILE_SYNC';
  * 동시 처리 수 (concurrency)
  * - 다른 파일은 병렬 처리
  * - 같은 파일은 파일별 락으로 순차 처리 보장
- * - 환경에 따라 조정 가능 (기본값: 5)
+ * - 환경변수: NAS_FILE_SYNC_CONCURRENCY (기본값: 5)
  */
-export const NAS_FILE_SYNC_CONCURRENCY = 5;
+export const NAS_FILE_SYNC_CONCURRENCY = parseInt(
+  process.env.NAS_FILE_SYNC_CONCURRENCY || '5',
+  10,
+);
 
 /**
  * 대용량 파일 병렬 업로드 설정
+ * 환경변수로 관리 (기본값은 fallback)
  */
 export const PARALLEL_UPLOAD_CONFIG = {
-  /** 병렬 업로드 활성화 임계값 (100MB 이상) */
-  THRESHOLD_BYTES: 100 * 1024 * 1024,
-  /** 청크 크기 (50MB) */
-  CHUNK_SIZE: 50 * 1024 * 1024,
-  /** 동시 청크 업로드 수 */
-  PARALLEL_CHUNKS: 4,
-  /** 진행률 로그 출력 간격 (%) */
-  PROGRESS_LOG_INTERVAL: 10,
+  /** 병렬 업로드 활성화 임계값 (기본 100MB) */
+  THRESHOLD_BYTES: parseInt(
+    process.env.NAS_PARALLEL_UPLOAD_THRESHOLD_BYTES || String(100 * 1024 * 1024),
+    10,
+  ),
+  /** 청크 크기 (기본 50MB) */
+  CHUNK_SIZE: parseInt(
+    process.env.NAS_PARALLEL_UPLOAD_CHUNK_SIZE || String(50 * 1024 * 1024),
+    10,
+  ),
+  /** 동시 청크 업로드 수 (기본 4) */
+  PARALLEL_CHUNKS: parseInt(
+    process.env.NAS_PARALLEL_UPLOAD_CHUNKS || '4',
+    10,
+  ),
+  /** 진행률 로그 출력 간격 (%, 기본 5) */
+  PROGRESS_LOG_INTERVAL: parseInt(
+    process.env.NAS_PARALLEL_UPLOAD_PROGRESS_INTERVAL || '5',
+    10,
+  ),
 };
 
 
