@@ -156,6 +156,24 @@ export class UploadSessionDomainService {
   }
 
   /**
+   * 세션 병합 중 처리 (비동기 complete 진입)
+   * 파트 업로드 완료 → NAS sync + 캐시 concat 진행 상태로 전환
+   *
+   * @param session - 세션 엔티티
+   * @param fileId - 생성된 파일 ID
+   * @param txOptions - 트랜잭션 옵션
+   * @returns 업데이트된 세션 엔티티
+   */
+  async 엔티티세션병합중(
+    session: UploadSessionEntity,
+    fileId: string,
+    txOptions?: TransactionOptions,
+  ): Promise<UploadSessionEntity> {
+    session.completing(fileId);
+    return this.sessionRepository.save(session, txOptions);
+  }
+
+  /**
    * 세션 취소 처리
    * 엔티티의 abort 행위를 실행하고 영속화합니다.
    *
@@ -223,6 +241,14 @@ export class UploadSessionDomainService {
    */
   async 만료세션일괄삭제(txOptions?: TransactionOptions): Promise<number> {
     return this.sessionRepository.deleteExpiredSessions(txOptions);
+  }
+
+  /**
+   * 전체 활성 세션 통계 조회
+   * (INIT | UPLOADING 상태, 미만료)
+   */
+  async 활성세션통계(): Promise<{ count: number; totalBytes: number }> {
+    return this.sessionRepository.getActiveSessionStats();
   }
 
   // ============================================

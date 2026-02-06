@@ -13,7 +13,7 @@ export interface SessionStatusResponse {
   fileName: string;
 
   /** 세션 상태 */
-  status: 'INIT' | 'UPLOADING' | 'COMPLETED' | 'ABORTED' | 'EXPIRED';
+  status: 'INIT' | 'UPLOADING' | 'COMPLETING' | 'COMPLETED' | 'ABORTED' | 'EXPIRED';
 
   /** 파일 전체 크기 (bytes) */
   totalSize: number;

@@ -14,12 +14,15 @@ import { FileUploadService } from './file-upload.service';
 import { FileDownloadService } from './file-download.service';
 import { FileManageService } from './file-manage.service';
 import { MultipartUploadService } from './multipart-upload.service';
-import { MultipartOrphanCleanupScheduler } from './scheduler/multipart-orphan-cleanup.scheduler';
+import { UploadQueueService } from './upload-queue.service';
 import { SyncProgressService } from './sync-progress.service';
 
 /**
  * 파일 비즈니스 모듈
  * 파일 조회, 업로드, 다운로드, 관리 서비스를 제공합니다.
+ *
+ * 참고: MultipartOrphanCleanupScheduler는 WorkerSchedulerModule로 이동되었습니다.
+ * 프로세스 분리를 위해 스케줄러는 워커 전용 모듈에서 관리합니다.
  */
 @Module({
   imports: [
@@ -40,7 +43,7 @@ import { SyncProgressService } from './sync-progress.service';
     FileDownloadService,
     FileManageService,
     MultipartUploadService,
-    MultipartOrphanCleanupScheduler,
+    UploadQueueService,
     SyncProgressService,
   ],
   exports: [
@@ -49,7 +52,7 @@ import { SyncProgressService } from './sync-progress.service';
     FileDownloadService,
     FileManageService,
     MultipartUploadService,
-    MultipartOrphanCleanupScheduler,
+    UploadQueueService,
     SyncProgressService,
   ],
 })

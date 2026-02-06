@@ -53,9 +53,13 @@ export interface PreparedDownloadResponse {
   fileId: string;
 }
 
+import { PassThrough } from 'stream';
+import { pipeline } from 'stream/promises';
 import { FileDomainService } from '../../domain/file/service/file-domain.service';
 import { FileCacheStorageDomainService } from '../../domain/storage/file/service/file-cache-storage-domain.service';
 import { FileNasStorageDomainService } from '../../domain/storage/file/service/file-nas-storage-domain.service';
+import { UploadSessionDomainService } from '../../domain/upload-session/service/upload-session-domain.service';
+import { UploadSessionStatus } from '../../domain/upload-session';
 import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';
 import { NAS_STORAGE_PORT } from '../../domain/storage/ports/nas-storage.port';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
@@ -80,6 +84,7 @@ export class FileDownloadService {
     private readonly fileQueryService: FileQueryService,
     private readonly fileCacheStorageDomainService: FileCacheStorageDomainService,
     private readonly fileNasStorageDomainService: FileNasStorageDomainService,
+    private readonly uploadSessionDomainService: UploadSessionDomainService,
     @Inject(CACHE_STORAGE_PORT)
     private readonly cacheStorage: ICacheStoragePort,
     @Inject(NAS_STORAGE_PORT)
@@ -139,15 +144,19 @@ export class FileDownloadService {
     // 3-B. 캐시 미스 - NAS에서 조회
     const nasObject = await this.fileNasStorageDomainService.조회(fileId);
 
-    // 3-B-1. NAS 동기화 중인 경우 - 사용자에게 재시도 안내
+    // 3-B-1. NAS 동기화 중인 경우 - 멀티파트 파트 조립 다운로드 시도
     if (nasObject && nasObject.isSyncing()) {
+      const completingSession = await this.findCompletingSession(fileId);
+      if (completingSession) {
+        this.logger.log(`Serving download from multipart parts: ${fileId}`);
+        return this.downloadFromParts(file, nasObject, completingSession.id);
+      }
       this.logger.warn(`File is syncing to NAS: ${fileId}`);
       throw new ConflictException({
         code: 'FILE_SYNCING',
         message: '파일이 NAS에 동기화 중입니다. 잠시 후 다시 시도해주세요.',
       });
     }
-
 
     // 2. 캐시 상태 확인
     let cacheObject = await this.fileCacheStorageDomainService.조회(fileId);
@@ -372,6 +381,16 @@ export class FileDownloadService {
     const nasObject = await this.fileNasStorageDomainService.조회(fileId);
 
     if (nasObject && nasObject.isSyncing()) {
+      const completingSession = await this.findCompletingSession(fileId);
+      if (completingSession) {
+        this.logger.log(`Serving range download from multipart parts: ${fileId}`);
+        if (range) {
+          return this.downloadFromPartsWithRange(file, nasObject, completingSession.id, range);
+        }
+        // Range 없으면 전체 다운로드
+        const fullResult = await this.downloadFromParts(file, nasObject, completingSession.id);
+        return { ...fullResult, isPartial: false };
+      }
       this.logger.warn(`File is syncing to NAS: ${fileId}`);
       throw new ConflictException({
         code: 'FILE_SYNCING',
@@ -775,5 +794,93 @@ export class FileDownloadService {
       // lease 해제 실패는 로깅만 하고 에러를 전파하지 않음
       this.logger.error(`Failed to release lease for file: ${fileId}`, error);
     }
+  }
+
+  // ============================================
+  // 멀티파트 파트 기반 다운로드 (NAS sync 중)
+  // ============================================
+
+  /**
+   * COMPLETING 상태인 멀티파트 세션 조회
+   * NAS sync 중 다운로드 시 파트에서 직접 조립하기 위해 사용
+   */
+  private async findCompletingSession(fileId: string) {
+    const sessions = await this.uploadSessionDomainService.세션목록조회({
+      fileId,
+      status: [UploadSessionStatus.COMPLETING],
+      limit: 1,
+    });
+    return sessions[0] || null;
+  }
+
+  /**
+   * 파트에서 전체 파일 스트림 조립 (다운로드용)
+   * NAS sync 중 다운로드 요청 시 사용
+   */
+  private async downloadFromParts(
+    file: FileEntity,
+    storageObject: FileStorageObjectEntity,
+    sessionId: string,
+  ): Promise<{
+    file: FileEntity;
+    storageObject: FileStorageObjectEntity;
+    stream: NodeJS.ReadableStream;
+  }> {
+    const parts = await this.uploadSessionDomainService.완료파트목록조회(sessionId);
+    const sorted = parts.sort((a, b) => a.partNumber - b.partNumber);
+
+    const passThrough = new PassThrough();
+
+    // 파트를 순차적으로 파이프 (비동기)
+    (async () => {
+      for (const part of sorted) {
+        if (!part.objectKey) continue;
+        const partStream = await this.cacheStorage.파일스트림읽기(part.objectKey);
+        await pipeline(partStream, passThrough, { end: false });
+      }
+      passThrough.end();
+    })().catch(err => passThrough.destroy(err));
+
+    return { file, storageObject, stream: passThrough };
+  }
+
+  /**
+   * 파트에서 Range 다운로드 (부분 응답)
+   * 파트 크기 기반으로 바이트 → 파트 매핑
+   */
+  private async downloadFromPartsWithRange(
+    file: FileEntity,
+    storageObject: FileStorageObjectEntity,
+    sessionId: string,
+    range: RangeInfo,
+  ): Promise<DownloadWithRangeResult> {
+    const parts = await this.uploadSessionDomainService.완료파트목록조회(sessionId);
+    const sorted = parts.sort((a, b) => a.partNumber - b.partNumber);
+    const partSize = sorted[0]?.size || (10 * 1024 * 1024);
+
+    const startPart = Math.floor(range.start / partSize);
+    const endPart = Math.floor(range.end / partSize);
+    const relevant = sorted.slice(startPart, endPart + 1);
+
+    const passThrough = new PassThrough();
+
+    (async () => {
+      for (let i = 0; i < relevant.length; i++) {
+        const part = relevant[i];
+        if (!part.objectKey) continue;
+
+        const partOffset = (startPart + i) * partSize;
+        const readStart = Math.max(range.start - partOffset, 0);
+        const readEnd = Math.min(range.end - partOffset, part.size - 1);
+
+        const stream = await this.cacheStorage.파일범위스트림읽기(
+          part.objectKey, readStart, readEnd,
+        );
+        await pipeline(stream, passThrough, { end: false });
+      }
+      passThrough.end();
+    })().catch(err => passThrough.destroy(err));
+
+    return { file, storageObject, stream: passThrough, isPartial: true, range };
   }
 }

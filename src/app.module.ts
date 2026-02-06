@@ -15,13 +15,20 @@ import { createWinstonConfig } from './common/logger/winston.config';
 
 /**
  * 루트 애플리케이션 모듈
- * 
+ *
  * DDD 구조:
  * - Domain: 순수 도메인 로직 (엔티티, DTO, 리포지토리 인터페이스)
  * - Business: 비즈니스 유스케이스 (서비스)
  * - Interface: HTTP 컨트롤러
  * - Infra: 데이터베이스, 스토리지 등 인프라 구현
+ *
+ * APP_MODE 환경변수:
+ * - 'all' (기본): API + Workers + Schedulers 모두 실행
+ * - 'api': API만 실행 (Workers, Cron 비활성)
+ * - 'worker': 사용하지 않음 (별도 main-worker.ts 엔트리포인트 사용)
  */
+const appMode = process.env.APP_MODE || 'all';
+
 @Module({
   imports: [
     // 환경변수 설정
@@ -34,7 +41,8 @@ import { createWinstonConfig } from './common/logger/winston.config';
       createWinstonConfig(process.env.LOG_DIR || 'logs'),
     ),
     // 스케줄링 모듈 (Cron 작업용)
-    ScheduleModule.forRoot(),
+    // APP_MODE=api 에서는 미로드 → 모든 @Cron 데코레이터 자동 비활성화
+    ...(appMode !== 'api' ? [ScheduleModule.forRoot()] : []),
     // SSO 통합 모듈
     SSOModule,
     // 조직 마이그레이션 모듈

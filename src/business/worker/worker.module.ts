@@ -3,6 +3,7 @@ import { QueueInfraModule } from '../../infra/queue/queue-infra.module';
 import { StorageInfraModule } from '../../infra/storage/storage-infra.module';
 import { RepositoryModule } from '../../infra/database/repository.module';
 import { DomainModule } from '../../domain/domain.module';
+import { CacheManagementService } from '../admin/cache-management.service';
 
 // Workers (라우터)
 import { NasSyncWorker } from './nas-file-sync.worker';
@@ -61,6 +62,7 @@ const folderActionHandlers = [
   providers: [
     // Shared
     SyncEventLifecycleHelper,
+    CacheManagementService,
     // Action Handlers
     ...fileActionHandlers,
     ...folderActionHandlers,
@@ -75,6 +77,7 @@ const folderActionHandlers = [
     NasFolderSyncWorker,
     CacheEvictionWorker,
     CacheRestoreWorker,
+    CacheManagementService,
   ],
 })
 export class WorkerModule {}

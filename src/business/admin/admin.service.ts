@@ -14,7 +14,7 @@ import {
   SyncEventStatsService,
   FindSyncEventsParams,
 } from './sync-event-stats.service';
-import { CacheEvictionWorker } from '../worker/cache-eviction.worker';
+import { CacheManagementService } from './cache-management.service';
 import {
   SyncEventsResponseDto,
   CacheUsageResponseDto,
@@ -28,8 +28,8 @@ export class AdminService {
     private readonly nasHealthCheckService: NasHealthCheckService,
     private readonly storageConsistencyService: StorageConsistencyService,
     private readonly syncEventStatsService: SyncEventStatsService,
-    private readonly cacheEvictionWorker: CacheEvictionWorker,
-  ) { }
+    private readonly cacheManagementService: CacheManagementService,
+  ) {}
 
   /**
    * 캐시 스토리지 연결 상태 확인
@@ -106,7 +106,7 @@ export class AdminService {
    * @returns 캐시 사용 현황
    */
   async getCacheUsage(): Promise<CacheUsageResponseDto> {
-    const status = await this.cacheEvictionWorker.getCacheStatus();
+    const status = await this.cacheManagementService.getCacheStatus();
 
     return {
       currentBytes: status.currentBytes,
@@ -137,7 +137,7 @@ export class AdminService {
    * @returns Eviction 결과
    */
   async runCacheEviction(): Promise<CacheEvictionResponseDto> {
-    const result = await this.cacheEvictionWorker.runEviction();
+    const result = await this.cacheManagementService.runEviction();
 
     return {
       evictedCount: result.evictedCount,

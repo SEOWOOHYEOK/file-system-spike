@@ -72,14 +72,28 @@ export const ApiMultipartInitiate = () =>
     }),
     ApiResponse({
       status: 201,
-      description: '멀티파트 업로드 세션 생성 성공',
+      description: '슬롯 확보 → 즉시 세션 생성',
       schema: {
         type: 'object',
         properties: {
+          status: { type: 'string', example: 'ACTIVE' },
           sessionId: { type: 'string', example: '550e8400-e29b-41d4-a716-446655440000' },
           partSize: { type: 'number', example: 10485760, description: '파트 크기 (bytes)' },
           totalParts: { type: 'number', example: 103, description: '총 파트 수' },
           expiresAt: { type: 'string', example: '2024-01-24T10:00:00.000Z' },
+        },
+      },
+    }),
+    ApiResponse({
+      status: 202,
+      description: '슬롯 부족 → 대기열 등록',
+      schema: {
+        type: 'object',
+        properties: {
+          status: { type: 'string', example: 'WAITING' },
+          queueTicket: { type: 'string', example: '550e8400-e29b-41d4-a716-446655440000' },
+          position: { type: 'number', example: 3 },
+          estimatedWaitSeconds: { type: 'number', example: 900 },
         },
       },
     }),
@@ -149,19 +163,26 @@ export const ApiMultipartUploadPart = () =>
 export const ApiMultipartComplete = () =>
   applyDecorators(
     ApiOperation({
-      summary: '멀티파트 업로드 완료',
+      summary: '멀티파트 업로드 완료 (비동기)',
       description: `
 멀티파트 업로드를 완료하고 파일을 생성합니다.
 
-### 프로세스
+### 프로세스 (비동기)
 1. 모든 파트가 업로드되었는지 확인합니다.
-2. 파트들을 병합하여 최종 파일을 생성합니다.
-3. NAS 동기화 작업을 등록합니다.
+2. Composite checksum을 계산하고 파일/NAS 스토리지 객체를 생성합니다.
+3. NAS 동기화 작업을 큐에 등록합니다.
+4. **즉시 202 Accepted 응답을 반환합니다.**
+
+### 백그라운드 처리
+- NAS에 파트를 직접 업로드합니다 (merge 없음).
+- NAS 업로드 완료 후 로컬 캐시 파일을 concat으로 생성합니다.
+- 진행 상태는 GET /sync-events/:syncEventId/progress로 확인할 수 있습니다.
 
 ### 주의사항
 - 모든 파트가 업로드되지 않으면 에러가 발생합니다.
-- 완료 후 세션은 COMPLETED 상태가 됩니다.
-- 파트 파일들은 자동으로 정리됩니다.
+- 완료 요청 후 세션은 COMPLETING 상태가 됩니다.
+- NAS sync + 캐시 생성 완료 후 COMPLETED 상태가 됩니다.
+- 파트 파일들은 캐시 생성 후 자동으로 정리됩니다.
       `,
     }),
     ApiParam({
@@ -190,8 +211,8 @@ export const ApiMultipartComplete = () =>
       },
     }),
     ApiResponse({
-      status: 200,
-      description: '멀티파트 업로드 완료 성공',
+      status: 202,
+      description: '멀티파트 업로드 완료 요청 수락 (비동기 처리 시작)',
       schema: {
         type: 'object',
         properties: {
@@ -204,12 +225,13 @@ export const ApiMultipartComplete = () =>
           storageStatus: {
             type: 'object',
             properties: {
-              cache: { type: 'string', example: 'AVAILABLE' },
+              cache: { type: 'string', example: 'PENDING' },
               nas: { type: 'string', example: 'SYNCING' },
             },
           },
+          status: { type: 'string', example: 'COMPLETING', description: 'NAS sync + 캐시 생성 진행 중' },
           createdAt: { type: 'string', example: '2024-01-23T10:00:00.000Z' },
-          syncEventId: { type: 'string', example: '660e8400-e29b-41d4-a716-446655440000' },
+          syncEventId: { type: 'string', example: '660e8400-e29b-41d4-a716-446655440000', description: '진행률 조회용 ID' },
         },
       },
     }),
@@ -249,7 +271,7 @@ export const ApiMultipartStatus = () =>
           fileName: { type: 'string', example: 'large_video.mp4' },
           status: {
             type: 'string',
-            enum: ['INIT', 'UPLOADING', 'COMPLETED', 'ABORTED', 'EXPIRED'],
+            enum: ['INIT', 'UPLOADING', 'COMPLETING', 'COMPLETED', 'ABORTED', 'EXPIRED'],
             example: 'UPLOADING',
           },
           totalSize: { type: 'number', example: 1073741824 },
@@ -306,4 +328,132 @@ export const ApiMultipartAbort = () =>
     }),
     ApiResponse({ status: 404, description: '세션을 찾을 수 없음' }),
     ApiResponse({ status: 409, description: '이미 완료된 세션' }),
+  );
+
+// ============================================
+// Virtual Queue (대기열) API 문서
+// ============================================
+
+/**
+ * 대기열 상태 조회 API 문서
+ */
+export const ApiQueueStatus = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: '대기열 상태 조회 (폴링)',
+      description: `
+대기열 티켓의 현재 상태를 조회합니다.
+
+### 응답 상태별 동작
+- \`WAITING\`: 아직 순번이 오지 않음. position과 예상 대기 시간 반환
+- \`READY\`: 순번 도래, 세션이 자동 생성됨. sessionId와 claimDeadline 반환
+- \`EXPIRED\`: 티켓이 만료됨 (TTL 초과 또는 READY 후 미사용)
+- \`CANCELLED\`: 사용자가 취소함
+
+### 폴링 주기
+클라이언트는 5~10초 간격으로 폴링하는 것을 권장합니다.
+READY 응답을 받으면 claimDeadline 이내에 파트 업로드를 시작해야 합니다.
+      `,
+    }),
+    ApiParam({
+      name: 'ticket',
+      description: '대기열 티켓 ID',
+      example: '550e8400-e29b-41d4-a716-446655440000',
+    }),
+    ApiResponse({
+      status: 200,
+      description: '대기열 상태 조회 성공',
+      schema: {
+        oneOf: [
+          {
+            type: 'object',
+            properties: {
+              status: { type: 'string', example: 'WAITING' },
+              position: { type: 'number', example: 3 },
+              estimatedWaitSeconds: { type: 'number', example: 900 },
+            },
+          },
+          {
+            type: 'object',
+            properties: {
+              status: { type: 'string', example: 'READY' },
+              sessionId: { type: 'string', example: '550e8400-e29b-41d4-a716-446655440000' },
+              partSize: { type: 'number', example: 10485760 },
+              totalParts: { type: 'number', example: 103 },
+              expiresAt: { type: 'string', example: '2024-01-24T10:00:00.000Z' },
+              claimDeadline: { type: 'string', example: '2024-01-23T10:05:00.000Z' },
+            },
+          },
+          {
+            type: 'object',
+            properties: {
+              status: { type: 'string', example: 'EXPIRED' },
+              message: { type: 'string', example: '대기열 티켓이 만료되었습니다.' },
+            },
+          },
+        ],
+      },
+    }),
+  );
+
+/**
+ * 대기열 취소 API 문서
+ */
+export const ApiQueueCancel = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: '대기열 취소',
+      description: '대기열에서 나갑니다. 이미 ACTIVE 상태인 세션은 취소할 수 없습니다.',
+    }),
+    ApiParam({
+      name: 'ticket',
+      description: '대기열 티켓 ID',
+      example: '550e8400-e29b-41d4-a716-446655440000',
+    }),
+    ApiResponse({
+      status: 200,
+      description: '대기열 취소 결과',
+      schema: {
+        type: 'object',
+        properties: {
+          success: { type: 'boolean', example: true },
+          message: { type: 'string', example: '대기열이 취소되었습니다.' },
+        },
+      },
+    }),
+  );
+
+/**
+ * 전체 대기열 현황 API 문서
+ */
+export const ApiQueueOverallStatus = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: '전체 대기열 현황',
+      description: `
+현재 업로드 시스템의 전체 현황을 조회합니다.
+
+### 반환 정보
+- 활성 세션 수 / 최대 허용 수
+- 대기 중인 티켓 수 / 최대 대기열 크기
+- 총 업로드 바이트 / 최대 허용 바이트
+- 가용 슬롯 수
+      `,
+    }),
+    ApiResponse({
+      status: 200,
+      description: '전체 현황 조회 성공',
+      schema: {
+        type: 'object',
+        properties: {
+          activeSessions: { type: 'number', example: 5 },
+          maxActiveSessions: { type: 'number', example: 10 },
+          waitingCount: { type: 'number', example: 3 },
+          maxQueueSize: { type: 'number', example: 50 },
+          totalUploadBytes: { type: 'number', example: 53687091200 },
+          maxTotalUploadBytes: { type: 'number', example: 53687091200 },
+          availableSlots: { type: 'number', example: 5 },
+        },
+      },
+    }),
   );

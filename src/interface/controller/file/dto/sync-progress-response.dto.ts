@@ -56,4 +56,10 @@ export class SyncProgressResponseDto {
 
   @ApiPropertyOptional({ description: '상태 메시지' })
   message?: string;
+
+  @ApiPropertyOptional({
+    description: '처리 단계 (멀티파트: SYNCING → CONCAT → DONE)',
+    enum: ['SYNCING', 'CONCAT', 'DONE'],
+  })
+  stage?: string;
 }

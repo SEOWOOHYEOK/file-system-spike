@@ -6,3 +6,4 @@ export * from './initiate-multipart.dto';
 export * from './upload-part.dto';
 export * from './complete-multipart.dto';
 export * from './session-status.dto';
+export * from './upload-queue.dto';

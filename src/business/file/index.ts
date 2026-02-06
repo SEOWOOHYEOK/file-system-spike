@@ -7,5 +7,6 @@ export * from './file-upload.service';
 export * from './file-download.service';
 export * from './file-manage.service';
 export * from './multipart-upload.service';
+export * from './upload-queue.service';
 export * from './sync-progress.service';
 export * from './file.module';

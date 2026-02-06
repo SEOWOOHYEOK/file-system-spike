@@ -64,11 +64,11 @@ async function bootstrap() {
     },
   });
 
-  await app.listen(process.env.PORT ?? 3000);
+  await app.listen(process.env.PORT ?? 3200);
   const logger = new Logger('Main');
 
 
-  logger.log(`🚀 App server running on http://localhost:${process.env.PORT ?? 3000}`);
-  logger.log(`📚 Swagger docs at http://localhost:${process.env.PORT ?? 3000}/api-docs`);
+  logger.log(`🚀 App server running on http://localhost:${process.env.PORT ?? 3200}`);
+  logger.log(`📚 Swagger docs at http://localhost:${process.env.PORT ?? 3200}/api-docs`);
 }
 bootstrap();
