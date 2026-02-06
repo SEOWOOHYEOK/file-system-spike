@@ -6,6 +6,8 @@ export enum UploadSessionStatus {
   INIT = 'INIT',
   /** 업로드 중 - 파트 업로드 진행 중 */
   UPLOADING = 'UPLOADING',
+  /** 병합 중 - 파트 업로드 완료, NAS sync + 캐시 concat 진행 중 */
+  COMPLETING = 'COMPLETING',
   /** 완료 - 모든 파트 업로드 및 병합 완료 */
   COMPLETED = 'COMPLETED',
   /** 취소됨 - 사용자가 업로드 취소 */

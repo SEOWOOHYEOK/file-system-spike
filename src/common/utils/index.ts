@@ -4,3 +4,4 @@ export * from './filename.util';
 export * from './path.util';
 export * from './progress-stream';
 export * from './range-parser';
+export * from './semaphore';

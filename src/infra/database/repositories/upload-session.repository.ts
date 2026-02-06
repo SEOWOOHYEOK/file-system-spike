@@ -171,4 +171,24 @@ export class UploadSessionRepository implements IUploadSessionRepository {
     });
     return result.affected ?? 0;
   }
+
+  async getActiveSessionStats(options?: TransactionOptions): Promise<{ count: number; totalBytes: number }> {
+    const repo = this.getRepository(options);
+    const now = new Date();
+
+    const result = await repo
+      .createQueryBuilder('session')
+      .select('COUNT(session.id)', 'count')
+      .addSelect('COALESCE(SUM(session.totalSize), 0)', 'totalBytes')
+      .where('session.status IN (:...statuses)', {
+        statuses: [UploadSessionStatus.INIT, UploadSessionStatus.UPLOADING],
+      })
+      .andWhere('session.expiresAt > :now', { now })
+      .getRawOne();
+
+    return {
+      count: parseInt(result?.count ?? '0', 10),
+      totalBytes: parseInt(result?.totalBytes ?? '0', 10),
+    };
+  }
 }

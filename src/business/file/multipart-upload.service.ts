@@ -14,7 +14,8 @@ import {
 import { DataSource } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { createHash } from 'crypto';
-import { PassThrough } from 'stream';
+import { PassThrough, Transform } from 'stream';
+import { pipeline } from 'stream/promises';
 
 import {
   UploadPartEntity,
@@ -25,7 +26,7 @@ import {
 
 import { InitiateMultipartRequest } from '../../domain/upload-session/dto/initiate-multipart.dto';
 import { InitiateMultipartResponse } from '../../domain/upload-session/dto/initiate-multipart.dto';
-import { UploadPartRequest } from '../../domain/upload-session/dto/upload-part.dto';
+import { UploadPartRequest, UploadPartStreamRequest } from '../../domain/upload-session/dto/upload-part.dto';
 import { UploadPartResponse } from '../../domain/upload-session/dto/upload-part.dto';
 import { CompleteMultipartRequest } from '../../domain/upload-session/dto/complete-multipart.dto';
 import { CompleteMultipartResponse } from '../../domain/upload-session/dto/complete-multipart.dto';
@@ -53,10 +54,9 @@ import { UploadSessionDomainService } from '../../domain/upload-session/service/
 import { FileDomainService } from '../../domain/file/service/file-domain.service';
 import { FolderDomainService } from '../../domain/folder/service/folder-domain.service';
 import { SyncEventDomainService } from '../../domain/sync-event/service/sync-event-domain.service';
-import { FileCacheStorageDomainService } from '../../domain/storage/file/service/file-cache-storage-domain.service';
 import { FileNasStorageDomainService } from '../../domain/storage/file/service/file-nas-storage-domain.service';
 import { FolderNasStorageObjectDomainService } from '../../domain/storage/folder/service/folder-nas-storage-object-domain.service';
-import { normalizeFileName } from '../../common/utils';
+import { normalizeFileName, Semaphore } from '../../common/utils';
 
 
 
@@ -64,12 +64,16 @@ import { normalizeFileName } from '../../common/utils';
 export class MultipartUploadService {
   private readonly logger = new Logger(MultipartUploadService.name);
 
+  /** 파트 업로드 동시성 제한 Semaphore */
+  private readonly partUploadSemaphore = new Semaphore(
+    parseInt(process.env.MAX_CONCURRENT_PART_UPLOADS || '20', 10),
+  );
+
   constructor(
     private readonly uploadSessionDomainService: UploadSessionDomainService,
     private readonly fileDomainService: FileDomainService,
     private readonly folderDomainService: FolderDomainService,
     private readonly syncEventDomainService: SyncEventDomainService,
-    private readonly fileCacheStorageDomainService: FileCacheStorageDomainService,
     private readonly fileNasStorageDomainService: FileNasStorageDomainService,
     private readonly folderNasStorageObjectDomainService: FolderNasStorageObjectDomainService,
     @Inject(CACHE_STORAGE_PORT)
@@ -241,6 +245,110 @@ export class MultipartUploadService {
   }
 
   /**
+   * 스트리밍 파트 업로드 (메모리 효율적)
+   *
+   * Buffer를 수집하지 않고 req 스트림을 직접 캐시 스토리지에 기록합니다.
+   * Semaphore로 동시 디스크 I/O를 제한하여 서버 과부하를 방지합니다.
+   *
+   * 메모리 사용량: 파트당 ~128KB (highWaterMark) vs 기존 ~10MB
+   */
+  async uploadPartStream(request: UploadPartStreamRequest): Promise<UploadPartResponse> {
+    const { sessionId, partNumber, stream: inputStream } = request;
+
+    // 1. 세션 조회 및 검증 (Semaphore 밖에서 - DB 쿼리는 제한 불필요)
+    const session = await this.uploadSessionDomainService.세션조회(sessionId);
+    if (!session) {
+      throw new NotFoundException({
+        code: 'SESSION_NOT_FOUND',
+        message: '업로드 세션을 찾을 수 없습니다.',
+      });
+    }
+
+    if (session.isCompleted() || session.isAborted()) {
+      throw new ConflictException({
+        code: 'SESSION_NOT_ACTIVE',
+        message: '활성 상태의 세션이 아닙니다.',
+      });
+    }
+
+    if (session.isExpired()) {
+      await this.uploadSessionDomainService.엔티티세션만료(session);
+      throw new BadRequestException({
+        code: 'SESSION_EXPIRED',
+        message: '업로드 세션이 만료되었습니다.',
+      });
+    }
+
+    // 파트 번호 검증
+    if (partNumber < 1 || partNumber > session.totalParts) {
+      throw new BadRequestException({
+        code: 'INVALID_PART_NUMBER',
+        message: `파트 번호는 1~${session.totalParts} 범위여야 합니다.`,
+      });
+    }
+
+    // 2. Semaphore 획득하여 실제 I/O 보호
+    await this.partUploadSemaphore.acquire();
+    try {
+      const objectKey = this.buildPartObjectKey(sessionId, partNumber);
+
+      // 3. 스트림으로 해시 + 바이트 카운팅 + 캐시 쓰기를 동시에 수행
+      const hash = createHash('md5');
+      let totalBytes = 0;
+
+      const hashAndCountTransform = new Transform({
+        transform(chunk: Buffer, _encoding, callback) {
+          hash.update(chunk);
+          totalBytes += chunk.length;
+          callback(null, chunk);
+        },
+      });
+
+      const writeStream = new PassThrough();
+      const writePromise = this.cacheStorage.파일스트림쓰기(objectKey, writeStream);
+
+      // pipeline: inputStream → hashAndCount → writeStream
+      await pipeline(inputStream, hashAndCountTransform, writeStream);
+      await writePromise;
+
+      const etag = hash.digest('hex');
+
+      // 4. 파트 엔티티 저장
+      let part = await this.uploadSessionDomainService.파트번호조회(sessionId, partNumber);
+      if (!part) {
+        part = UploadPartEntity.create({
+          id: uuidv4(),
+          sessionId,
+          partNumber,
+          size: totalBytes,
+          objectKey,
+        });
+      }
+      part.complete(etag, objectKey);
+      await this.uploadSessionDomainService.파트저장(part);
+
+      // 5. 세션 업데이트
+      session.markPartCompleted(partNumber, totalBytes);
+      await this.uploadSessionDomainService.세션저장(session);
+
+      return {
+        partNumber,
+        etag,
+        size: totalBytes,
+        sessionProgress: session.getProgress(),
+      };
+    } catch (error) {
+      this.logger.error(
+        `Stream part upload failed: session=${sessionId}, part=${partNumber}`,
+        error instanceof Error ? error.stack : error,
+      );
+      throw error;
+    } finally {
+      this.partUploadSemaphore.release();
+    }
+  }
+
+  /**
    * 멀티파트 업로드 완료
    * 
    * 트랜잭션 처리:
@@ -266,10 +374,10 @@ export class MultipartUploadService {
     }
 
     // 2. 세션 상태 검증
-    if (session.isCompleted()) {
+    if (session.isCompleted() || session.isCompleting()) {
       throw new ConflictException({
         code: 'SESSION_ALREADY_COMPLETED',
-        message: '이미 완료된 업로드 세션입니다.',
+        message: '이미 완료되었거나 처리 중인 업로드 세션입니다.',
       });
     }
 
@@ -319,8 +427,8 @@ export class MultipartUploadService {
       uploadCreatedAt,
     );
 
-    // 7. 파트 병합 및 체크섬 계산 (캐시 스토리지 - 트랜잭션 외부)
-    const checksum = await this.mergeParts(fileId, parts);
+    // 7. Composite checksum 계산 (파트 ETag 기반 - I/O 없음, < 1ms)
+    const checksum = this.computeCompositeChecksum(parts);
 
     // 8. 폴더 경로 조회 (트랜잭션 외부)
     const folder = await this.folderDomainService.조회(session.folderId);
@@ -344,8 +452,6 @@ export class MultipartUploadService {
       const txOptions: TransactionOptions = { queryRunner };
 
       // 10. 파일 엔티티 생성 (트랜잭션 내부)
-
-
       fileEntity = await this.fileDomainService.생성({
         id: fileId,
         name: finalFileName,
@@ -356,8 +462,14 @@ export class MultipartUploadService {
         createdAt: uploadCreatedAt,
       }, txOptions);
 
-      // 11. 스토리지 객체 생성 (트랜잭션 내부)
-      await this.createStorageObjectsWithTx(fileId, uploadCreatedAt, finalFileName, checksum, txOptions);
+      // 11. NAS 스토리지 객체만 생성 (캐시는 NAS sync 후 concat 완료 시 생성)
+      await this.fileNasStorageDomainService.생성({
+        id: uuidv4(),
+        fileId,
+        createdAt: uploadCreatedAt,
+        fileName: finalFileName,
+        checksum,
+      }, txOptions);
 
       // 12. sync_events 생성 (트랜잭션 내부)
       syncEvent = SyncEventFactory.createFileCreateEvent({
@@ -371,26 +483,17 @@ export class MultipartUploadService {
       });
       await this.syncEventDomainService.저장(syncEvent, txOptions);
 
-      // 13. 세션 완료 처리 (트랜잭션 내부)
-      await this.uploadSessionDomainService.엔티티세션완료(session, fileId, txOptions);
+      // 13. 세션 → COMPLETING 상태 (NAS sync + 캐시 concat 진행 중)
+      await this.uploadSessionDomainService.엔티티세션병합중(session, fileId, txOptions);
 
       // 트랜잭션 커밋
       await queryRunner.commitTransaction();
-      this.logger.debug(`Multipart upload completed: ${fileId}`);
+      this.logger.debug(`Multipart upload completing (async): ${fileId}`);
 
     } catch (error) {
-      // 트랜잭션 롤백
+      // 트랜잭션 롤백 (캐시 파일 정리 불필요 - merge 없음)
       await queryRunner.rollbackTransaction();
       this.logger.error(`Failed to complete multipart upload: ${sessionId}`, error);
-
-      // 병합된 캐시 파일 정리 (보상 트랜잭션)
-      try {
-        await this.cacheStorage.파일삭제(fileId);
-        this.logger.debug(`Cleaned up merged file after rollback: ${fileId}`);
-      } catch (cleanupError) {
-        this.logger.error(`Failed to cleanup merged file: ${fileId}`, cleanupError);
-      }
-
       throw error;
     } finally {
       await queryRunner.release();
@@ -404,22 +507,19 @@ export class MultipartUploadService {
           fileId,
           action: 'upload',
           syncEventId,
+          multipartSessionId: sessionId,
+          compositeChecksum: checksum,
         }
       );
 
       // 15. 큐 등록 성공 시 QUEUED로 변경
       syncEvent.markQueued();
       await this.syncEventDomainService.저장(syncEvent);
-      this.logger.debug(`NAS_FILE_SYNC job added for file: ${fileId}`);
+      this.logger.debug(`NAS_FILE_SYNC job added for file: ${fileId} (multipart)`);
     } catch (queueError) {
       // 큐 등록 실패해도 PENDING 상태로 유지 - 스케줄러가 복구
       this.logger.error(`Failed to add job to queue, scheduler will recover: ${fileId}`, queueError);
     }
-
-    // 16. 파트 파일 정리 (비동기)
-    this.cleanupParts(parts).catch((err) => {
-      this.logger.error('Failed to cleanup parts:', err);
-    });
 
     return {
       fileId: fileEntity.id,
@@ -429,9 +529,10 @@ export class MultipartUploadService {
       size: fileEntity.sizeBytes,
       mimeType: fileEntity.mimeType,
       storageStatus: {
-        cache: 'AVAILABLE',
-        nas: 'SYNCING',
+        cache: 'PENDING' as const,
+        nas: 'SYNCING' as const,
       },
+      status: 'COMPLETING' as const,
       createdAt: fileEntity.createdAt.toISOString(),
       syncEventId,
     };
@@ -482,10 +583,10 @@ export class MultipartUploadService {
       });
     }
 
-    if (session.isCompleted()) {
+    if (session.isCompleted() || session.isCompleting()) {
       throw new ConflictException({
         code: 'SESSION_ALREADY_COMPLETED',
-        message: '이미 완료된 세션은 취소할 수 없습니다. 파일 삭제 API를 사용하세요.',
+        message: '이미 완료되었거나 처리 중인 세션은 취소할 수 없습니다. 파일 삭제 API를 사용하세요.',
       });
     }
 
@@ -504,8 +605,18 @@ export class MultipartUploadService {
     await this.uploadSessionDomainService.엔티티세션취소(session);
 
     // 파트 파일 정리 (비동기)
-    this.cleanupParts(parts).catch((err) => {
-      this.logger.error(`파트 파일 정리 실패: ${err.message}`, err.stack);
+    (async () => {
+      for (const part of parts) {
+        if (part.objectKey) {
+          try {
+            await this.cacheStorage.파일삭제(part.objectKey);
+          } catch (err) {
+            this.logger.error(`파트 삭제 실패: partNumber=${part.partNumber}, ${(err as Error).message}`);
+          }
+        }
+      }
+    })().catch((err) => {
+      this.logger.error(`파트 파일 정리 실패: ${(err as Error).message}`, (err as Error).stack);
     });
 
     // 파트 레코드 삭제
@@ -526,81 +637,16 @@ export class MultipartUploadService {
   }
 
   /**
-   * 파트 병합 (스트리밍 방식)
+   * Composite checksum 계산
+   * 파트 ETag들을 연결하여 SHA-256 해시를 생성합니다.
+   * I/O 없이 메모리에서만 계산하므로 < 1ms 소요.
    *
-   * 기존 Buffer.concat 방식은 Node.js Buffer 최대 크기(~4GB) 제한으로
-   * 4GB 초과 파일에서 RangeError 발생.
-   * → 스트리밍으로 변경하여 메모리 사용량을 최소화하고 파일 크기 제한 해소.
-   *
-   * @returns SHA-256 체크섬
+   * @returns SHA-256 composite checksum
    */
-  private async mergeParts(fileId: string, parts: UploadPartEntity[]): Promise<string> {
-    const sortedParts = parts.sort((a, b) => a.partNumber - b.partNumber);
-    const hash = createHash('sha256');
-
-    // PassThrough: 모든 파트를 순차적으로 하나의 스트림으로 연결
-    const mergeStream = new PassThrough();
-
-    // 캐시 스토리지에 스트림 쓰기 시작 (백그라운드)
-    const writePromise = this.cacheStorage.파일스트림쓰기(fileId, mergeStream);
-
-    try {
-      for (const part of sortedParts) {
-        if (!part.objectKey) {
-          throw new InternalServerErrorException({
-            code: 'PART_OBJECT_KEY_MISSING',
-            message: `파트 ${part.partNumber}의 objectKey가 없습니다.`,
-          });
-        }
-
-        const partStream = await this.cacheStorage.파일스트림읽기(part.objectKey);
-
-        // 파트 스트림 → mergeStream 전달 (backpressure 처리)
-        await new Promise<void>((resolve, reject) => {
-          partStream.on('data', (chunk: Buffer) => {
-            hash.update(chunk);
-            if (!mergeStream.write(chunk)) {
-              partStream.pause();
-              mergeStream.once('drain', () => partStream.resume());
-            }
-          });
-          partStream.on('end', resolve);
-          partStream.on('error', (err) => {
-            mergeStream.destroy(err);
-            reject(err);
-          });
-        });
-      }
-
-      // 모든 파트 전달 완료
-      mergeStream.end();
-
-      // 스트림 쓰기 완료 대기
-      await writePromise;
-    } catch (error) {
-      // 에러 발생 시 스트림 정리
-      if (!mergeStream.destroyed) {
-        mergeStream.destroy();
-      }
-      throw error;
-    }
-
-    return hash.digest('hex');
-  }
-
-  /**
-   * 파트 파일 정리
-   */
-  private async cleanupParts(parts: UploadPartEntity[]): Promise<void> {
-    for (const part of parts) {
-      if (part.objectKey) {
-        try {
-          await this.cacheStorage.파일삭제(part.objectKey);
-        } catch (err) {
-          this.logger.error(`파트 삭제 실패: partNumber=${part.partNumber}, ${err.message}`, err.stack);
-        }
-      }
-    }
+  private computeCompositeChecksum(parts: UploadPartEntity[]): string {
+    const sorted = parts.sort((a, b) => a.partNumber - b.partNumber);
+    const etagConcat = sorted.map(p => p.etag).join('');
+    return createHash('sha256').update(etagConcat).digest('hex');
   }
 
   /**
@@ -666,33 +712,5 @@ export class MultipartUploadService {
     }
 
     return newName;
-  }
-
-
-
-  /**
-   * 스토리지 객체 생성 (트랜잭션 지원)
-   */
-  private async createStorageObjectsWithTx(
-    fileId: string,
-    createdAt: Date,
-    fileName: string,
-    checksum: string,
-    txOptions: TransactionOptions,
-  ): Promise<void> {
-    await Promise.all([
-      this.fileCacheStorageDomainService.생성({
-        id: uuidv4(),
-        fileId,
-        checksum,
-      }, txOptions),
-      this.fileNasStorageDomainService.생성({
-        id: uuidv4(),
-        fileId,
-        createdAt,
-        fileName,
-        checksum,
-      }, txOptions),
-    ]);
   }
 }

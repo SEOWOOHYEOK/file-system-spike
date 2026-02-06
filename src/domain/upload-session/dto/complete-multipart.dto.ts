@@ -51,9 +51,12 @@ export interface CompleteMultipartResponse {
 
   /** 스토리지 상태 */
   storageStatus: {
-    cache: 'AVAILABLE';
+    cache: 'AVAILABLE' | 'PENDING';
     nas: 'SYNCING';
   };
+
+  /** 세션 상태 (비동기 처리 시 COMPLETING) */
+  status?: 'COMPLETING';
 
   /** 생성 시간 (ISO 8601) */
   createdAt: string;

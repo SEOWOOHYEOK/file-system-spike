@@ -39,7 +39,7 @@ export class UploadSessionOrmEntity {
 
   @Column({
     type: 'enum',
-    enum: ['INIT', 'UPLOADING', 'COMPLETED', 'ABORTED', 'EXPIRED'],
+    enum: ['INIT', 'UPLOADING', 'COMPLETING', 'COMPLETED', 'ABORTED', 'EXPIRED'],
     default: 'INIT',
   })
   @Index()

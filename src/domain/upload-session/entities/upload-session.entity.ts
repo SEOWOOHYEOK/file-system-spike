@@ -145,7 +145,7 @@ export class UploadSessionEntity {
   }
 
   /**
-   * 활성 상태인지 확인 (INIT 또는 UPLOADING)
+   * 활성 상태인지 확인 (INIT 또는 UPLOADING, COMPLETING 제외)
    */
   isActive(): boolean {
     return (
@@ -224,6 +224,26 @@ export class UploadSessionEntity {
   }
 
   /**
+   * NAS sync 진행 중 상태인지 확인 (COMPLETING)
+   */
+  isCompleting(): boolean {
+    return this.status === UploadSessionStatus.COMPLETING;
+  }
+
+  /**
+   * 세션 병합 중 처리 (비동기 complete 진입)
+   * 파트 업로드 완료 → NAS sync + 캐시 concat 진행 상태
+   */
+  completing(fileId: string): void {
+    if (!this.allPartsCompleted()) {
+      throw new Error('모든 파트가 완료되지 않았습니다.');
+    }
+    this.status = UploadSessionStatus.COMPLETING;
+    this.fileId = fileId;
+    this.updatedAt = new Date();
+  }
+
+  /**
    * 세션 완료 처리
    */
   complete(fileId: string): void {
@@ -239,8 +259,8 @@ export class UploadSessionEntity {
    * 세션 취소 처리
    */
   abort(): void {
-    if (this.isCompleted()) {
-      throw new Error('이미 완료된 세션은 취소할 수 없습니다.');
+    if (this.isCompleted() || this.isCompleting()) {
+      throw new Error('이미 완료되었거나 처리 중인 세션은 취소할 수 없습니다.');
     }
     this.status = UploadSessionStatus.ABORTED;
     this.updatedAt = new Date();
@@ -250,8 +270,8 @@ export class UploadSessionEntity {
    * 세션 만료 처리
    */
   expire(): void {
-    if (this.isCompleted()) {
-      throw new Error('이미 완료된 세션은 만료 처리할 수 없습니다.');
+    if (this.isCompleted() || this.isCompleting()) {
+      throw new Error('이미 완료되었거나 처리 중인 세션은 만료 처리할 수 없습니다.');
     }
     this.status = UploadSessionStatus.EXPIRED;
     this.updatedAt = new Date();

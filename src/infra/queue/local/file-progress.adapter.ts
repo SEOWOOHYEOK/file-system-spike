@@ -110,6 +110,8 @@ export class FileProgressAdapter implements IProgressStoragePort, OnModuleInit, 
 
   async set(syncEventId: string, progress: SyncProgress): Promise<void> {
     const filePath = this.getFilePath(syncEventId);
+    // 방어적 디렉토리 생성 (HMR/재시작 등으로 디렉토리가 사라진 경우 대비)
+    await fs.mkdir(this.basePath, { recursive: true }).catch(() => {});
     await fs.writeFile(filePath, JSON.stringify(progress, null, 2), 'utf-8');
     this.logger.debug(`Progress set: ${syncEventId} (${progress.progress.percent}%)`);
   }

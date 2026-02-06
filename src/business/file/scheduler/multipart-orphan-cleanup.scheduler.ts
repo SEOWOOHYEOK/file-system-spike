@@ -16,6 +16,7 @@ import { UploadSessionDomainService } from '../../../domain/upload-session/servi
 import { UploadSessionStatus } from '../../../domain/upload-session';
 import { CACHE_STORAGE_PORT } from '../../../domain/storage/ports/cache-storage.port';
 import type { ICacheStoragePort } from '../../../domain/storage/ports/cache-storage.port';
+import { UploadQueueService } from '../upload-queue.service';
 
 /**
  * Cleanup 실행 결과
@@ -49,6 +50,7 @@ export class MultipartOrphanCleanupScheduler {
     private readonly uploadSessionDomainService: UploadSessionDomainService,
     @Inject(CACHE_STORAGE_PORT)
     private readonly cacheStorage: ICacheStoragePort,
+    private readonly uploadQueueService: UploadQueueService,
   ) {
     this.retentionHours = this.configService.get<number>(
       'MULTIPART_CLEANUP_RETENTION_HOURS',
@@ -111,6 +113,15 @@ export class MultipartOrphanCleanupScheduler {
         `sessions=${result.cleanedSessions}, parts=${result.cleanedParts}, ` +
         `freed=${this.formatBytes(result.freedBytes)}, errors=${result.errorCount}`,
       );
+
+      // 세션 정리 후 대기열 승격 트리거
+      if (result.cleanedSessions > 0) {
+        try {
+          await this.uploadQueueService.promoteNext();
+        } catch (err) {
+          this.logger.error('대기열 승격 실패', err);
+        }
+      }
 
       return result;
     } catch (error) {
@@ -183,12 +194,25 @@ export class MultipartOrphanCleanupScheduler {
     try {
       // 취소/만료 상태인 세션 중 보존 기간이 지난 것 조회
       const cutoffTime = new Date(Date.now() - this.retentionHours * 60 * 60 * 1000);
+      // COMPLETING 상태는 NAS sync + concat이 오래 걸릴 수 있으므로 보존 기간 2배 적용
+      const completingCutoffTime = new Date(Date.now() - this.retentionHours * 2 * 60 * 60 * 1000);
 
-      const abortedSessions = await this.uploadSessionDomainService.세션목록조회({
-        status: [UploadSessionStatus.ABORTED, UploadSessionStatus.EXPIRED],
-        updatedBefore: cutoffTime,
-        limit: this.batchSize,
-      });
+      const [abortedSessions, stuckCompletingSessions] = await Promise.all([
+        this.uploadSessionDomainService.세션목록조회({
+          status: [UploadSessionStatus.ABORTED, UploadSessionStatus.EXPIRED],
+          updatedBefore: cutoffTime,
+          limit: this.batchSize,
+        }),
+        // COMPLETING 상태가 오래 지속된 세션 (worker 실패 등)
+        this.uploadSessionDomainService.세션목록조회({
+          status: [UploadSessionStatus.COMPLETING],
+          updatedBefore: completingCutoffTime,
+          limit: this.batchSize,
+        }),
+      ]);
+
+      // 두 목록 합치기
+      abortedSessions.push(...stuckCompletingSessions);
 
       if (abortedSessions.length === 0) {
         return result;
@@ -293,11 +317,16 @@ export class MultipartOrphanCleanupScheduler {
   }> {
     const cutoffTime = new Date(Date.now() - this.retentionHours * 60 * 60 * 1000);
 
-    const [expiredSessions, abortedSessions] = await Promise.all([
+    const [expiredSessions, abortedSessions, stuckCompletingSessions] = await Promise.all([
       this.uploadSessionDomainService.만료세션조회(1000),
       this.uploadSessionDomainService.세션목록조회({
         status: [UploadSessionStatus.ABORTED, UploadSessionStatus.EXPIRED],
         updatedBefore: cutoffTime,
+        limit: 1000,
+      }),
+      this.uploadSessionDomainService.세션목록조회({
+        status: [UploadSessionStatus.COMPLETING],
+        updatedBefore: new Date(Date.now() - this.retentionHours * 2 * 60 * 60 * 1000),
         limit: 1000,
       }),
     ]);
@@ -307,7 +336,7 @@ export class MultipartOrphanCleanupScheduler {
       retentionHours: this.retentionHours,
       batchSize: this.batchSize,
       pendingExpiredSessions: expiredSessions.length,
-      pendingAbortedSessions: abortedSessions.length,
+      pendingAbortedSessions: abortedSessions.length + stuckCompletingSessions.length,
     };
   }
 }

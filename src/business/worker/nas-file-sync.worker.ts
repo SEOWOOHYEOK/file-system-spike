@@ -41,6 +41,10 @@ interface NasFileSyncJobBase {
  */
 export interface NasFileUploadJobData extends NasFileSyncJobBase {
   action: 'upload';
+  /** 멀티파트 세션 ID (있으면 파트 기반 NAS 업로드 + 캐시 concat 수행) */
+  multipartSessionId?: string;
+  /** Composite checksum (파트 ETag 기반 - 캐시 객체 생성 시 사용) */
+  compositeChecksum?: string;
 }
 
 /**

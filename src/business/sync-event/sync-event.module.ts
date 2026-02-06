@@ -5,11 +5,13 @@ import { SyncEventDomainModule } from '../../domain/sync-event/sync-event.module
 import { QueueInfraModule } from '../../infra/queue/queue-infra.module';
 import { RepositoryModule } from '../../infra/database/repository.module';
 import { SyncEventQueryService } from './sync-event-query.service';
-import { SyncEventRecoveryScheduler } from './scheduler/sync-event-recovery.scheduler';
 
 /**
  * 동기화 이벤트 비즈니스 모듈
- * 동기화 이벤트 조회 서비스와 복구 스케줄러를 제공합니다.
+ * 동기화 이벤트 조회 서비스를 제공합니다.
+ *
+ * 참고: SyncEventRecoveryScheduler는 WorkerSchedulerModule로 이동되었습니다.
+ * 프로세스 분리를 위해 스케줄러는 워커 전용 모듈에서 관리합니다.
  */
 @Module({
   imports: [
@@ -19,7 +21,7 @@ import { SyncEventRecoveryScheduler } from './scheduler/sync-event-recovery.sche
     QueueInfraModule,
     RepositoryModule,
   ],
-  providers: [SyncEventQueryService, SyncEventRecoveryScheduler],
+  providers: [SyncEventQueryService],
   exports: [SyncEventQueryService],
 })
 export class SyncEventBusinessModule {}

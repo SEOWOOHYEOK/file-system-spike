@@ -54,11 +54,16 @@ describe('FileDownloadService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    const mockUploadSessionDomainService = {
+      세션목록조회: jest.fn().mockResolvedValue([]),
+      완료파트목록조회: jest.fn().mockResolvedValue([]),
+    };
     service = new FileDownloadService(
       mockFileDomainService as any,
       mockFolderDomainService as any,
       mockFileCacheStorageDomainService as any,
       mockFileNasStorageDomainService as any,
+      mockUploadSessionDomainService as any,
       mockCacheStorage as any,
       mockNasStorage as any,
       mockJobQueue as any,

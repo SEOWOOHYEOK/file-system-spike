@@ -3,6 +3,7 @@ import { FileBusinessModule } from './file/file.module';
 import { FolderBusinessModule } from './folder/folder.module';
 import { TrashBusinessModule } from './trash/trash.module';
 import { WorkerModule } from './worker/worker.module';
+import { WorkerSchedulerModule } from './worker/worker-scheduler.module';
 import { AdminBusinessModule } from './admin/admin.module';
 import { RoleModule } from './role/role.module';
 import { UserModule } from './user/user.module';
@@ -14,13 +15,24 @@ import { FavoriteBusinessModule } from './favorite/favorite.module';
 /**
  * 비즈니스 레이어 통합 모듈
  * 파일, 폴더, 휴지통, Admin, User, Share, ExternalShare, Audit 비즈니스 모듈을 통합합니다.
+ *
+ * APP_MODE 환경변수:
+ * - 'all' (기본): WorkerModule + WorkerSchedulerModule 포함
+ * - 'api': WorkerModule, WorkerSchedulerModule 제외 (큐 프로세싱 / Cron 비활성)
  */
+const appMode = process.env.APP_MODE || 'all';
+
+/** APP_MODE=api가 아닐 때만 워커/스케줄러 모듈 로드 */
+const workerModules = appMode !== 'api'
+  ? [WorkerModule, WorkerSchedulerModule]
+  : [];
+
 @Module({
   imports: [
     FileBusinessModule,
     FolderBusinessModule,
     TrashBusinessModule,
-    WorkerModule,
+    ...workerModules,
     AdminBusinessModule,
     RoleModule,
     UserModule,
@@ -33,7 +45,7 @@ import { FavoriteBusinessModule } from './favorite/favorite.module';
     FileBusinessModule,
     FolderBusinessModule,
     TrashBusinessModule,
-    WorkerModule,
+    ...workerModules,
     AdminBusinessModule,
     RoleModule,
     UserModule,
@@ -43,4 +55,4 @@ import { FavoriteBusinessModule } from './favorite/favorite.module';
     FavoriteBusinessModule,
   ],
 })
-export class BusinessModule { }
+export class BusinessModule {}

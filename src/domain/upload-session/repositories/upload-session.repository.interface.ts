@@ -67,6 +67,12 @@ export interface IUploadSessionRepository {
    * 만료된 세션 일괄 삭제
    */
   deleteExpiredSessions(options?: TransactionOptions): Promise<number>;
+
+  /**
+   * 전체 활성 세션 통계 조회
+   * 상태가 INIT 또는 UPLOADING이고 만료되지 않은 세션의 수와 totalSize 합계
+   */
+  getActiveSessionStats(options?: TransactionOptions): Promise<{ count: number; totalBytes: number }>;
 }
 
 /**
