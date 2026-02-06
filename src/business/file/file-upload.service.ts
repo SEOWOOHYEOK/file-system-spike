@@ -13,7 +13,7 @@ import {
 import { FolderAvailabilityStatus } from '../../domain/folder';
 import { SyncEventFactory } from '../../domain/sync-event';
 import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';
-import { JOB_QUEUE_PORT } from '../../infra/queue/job-queue.port';
+import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 import {
   NAS_FILE_SYNC_QUEUE_PREFIX,
   type NasFileUploadJobData,
@@ -30,7 +30,7 @@ import { FileNasStorageDomainService } from '../../domain/storage/file/service/f
 import { FolderNasStorageObjectDomainService } from '../../domain/storage/folder/service/folder-nas-storage-object-domain.service';
 
 import type { ICacheStoragePort } from '../../domain/storage/ports/cache-storage.port';
-import type { IJobQueuePort } from '../../infra/queue/job-queue.port';
+import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 
 /**
  * 파일 업로드 비즈니스 서비스

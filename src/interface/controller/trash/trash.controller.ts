@@ -8,6 +8,7 @@ import {
   Query,
   HttpCode,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { TrashService } from '../../../business/trash/trash.service';
@@ -36,6 +37,8 @@ import { RequestContext } from '../../../common/context/request-context';
 @ApiTags('220.휴지통')
 @Controller('v1/trash')
 export class TrashController {
+  private readonly logger = new Logger(TrashController.name);
+
   constructor(private readonly trashService: TrashService) { }
 
   /**
@@ -45,8 +48,7 @@ export class TrashController {
   @ApiOperation({ summary: '휴지통 목록 조회' })
   @AuditAction({
     action: AuditActionEnum.TRASH_VIEW,
-    targetType: TargetType.FOLDER,
-    targetIdParam: 'folderId',
+    targetType: TargetType.FILE,
   })
   async getTrashList(@Query() query: TrashListQuery): Promise<TrashListResponse> {
     return this.trashService.getTrashList(query);
@@ -71,11 +73,13 @@ export class TrashController {
   @AuditAction({
     action: AuditActionEnum.FILE_RESTORE,
     targetType: TargetType.FILE,
-    targetIdParam: 'itemIds',
+    targetIdParam: 'trashMetadataId',
   })
   async executeRestore(@Body() request: RestoreExecuteRequest): Promise<RestoreExecuteResponse> {
-    // TODO: 실제 구현 시 인증된 사용자 ID 사용
     const userId = RequestContext.getUserId() || 'unknown';
+    this.logger.log(
+      `휴지통 복원 실행 요청: itemCount=${request.items?.length ?? 0}, userId=${userId}`,
+    );
     return this.trashService.executeRestore(request, userId);
   }
 
@@ -102,8 +106,10 @@ export class TrashController {
   async purgeFile(
     @Param('trashMetadataId') trashMetadataId: string,
   ): Promise<PurgeResponse> {
-    // TODO: 실제 구현 시 인증된 사용자 ID 사용
     const userId = RequestContext.getUserId() || 'unknown';
+    this.logger.log(
+      `파일 영구삭제 요청: trashMetadataId=${trashMetadataId}, userId=${userId}`,
+    );
     return this.trashService.purgeFile(trashMetadataId, userId);
   }
 
@@ -114,11 +120,13 @@ export class TrashController {
   @ApiOperation({ summary: '휴지통 비우기' })
   @AuditAction({
     action: AuditActionEnum.TRASH_EMPTY,
-    targetType: TargetType.FOLDER,
+    targetType: TargetType.FILE,
   })
   async emptyTrash(): Promise<EmptyTrashResponse> {
-    // TODO: 실제 구현 시 인증된 사용자 ID 사용
     const userId = RequestContext.getUserId() || 'unknown';
+    this.logger.log(
+      `휴지통 비우기 요청: userId=${userId}`,
+    );
     return this.trashService.emptyTrash(userId);
   }
 }

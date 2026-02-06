@@ -17,14 +17,14 @@ import {
 import {
   SyncEventFactory,
 } from '../../domain/sync-event';
-import { JOB_QUEUE_PORT } from '../../infra/queue/job-queue.port';
+import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 import {
   NAS_FILE_SYNC_QUEUE_PREFIX,
   type NasFileRenameJobData,
   type NasFileMoveJobData,
   type NasFileTrashJobData,
 } from '../worker/nas-file-sync.worker';
-import type { IJobQueuePort } from '../../infra/queue/job-queue.port';
+import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 import { FileDomainService } from '../../domain/file/service/file-domain.service';
 import { FolderDomainService } from '../../domain/folder/service/folder-domain.service';
 import { TrashDomainService } from '../../domain/trash/service/trash-domain.service';

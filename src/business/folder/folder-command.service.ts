@@ -22,10 +22,10 @@ import { SyncEventFactory } from '../../domain/sync-event';
 import { SyncEventDomainService } from '../../domain/sync-event/service/sync-event-domain.service';
 import { TrashDomainService } from '../../domain/trash/service/trash-domain.service';
 import { FolderNasStorageObjectDomainService } from '../../domain/storage/folder/service/folder-nas-storage-object-domain.service';
-import { JOB_QUEUE_PORT } from '../../infra/queue/job-queue.port';
+import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 import { NAS_FOLDER_SYNC_QUEUE_PREFIX } from '../worker/nas-folder-sync.worker';
 
-import type { IJobQueuePort } from '../../infra/queue/job-queue.port';
+import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 
 import {
   type NasFolderMkdirJobData,

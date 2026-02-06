@@ -189,4 +189,21 @@ export class FolderNasStorageObjectDomainService {
     }
     return this.repository.updateStatusByFolderIds(folderIds, status);
   }
+
+  /**
+   * objectKey 접두사 기반 일괄 변경
+   * 폴더 이름 변경/이동 시 하위 폴더들의 objectKey를 일괄 업데이트합니다.
+   *
+   * @param pathPrefix - 검색할 경로 접두사
+   * @param oldPath - 치환할 기존 경로
+   * @param newPath - 새 경로
+   * @returns 영향받은 스토리지 객체 수
+   */
+  async 경로접두사일괄변경(
+    pathPrefix: string,
+    oldPath: string,
+    newPath: string,
+  ): Promise<number> {
+    return this.repository.updateObjectKeyByPrefix(pathPrefix, oldPath, newPath);
+  }
 }

@@ -251,6 +251,74 @@ export const ApiFileDownload = () =>
   );
 
 /**
+ * 파일 미리보기 API 문서
+ */
+export const ApiFilePreview = () =>
+  applyDecorators(
+    ApiOperation({
+      summary: '파일 미리보기 (인라인 표시)',
+      description: `
+파일을 브라우저에서 직접 표시(렌더링)합니다.
+
+### 다운로드와의 차이
+- **다운로드** (\`/download\`): \`Content-Disposition: attachment\` → 파일 저장 다이얼로그
+- **미리보기** (\`/preview\`): \`Content-Disposition: inline\` → 브라우저 내 직접 렌더링
+
+### 미리보기 가능한 파일 타입
+- **이미지**: PNG, JPEG, GIF, WebP, SVG
+- **PDF**: 브라우저 내장 PDF 뷰어
+- **비디오**: MP4, WebM
+- **오디오**: MP3, WAV, OGG
+- **텍스트**: TXT, HTML, CSS, CSV, JSON, XML, JS
+
+### 미리보기 불가 파일 타입
+- Office 문서 (DOCX, XLSX, PPTX) 등은 자동으로 다운로드됩니다.
+
+### 클라이언트 사용법
+\`\`\`html
+<!-- 이미지 -->
+<img src="/v1/files/{fileId}/preview" />
+
+<!-- PDF -->
+<iframe src="/v1/files/{fileId}/preview" width="100%" height="600px" />
+
+<!-- 비디오 -->
+<video src="/v1/files/{fileId}/preview" controls />
+
+<!-- 오디오 -->
+<audio src="/v1/files/{fileId}/preview" controls />
+\`\`\`
+
+### Range 요청 지원
+다운로드와 동일하게 HTTP Range Requests (RFC 7233)를 지원합니다.
+- 비디오/오디오 탐색(seek) 시 브라우저가 자동으로 Range 요청을 보냅니다.
+
+### 캐싱
+\`Cache-Control: private, max-age=3600\` 헤더를 포함합니다.
+      `,
+    }),
+    ApiParam({
+      name: 'fileId',
+      description: '미리보기할 파일 ID',
+      example: '550e8400-e29b-41d4-a716-446655440000',
+    }),
+    ApiProduces('application/octet-stream', 'image/*', 'application/pdf', 'video/*', 'audio/*', 'text/*'),
+    ApiResponse({
+      status: 200,
+      description: '파일 미리보기 성공 (전체 파일)',
+      content: {
+        'application/octet-stream': {
+          schema: { type: 'string', format: 'binary' },
+        },
+      },
+    }),
+    ApiResponse({ status: 206, description: '부분 파일 응답 (Range 요청)' }),
+    ApiResponse({ status: 404, description: '파일을 찾을 수 없음' }),
+    ApiResponse({ status: 409, description: '파일이 NAS 동기화 중' }),
+    ApiResponse({ status: 416, description: 'Range 요청 범위 초과' }),
+  );
+
+/**
  * 파일명 변경 API 문서
  */
 export const ApiFileRename = () =>

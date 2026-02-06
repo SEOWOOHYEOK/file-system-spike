@@ -38,6 +38,7 @@ import {
   ApiFilesUpload,
   ApiFileInfo,
   ApiFileDownload,
+  ApiFilePreview,
   ApiFileRename,
   ApiFileMove,
   ApiFileDelete,
@@ -48,7 +49,7 @@ import { RequestContext } from '../../../common/context/request-context';
 import { AuditAction } from '../../../common/decorators';
 import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
 import { TargetType } from '../../../domain/audit/enums/common.enum';
-import { createByteCountingStream, formatContentRange } from '../../../common/utils';
+// createByteCountingStream, formatContentRange → FileDownloadService.prepareDownload()로 이동
 
 /**
  * 파일 컨트롤러
@@ -89,6 +90,9 @@ export class FileController {
     @Body('folderId', new ParseUUIDPipe()) folderId: string,
     @Body('conflictStrategy') conflictStrategy?: ConflictStrategy,
   ): Promise<UploadFileResponse> {
+    this.logger.log(
+      `파일 업로드 요청: fileName=${file?.originalname}, folderId=${folderId}, size=${file?.size}, userId=${RequestContext.getUserId()}`,
+    );
     return this.fileUploadService.upload({
       file,
       folderId,
@@ -105,7 +109,7 @@ export class FileController {
   @HttpCode(HttpStatus.CREATED)
   @AuditAction({
     action: AuditActionEnum.FILE_UPLOAD,
-    targetType: TargetType.FOLDER,
+    targetType: TargetType.FILE,
     targetIdParam: 'folderId',
   })
   async uploadMany(
@@ -113,6 +117,9 @@ export class FileController {
     @Body('folderId', new ParseUUIDPipe()) folderId: string,
     @Body('conflictStrategy') conflictStrategy?: ConflictStrategy,
   ): Promise<UploadFileResponse[]> {
+    this.logger.log(
+      `다중 파일 업로드 요청: fileCount=${files?.length}, folderId=${folderId}, userId=${RequestContext.getUserId()}`,
+    );
     return this.fileUploadService.uploadMany({
       files,
       folderId,
@@ -155,78 +162,95 @@ export class FileController {
     @Headers('if-range') ifRangeHeader: string,
     @Res() res: Response,
   ): Promise<void> {
-    // 1. 다운로드 서비스 호출 (Range 파싱, If-Range 검증 모두 서비스에서 처리)
-    const { file, storageObject, stream, isPartial, range, isRangeInvalid } =
-      await this.fileDownloadService.downloadWithRange(fileId, {
+    this.logger.log(
+      `파일 다운로드 요청: fileId=${fileId}, hasRange=${!!rangeHeader}, userId=${RequestContext.getUserId()}`,
+    );
+
+    // 1. 서비스에서 상태코드·헤더·스트림 조합 (헤더 조합, 바이트 카운팅 래핑 포함)
+    const { statusCode, headers, stream } =
+      await this.fileDownloadService.prepareDownload(fileId, {
         rangeHeader,
         ifRangeHeader,
       });
 
-    // 2. Range 요청이 유효하지 않은 경우 (범위 초과 등)
-    if (isRangeInvalid) {
-      res.status(416); // Range Not Satisfiable
-      res.set({
-        'Content-Range': `bytes */${file.sizeBytes}`,
-      });
+    // 2. HTTP 응답 전송
+    res.status(statusCode);
+    res.set(headers);
+
+    if (!stream) {
       res.end();
       return;
     }
 
-    // 3. 응답 헤더 설정
-    const headers: Record<string, string | number> = {
-      'Content-Type': file.mimeType,
-      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
-      'Accept-Ranges': 'bytes', // Range 지원 표시
+    // 3. 스트림 → 응답 파이프 + lease 해제
+    let leaseReleased = false;
+    const safeReleaseLease = async () => {
+      if (leaseReleased) return;
+      leaseReleased = true;
+      await this.fileDownloadService.releaseLease(fileId);
     };
 
-    // ETag 헤더 (체크섬 기반) - 클라이언트가 이어받기/캐시에 활용
-    if (storageObject.checksum) {
-      headers['ETag'] = `"${storageObject.checksum}"`;
-    }
+    stream.pipe(res);
+    stream.on('end', safeReleaseLease);
+    stream.on('error', safeReleaseLease);
+    stream.on('close', safeReleaseLease);
+  }
 
-    // Last-Modified 헤더
-    headers['Last-Modified'] = file.updatedAt.toUTCString();
+  /**
+   * GET /files/:fileId/preview - 파일 미리보기 (인라인 표시)
+   *
+   * 브라우저가 파일을 직접 렌더링할 수 있도록 Content-Disposition: inline 으로 응답.
+   * 이미지, PDF, 비디오, 오디오, 텍스트 등 브라우저가 지원하는 파일 타입은 즉시 표시되고,
+   * 미지원 타입은 자동으로 다운로드됩니다.
+   *
+   * 클라이언트 사용:
+   *   <img src="/v1/files/{fileId}/preview" />
+   *   <iframe src="/v1/files/{fileId}/preview" />
+   *   <video src="/v1/files/{fileId}/preview" controls />
+   *   <audio src="/v1/files/{fileId}/preview" controls />
+   */
+  @Get(':fileId/preview')
+  @ApiFilePreview()
+  @AuditAction({
+    action: AuditActionEnum.FILE_DOWNLOAD,
+    targetType: TargetType.FILE,
+    targetIdParam: 'fileId',
+  })
+  async preview(
+    @Param('fileId') fileId: string,
+    @Headers('range') rangeHeader: string,
+    @Headers('if-range') ifRangeHeader: string,
+    @Res() res: Response,
+  ): Promise<void> {
+    this.logger.log(
+      `파일 미리보기 요청: fileId=${fileId}, hasRange=${!!rangeHeader}, userId=${RequestContext.getUserId()}`,
+    );
 
-    // 체크섬 커스텀 헤더 (전체 파일에만 의미 있음)
-    if (storageObject.checksum && !isPartial) {
-      headers['X-Checksum-SHA256'] = storageObject.checksum;
-    }
+    const { statusCode, headers, stream } =
+      await this.fileDownloadService.preparePreview(fileId, {
+        rangeHeader,
+        ifRangeHeader,
+      });
 
-    if (isPartial && range) {
-      // 206 Partial Content
-      res.status(206);
-      headers['Content-Range'] = formatContentRange(range.start, range.end, file.sizeBytes);
-      headers['Content-Length'] = range.end - range.start + 1;
-    } else {
-      // 200 OK (전체 파일)
-      headers['Content-Length'] = file.sizeBytes;
-    }
-
+    res.status(statusCode);
     res.set(headers);
 
-    // 4. 스트림 파이프
-    if (stream) {
-      // 중복 해제 방지 플래그
-      let leaseReleased = false;
-      const safeReleaseLease = async () => {
-        if (leaseReleased) return;
-        leaseReleased = true;
-        await this.fileDownloadService.releaseLease(fileId);
-      };
-
-      // 바이트 카운팅 스트림 생성 및 파이프
-      const expectedSize = isPartial && range ? range.end - range.start + 1 : file.sizeBytes;
-      const rangeInfo = range ? `${range.start}-${range.end}` : 'full';
-      const countingStream = createByteCountingStream(expectedSize, this.logger, fileId, rangeInfo);
-      stream.pipe(countingStream).pipe(res);
-
-      stream.on('end', safeReleaseLease);
-      stream.on('error', safeReleaseLease);
-      stream.on('close', safeReleaseLease);
-    } else {
-      // 스트림이 없으면 빈 응답
+    if (!stream) {
       res.end();
+      return;
     }
+
+    let leaseReleased = false;
+    const safeReleaseLease = async () => {
+      if (leaseReleased) return;
+      leaseReleased = true;
+      await this.fileDownloadService.releaseLease(fileId);
+    };
+
+    stream.pipe(res);
+    stream.on('end', safeReleaseLease);
+    stream.on('error', safeReleaseLease);
+    stream.on('close', safeReleaseLease);
   }
 
   /**
@@ -245,8 +269,12 @@ export class FileController {
     @Body() request: RenameFileRequest,
   ): Promise<RenameFileResponse> {
     const userId = RequestContext.getUserId() || 'unknown';
+    this.logger.log(
+      `파일 이름변경 요청: fileId=${fileId}, newName=${request.newName}, userId=${userId}`,
+    );
     return this.fileManageService.rename(fileId, request, userId);
   }
+
 
   /**
    * POST /files/:fileId/move - 파일 이동
@@ -263,6 +291,9 @@ export class FileController {
     @Body() request: MoveFileRequest,
   ): Promise<MoveFileResponse> {
     const userId = RequestContext.getUserId() || 'unknown';
+    this.logger.log(
+      `파일 이동 요청: fileId=${fileId}, targetFolderId=${request.targetFolderId}, userId=${userId}`,
+    );
     return this.fileManageService.move(fileId, request, userId);
   }
 
@@ -280,6 +311,9 @@ export class FileController {
   })
   async delete(@Param('fileId') fileId: string): Promise<DeleteFileResponse> {
     const userId = RequestContext.getUserId() || 'unknown';
+    this.logger.log(
+      `파일 삭제(휴지통 이동) 요청: fileId=${fileId}, userId=${userId}`,
+    );
     return this.fileManageService.delete(fileId, userId);
   }
 

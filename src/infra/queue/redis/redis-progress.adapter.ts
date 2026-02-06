@@ -8,7 +8,7 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Redis from 'ioredis';
-import type { IProgressStoragePort, SyncProgress } from '../progress-storage.port';
+import type { IProgressStoragePort, SyncProgress } from '../../../domain/queue/ports/progress-storage.port';
 
 const DEFAULT_TTL = 3600; // 1시간 (초)
 

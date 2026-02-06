@@ -4,7 +4,8 @@
  * ============================================================
  *
  * 🎯 테스트 대상:
- *   - NasFolderSyncWorker
+ *   - NasFolderSyncWorker (라우터 역할)
+ *   - 개별 핸들러들은 각자의 spec에서 테스트
  *
  * 📋 비즈니스 맥락:
  *   - NAS 폴더 동기화 작업 처리
@@ -18,10 +19,15 @@
  * ============================================================
  */
 
+// Mock uuid module (must be before imports)
+jest.mock('uuid', () => ({
+  v4: jest.fn(() => 'mock-uuid'),
+}));
+
 import { Test, TestingModule } from '@nestjs/testing';
 import { NasFolderSyncWorker } from './nas-folder-sync.worker';
-import { JOB_QUEUE_PORT } from '../../infra/queue/job-queue.port';
-import { DISTRIBUTED_LOCK_PORT } from '../../infra/queue/distributed-lock.port';
+import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
+import { DISTRIBUTED_LOCK_PORT } from '../../domain/queue/ports/distributed-lock.port';
 import { NAS_STORAGE_PORT } from '../../domain/storage/ports/nas-storage.port';
 import {
   FOLDER_REPOSITORY,
@@ -30,12 +36,28 @@ import {
 import { FOLDER_STORAGE_OBJECT_REPOSITORY } from '../../domain/storage';
 import { TRASH_REPOSITORY } from '../../domain/trash';
 import { SYNC_EVENT_REPOSITORY } from '../../domain/sync-event/repositories/sync-event.repository.interface';
+import { TRASH_QUERY_SERVICE } from '../../domain/trash/repositories/trash.repository.interface';
 import {
   SyncEventEntity,
   SyncEventStatus,
   SyncEventType,
   SyncEventTargetType,
 } from '../../domain/sync-event/entities/sync-event.entity';
+
+// Domain Services (needed by handlers)
+import { FolderDomainService } from '../../domain/folder/service/folder-domain.service';
+import { FolderNasStorageObjectDomainService } from '../../domain/storage/folder/service/folder-nas-storage-object-domain.service';
+import { TrashDomainService } from '../../domain/trash/service/trash-domain.service';
+import { SyncEventDomainService } from '../../domain/sync-event/service/sync-event-domain.service';
+
+// Handlers & Helpers
+import { SyncEventLifecycleHelper } from './shared/sync-event-lifecycle.helper';
+import { FolderMkdirHandler } from './handlers/folder-mkdir.handler';
+import { FolderRenameHandler } from './handlers/folder-rename.handler';
+import { FolderMoveHandler } from './handlers/folder-move.handler';
+import { FolderTrashHandler } from './handlers/folder-trash.handler';
+import { FolderRestoreHandler } from './handlers/folder-restore.handler';
+import { FolderPurgeHandler } from './handlers/folder-purge.handler';
 
 describe('NasFolderSyncWorker', () => {
   const mockJobQueue = {
@@ -71,6 +93,10 @@ describe('NasFolderSyncWorker', () => {
     save: jest.fn(),
     updateStatus: jest.fn(),
   };
+  const mockTrashQueryService = {
+    findByTargetId: jest.fn(),
+    findByOriginalFolderId: jest.fn(),
+  };
 
   let worker: NasFolderSyncWorker;
 
@@ -78,13 +104,30 @@ describe('NasFolderSyncWorker', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         NasFolderSyncWorker,
+        // Shared helpers
+        SyncEventLifecycleHelper,
+        // Domain Services (real classes with mocked repositories)
+        FolderDomainService,
+        FolderNasStorageObjectDomainService,
+        TrashDomainService,
+        SyncEventDomainService,
+        // Folder action handlers
+        FolderMkdirHandler,
+        FolderRenameHandler,
+        FolderMoveHandler,
+        FolderTrashHandler,
+        FolderRestoreHandler,
+        FolderPurgeHandler,
+        // Ports
         { provide: JOB_QUEUE_PORT, useValue: mockJobQueue },
         { provide: DISTRIBUTED_LOCK_PORT, useValue: mockDistributedLock },
         { provide: NAS_STORAGE_PORT, useValue: mockNasStorage },
+        // Repositories
         { provide: FOLDER_REPOSITORY, useValue: mockFolderRepository },
         { provide: FOLDER_STORAGE_OBJECT_REPOSITORY, useValue: mockFolderStorageObjectRepository },
         { provide: TRASH_REPOSITORY, useValue: mockTrashRepository },
         { provide: SYNC_EVENT_REPOSITORY, useValue: mockSyncEventRepository },
+        { provide: TRASH_QUERY_SERVICE, useValue: mockTrashQueryService },
       ],
     }).compile();
 
@@ -150,12 +193,12 @@ describe('NasFolderSyncWorker', () => {
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
       // ═══════════════════════════════════════════════════════
-      await mkdirProcessor({ data: { folderId, path: folderPath, syncEventId } });
+      await mkdirProcessor({ data: { folderId, action: 'mkdir', path: folderPath, syncEventId } });
 
       // ═══════════════════════════════════════════════════════
       // ✅ THEN (결과 검증)
       // ═══════════════════════════════════════════════════════
-      expect(mockSyncEventRepository.findById).toHaveBeenCalledWith(syncEventId);
+      expect(mockSyncEventRepository.findById).toHaveBeenCalledWith(syncEventId, undefined);
       expect(mockSyncEventRepository.save).toHaveBeenCalled();
 
       // 저장된 SyncEvent의 상태 확인
@@ -218,7 +261,7 @@ describe('NasFolderSyncWorker', () => {
       // 🎬 WHEN (테스트 실행)
       // ═══════════════════════════════════════════════════════
       await expect(
-        mkdirProcessor({ data: { folderId, path: folderPath, syncEventId } }),
+        mkdirProcessor({ data: { folderId, action: 'mkdir', path: folderPath, syncEventId } }),
       ).rejects.toThrow('NAS folder creation failed');
 
       // ═══════════════════════════════════════════════════════
@@ -268,7 +311,7 @@ describe('NasFolderSyncWorker', () => {
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행) - syncEventId 없이 호출
       // ═══════════════════════════════════════════════════════
-      await mkdirProcessor({ data: { folderId, path: folderPath } });
+      await mkdirProcessor({ data: { folderId, action: 'mkdir', path: folderPath } });
 
       // ═══════════════════════════════════════════════════════
       // ✅ THEN (결과 검증)
@@ -327,17 +370,17 @@ describe('NasFolderSyncWorker', () => {
       mockFolderStorageObjectRepository.findByObjectKeyPrefix.mockResolvedValue([]);
 
       await worker.onModuleInit();
-      const renameProcessor = mockJobQueue.processJobs.mock.calls[1][1];
+      const processor = mockJobQueue.processJobs.mock.calls[0][1];
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
       // ═══════════════════════════════════════════════════════
-      await renameProcessor({ data: { folderId, oldPath, newPath, syncEventId } });
+      await processor({ data: { folderId, action: 'rename', oldPath, newPath, syncEventId } });
 
       // ═══════════════════════════════════════════════════════
       // ✅ THEN (결과 검증)
       // ═══════════════════════════════════════════════════════
-      expect(mockSyncEventRepository.findById).toHaveBeenCalledWith(syncEventId);
+      expect(mockSyncEventRepository.findById).toHaveBeenCalledWith(syncEventId, undefined);
 
       // 저장된 SyncEvent의 상태 확인 - DONE으로 변경됨
       const savedSyncEvent = mockSyncEventRepository.save.mock.calls[0][0];
@@ -407,7 +450,7 @@ describe('NasFolderSyncWorker', () => {
       // 핵심: NAS 삭제 완료 후 permanentDelete() 호출
       expect(mockNasStorage.폴더삭제).toHaveBeenCalledWith(trashPath);
       expect(permanentDeleteMock).toHaveBeenCalled();
-      expect(mockFolderRepository.save).toHaveBeenCalledWith(mockFolder);
+      expect(mockFolderRepository.save).toHaveBeenCalledWith(mockFolder, undefined);
       expect(mockTrashRepository.delete).toHaveBeenCalledWith(trashMetadataId);
     });
 

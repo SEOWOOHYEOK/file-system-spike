@@ -9,8 +9,7 @@ export enum AuditAction {
   FILE_DOWNLOAD = 'FILE_DOWNLOAD', // 파일 다운로드
   FILE_UPLOAD = 'FILE_UPLOAD', // 파일 업로드
   FILE_RENAME = 'FILE_RENAME', // 파일 이름 변경
-  FILE_MOVE = 'FILE_MOVE', // 파일 이동
-  FILE_COPY = 'FILE_COPY', // 파일 복사
+  FILE_MOVE = 'FILE_MOVE', // 파일 이
   FILE_DELETE = 'FILE_DELETE', // 파일 삭제 (휴지통 이동)
   FILE_RESTORE = 'FILE_RESTORE', // 파일 복원
   FILE_PURGE = 'FILE_PURGE', // 파일 영구 삭제
@@ -55,7 +54,6 @@ export const AuditActionDescription: Record<AuditAction, string> = {
   [AuditAction.FILE_UPLOAD]: '파일 업로드',
   [AuditAction.FILE_RENAME]: '파일 이름 변경',
   [AuditAction.FILE_MOVE]: '파일 이동',
-  [AuditAction.FILE_COPY]: '파일 복사',
   [AuditAction.FILE_DELETE]: '파일 삭제',
   [AuditAction.FILE_RESTORE]: '파일 복원',
   [AuditAction.FILE_PURGE]: '파일 영구 삭제',
@@ -100,7 +98,6 @@ export const AuditActionCategory: Record<AuditAction, ActionCategory> = {
   [AuditAction.FILE_UPLOAD]: ActionCategory.FILE,
   [AuditAction.FILE_RENAME]: ActionCategory.FILE,
   [AuditAction.FILE_MOVE]: ActionCategory.FILE,
-  [AuditAction.FILE_COPY]: ActionCategory.FILE,
   [AuditAction.FILE_DELETE]: ActionCategory.FILE,
   [AuditAction.FILE_RESTORE]: ActionCategory.FILE,
   [AuditAction.FILE_PURGE]: ActionCategory.FILE,

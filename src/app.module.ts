@@ -1,6 +1,7 @@
 import { Module, NestModule, MiddlewareConsumer } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { WinstonModule } from 'nest-winston';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { DomainModule } from './domain/domain.module';
@@ -10,6 +11,7 @@ import { RepositoryModule } from './infra/database/repository.module';
 import { SSOModule } from './integrations/sso';
 import { OrganizationMigrationModule } from './integrations/migration';
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
+import { createWinstonConfig } from './common/logger/winston.config';
 
 /**
  * 루트 애플리케이션 모듈
@@ -27,6 +29,10 @@ import { RequestContextMiddleware } from './common/middleware/request-context.mi
       isGlobal: true,
       envFilePath: '.env',
     }),
+    // Winston 구조화 로깅
+    WinstonModule.forRoot(
+      createWinstonConfig(process.env.LOG_DIR || 'logs'),
+    ),
     // 스케줄링 모듈 (Cron 작업용)
     ScheduleModule.forRoot(),
     // SSO 통합 모듈

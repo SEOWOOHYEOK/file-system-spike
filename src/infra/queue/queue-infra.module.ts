@@ -17,9 +17,9 @@
 
 import { Module, Logger } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { JOB_QUEUE_PORT } from './job-queue.port';
-import { DISTRIBUTED_LOCK_PORT } from './distributed-lock.port';
-import { PROGRESS_STORAGE_PORT } from './progress-storage.port';
+import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
+import { DISTRIBUTED_LOCK_PORT } from '../../domain/queue/ports/distributed-lock.port';
+import { PROGRESS_STORAGE_PORT } from '../../domain/queue/ports/progress-storage.port';
 import { BullQueueAdapter } from './redis/bull-queue.adapter';
 import { RedisLockAdapter } from './redis/redis-lock.adapter';
 import { RedisProgressAdapter } from './redis/redis-progress.adapter';

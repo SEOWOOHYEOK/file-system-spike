@@ -5,10 +5,8 @@
 // 모듈
 export * from './queue-infra.module';
 
-// 포트 인터페이스
-export * from './job-queue.port';
-export * from './distributed-lock.port';
-export * from './progress-storage.port';
+// 포트 인터페이스 (Domain에서 re-export)
+export * from '../../domain/queue/ports';
 
 // Redis(Bull) 어댑터
 export * from './redis';

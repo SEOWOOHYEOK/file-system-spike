@@ -8,8 +8,8 @@ import {
   QueueStats,
   Job,
   JobsByStatusResult,
-} from '../../infra/queue/job-queue.port';
-import type { IJobQueuePort } from '../../infra/queue/job-queue.port';
+} from '../../domain/queue/ports/job-queue.port';
+import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 
 /**
  * NAS 동기화 관련 큐 이름 목록

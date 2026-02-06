@@ -19,7 +19,7 @@ import type {
   QueueStats,
   ProcessorOptions,
   JobsByStatusResult,
-} from '../job-queue.port';
+} from '../../../domain/queue/ports/job-queue.port';
 
 @Injectable()
 export class BullQueueAdapter implements IJobQueuePort, OnModuleDestroy {

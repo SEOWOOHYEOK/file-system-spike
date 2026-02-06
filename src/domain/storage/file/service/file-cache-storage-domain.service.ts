@@ -218,4 +218,45 @@ export class FileCacheStorageDomainService {
     }
     return this.repository.updateStatusByFileIds(fileIds, this.storageType, status, txOptions);
   }
+
+  // ============================================
+  // 캐시 Eviction 관련 메서드
+  // ============================================
+
+  /**
+   * 캐시 상세 통계 조회
+   * - 상태별 파일 수
+   * - lease 중인 파일 수
+   * - NAS 미동기화 파일 수
+   */
+  async 캐시상세통계조회(txOptions?: TransactionOptions): Promise<import('../repositories/file-storage-object.repository.interface').CacheDetailedStats> {
+    return this.repository.getCacheDetailedStats(txOptions);
+  }
+
+  /**
+   * Eviction 대상 조회 (LRU 기준)
+   * 조건: CACHE 타입, AVAILABLE 상태, leaseCount=0, NAS에 동기화 완료된 파일
+   * @param limit 조회할 최대 개수
+   */
+  async LRU제거후보조회(limit: number, txOptions?: TransactionOptions): Promise<FileStorageObjectEntity[]> {
+    return this.repository.findEvictionCandidatesLRU(limit, txOptions);
+  }
+
+  /**
+   * Atomic 상태 전환 (AVAILABLE -> EVICTING)
+   * Race Condition 방지를 위해 leaseCount=0 조건 포함
+   * @param fileId 파일 ID
+   * @returns 영향받은 row 수 (0: 이미 lease 중이거나 상태 변경됨, 1: 성공)
+   */
+  async 제거중상태설정(fileId: string, txOptions?: TransactionOptions): Promise<number> {
+    return this.repository.tryMarkEvicting(fileId, txOptions);
+  }
+
+  /**
+   * Eviction 완료 후 캐시 레코드 삭제
+   * @param fileId 파일 ID
+   */
+  async 캐시레코드삭제(fileId: string, txOptions?: TransactionOptions): Promise<void> {
+    return this.repository.deleteCacheRecord(fileId, txOptions);
+  }
 }

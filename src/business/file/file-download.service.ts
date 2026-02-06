@@ -1,5 +1,5 @@
 import { Injectable, Inject, NotFoundException, BadRequestException, Logger, InternalServerErrorException, ConflictException } from '@nestjs/common';
-import { parseRangeHeader, type RangeInfo } from '../../common/utils';
+import { parseRangeHeader, formatContentRange, createByteCountingStream, type RangeInfo } from '../../common/utils';
 import {
   StorageType,
   AvailabilityStatus,
@@ -35,15 +35,33 @@ export interface DownloadWithRangeResult {
   /** Range 파싱 실패 (416 Range Not Satisfiable 응답 필요) */
   isRangeInvalid?: boolean;
 }
+
+/**
+ * 다운로드 준비 응답
+ *
+ * 컨트롤러가 Express Response에 바로 적용할 수 있도록
+ * 상태코드, 헤더, 스트림을 모두 포함한 결과.
+ */
+export interface PreparedDownloadResponse {
+  /** HTTP 상태코드 (200 | 206 | 416) */
+  statusCode: number;
+  /** HTTP 응답 헤더 */
+  headers: Record<string, string | number>;
+  /** 파일 스트림 (416인 경우 null) */
+  stream: NodeJS.ReadableStream | null;
+  /** 파일 ID (lease 해제용) */
+  fileId: string;
+}
+
 import { FileDomainService } from '../../domain/file/service/file-domain.service';
 import { FileCacheStorageDomainService } from '../../domain/storage/file/service/file-cache-storage-domain.service';
 import { FileNasStorageDomainService } from '../../domain/storage/file/service/file-nas-storage-domain.service';
 import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';
 import { NAS_STORAGE_PORT } from '../../domain/storage/ports/nas-storage.port';
-import { JOB_QUEUE_PORT } from '../../infra/queue/job-queue.port';
+import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 import type { ICacheStoragePort } from '../../domain/storage/ports/cache-storage.port';
 import type { INasStoragePort } from '../../domain/storage/ports/nas-storage.port';
-import type { IJobQueuePort } from '../../infra/queue/job-queue.port';
+import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 import { v4 as uuidv4 } from 'uuid';
 import { FileQueryService } from './file-query.service';
 
@@ -275,6 +293,8 @@ export class FileDownloadService {
         await this.jobQueue.addJob('CACHE_RESTORE', {
           fileId: file.id,
           nasObjectKey: nasObject.objectKey,
+        }, {
+          jobId: `cache-restore:${file.id}`,
         });
         this.logger.debug(`Cache restore job registered for file: ${file.id}`);
       }
@@ -441,6 +461,85 @@ export class FileDownloadService {
   }
 
   /**
+   * 다운로드 준비 (컨트롤러용)
+   *
+   * downloadWithRange()를 호출한 뒤 HTTP 응답에 필요한 상태코드,
+   * 헤더, 스트림(바이트 카운팅 래핑 포함)을 조합하여 반환한다.
+   * 컨트롤러는 이 결과를 Express Response에 그대로 적용하면 된다.
+   *
+   * @param fileId - 파일 ID
+   * @param options - Range/If-Range 헤더
+   * @returns PreparedDownloadResponse
+   */
+  async prepareDownload(
+    fileId: string,
+    options?: DownloadWithRangeOptions,
+  ): Promise<PreparedDownloadResponse> {
+    const { file, storageObject, stream, isPartial, range, isRangeInvalid } =
+      await this.downloadWithRange(fileId, options);
+
+    // ── 416 Range Not Satisfiable ──
+    if (isRangeInvalid) {
+      this.logger.warn(
+        `Range 요청 범위 초과: fileId=${fileId}, sizeBytes=${file.sizeBytes}, rangeHeader=${options?.rangeHeader}`,
+      );
+      return {
+        statusCode: 416,
+        headers: { 'Content-Range': `bytes */${file.sizeBytes}` },
+        stream: null,
+        fileId,
+      };
+    }
+
+    // ── 공통 헤더 ──
+    const headers: Record<string, string | number> = {
+      'Content-Type': file.mimeType,
+      'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
+      'Accept-Ranges': 'bytes',
+    };
+
+    if (storageObject.checksum) {
+      headers['ETag'] = `"${storageObject.checksum}"`;
+    }
+
+    headers['Last-Modified'] = file.updatedAt.toUTCString();
+
+    if (storageObject.checksum && !isPartial) {
+      headers['X-Checksum-SHA256'] = storageObject.checksum;
+    }
+
+    // ── 상태코드 + Range 헤더 ──
+    let statusCode: number;
+    if (isPartial && range) {
+      statusCode = 206;
+      headers['Content-Range'] = formatContentRange(range.start, range.end, file.sizeBytes);
+      headers['Content-Length'] = range.end - range.start + 1;
+    } else {
+      statusCode = 200;
+      headers['Content-Length'] = file.sizeBytes;
+    }
+
+    // ── 바이트 카운팅 스트림 래핑 ──
+    let outStream: NodeJS.ReadableStream | null = null;
+    if (stream) {
+      const expectedSize = isPartial && range
+        ? range.end - range.start + 1
+        : file.sizeBytes;
+      const rangeInfo = range ? `${range.start}-${range.end}` : 'full';
+      const countingStream = createByteCountingStream(
+        expectedSize,
+        this.logger,
+        fileId,
+        rangeInfo,
+      );
+      (stream as NodeJS.ReadableStream & { pipe: Function }).pipe(countingStream);
+      outStream = countingStream;
+    }
+
+    return { statusCode, headers, stream: outStream, fileId };
+  }
+
+  /**
    * 캐시에서 다운로드 (Range 지원)
    */
   private async downloadFromCacheWithRange(
@@ -508,7 +607,7 @@ export class FileDownloadService {
     await this.fileNasStorageDomainService.저장(nasObject);
 
     const rangeStr = range ? `${range.start}-${range.end} (${range.end - range.start + 1} bytes)` : 'full';
-    this.logger.log(`[NAS_DOWNLOAD] 📥 file=${file.id.substring(0, 8)}... | range=${rangeStr} | objectKey=${nasObject.objectKey}`);
+    this.logger.log(`[NAS_FILE_RA_DOWNLOAD] 📥 file=${file.id.substring(0, 8)}... | range=${rangeStr} | objectKey=${nasObject.objectKey}`);
 
     try {
       let stream: NodeJS.ReadableStream;
@@ -521,16 +620,16 @@ export class FileDownloadService {
         stream = await this.nasStorage.파일스트림읽기(nasObject.objectKey);
       }
 
-      // 캐시 복원 작업 등록 (전체 다운로드 시에만)
-      if (!range) {
-        const cacheObject = await this.fileCacheStorageDomainService.조회(file.id);
-        if (!cacheObject || cacheObject.availabilityStatus === AvailabilityStatus.MISSING) {
-          await this.jobQueue.addJob('CACHE_RESTORE', {
-            fileId: file.id,
-            nasObjectKey: nasObject.objectKey,
-          });
-          this.logger.debug(`Cache restore job registered for file: ${file.id}`);
-        }
+      // 캐시 복원 작업 등록 (Range 요청 포함 - 워커가 전체 파일을 NAS에서 캐시로 복사)
+      const cacheObject = await this.fileCacheStorageDomainService.조회(file.id);
+      if (!cacheObject || cacheObject.availabilityStatus === AvailabilityStatus.MISSING) {
+        await this.jobQueue.addJob('CACHE_RESTORE', {
+          fileId: file.id,
+          nasObjectKey: nasObject.objectKey,
+        }, {
+          jobId: `cache-restore:${file.id}`,
+        });
+        this.logger.debug(`Cache restore job registered for file: ${file.id}`);
       }
 
       return {
@@ -550,6 +649,76 @@ export class FileDownloadService {
         message: 'NAS에서 파일을 읽는 데 실패했습니다.',
       });
     }
+  }
+
+  // ── 미리보기 가능한 MIME 타입 ──
+  private static readonly PREVIEWABLE_MIME_TYPES = new Set([
+    // 이미지
+    'image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/svg+xml', 'image/x-icon',
+    // PDF
+    'application/pdf',
+    // 비디오
+    'video/mp4', 'video/webm',
+    // 오디오
+    'audio/mpeg', 'audio/wav', 'audio/ogg',
+    // 텍스트
+    'text/plain', 'text/html', 'text/css', 'text/csv',
+    'application/json', 'application/xml', 'application/javascript',
+  ]);
+
+  /**
+   * 파일 미리보기 준비 (컨트롤러용)
+   *
+   * prepareDownload()와 동일하지만 Content-Disposition을 `inline`으로 설정하여
+   * 브라우저가 파일을 직접 표시(렌더링)할 수 있게 합니다.
+   *
+   * - 미리보기 가능한 MIME 타입: inline → 브라우저가 직접 렌더링
+   * - 미리보기 불가 MIME 타입: attachment → 다운로드 폴백
+   *
+   * 클라이언트 사용 예시:
+   * - 이미지: <img src="/v1/files/{fileId}/preview" />
+   * - PDF:   <iframe src="/v1/files/{fileId}/preview" />
+   * - 비디오: <video src="/v1/files/{fileId}/preview" controls />
+   * - 오디오: <audio src="/v1/files/{fileId}/preview" controls />
+   *
+   * @param fileId - 파일 ID
+   * @param options - Range/If-Range 헤더 (optional)
+   * @returns PreparedDownloadResponse (Content-Disposition: inline)
+   */
+  async preparePreview(
+    fileId: string,
+    options?: DownloadWithRangeOptions,
+  ): Promise<PreparedDownloadResponse> {
+    const result = await this.prepareDownload(fileId, options);
+
+    // stream이 null이면 (416 등) 그대로 반환
+    if (!result.stream) {
+      return result;
+    }
+
+    // MIME 타입 확인 후 inline/attachment 결정
+    const contentType = result.headers['Content-Type'] as string;
+    const isPreviewable = FileDownloadService.PREVIEWABLE_MIME_TYPES.has(contentType);
+
+    if (isPreviewable) {
+      // 브라우저가 직접 렌더링하도록 inline 설정
+      const filename = this.extractFilenameFromHeader(result.headers['Content-Disposition'] as string);
+      result.headers['Content-Disposition'] = `inline; filename*=UTF-8''${filename}`;
+    }
+    // 미리보기 불가능한 타입은 기존 attachment 유지 (다운로드 폴백)
+
+    // 브라우저 캐싱 허용 (미리보기는 반복 요청이 잦음)
+    result.headers['Cache-Control'] = 'private, max-age=3600';
+
+    return result;
+  }
+
+  /**
+   * Content-Disposition 헤더에서 파일명 추출
+   */
+  private extractFilenameFromHeader(disposition: string): string {
+    const match = disposition?.match(/filename\*=UTF-8''(.+)/);
+    return match ? match[1] : 'file';
   }
 
   /**

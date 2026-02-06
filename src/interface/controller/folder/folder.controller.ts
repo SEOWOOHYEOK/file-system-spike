@@ -10,6 +10,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
 import { FolderQueryService, FolderCommandService, SearchService } from '../../../business/folder';
@@ -49,6 +50,8 @@ import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 @UseGuards(JwtAuthGuard)
 @Controller('v1/folders')
 export class FolderController {
+  private readonly logger = new Logger(FolderController.name);
+
   constructor(
     private readonly folderQueryService: FolderQueryService,
     private readonly folderCommandService: FolderCommandService,
@@ -68,6 +71,9 @@ export class FolderController {
     targetNameParam: 'name',
   })
   async create(@Body() request: CreateFolderRequest): Promise<CreateFolderResponse> {
+    this.logger.log(
+      `폴더 생성 요청: name=${request.name}, parentId=${request.parentId}, userId=${RequestContext.getUserId()}`,
+    );
     return this.folderCommandService.생성(request);
   }
 
@@ -141,6 +147,9 @@ export class FolderController {
     @Param('folderId') folderId: string,
     @Body() request: RenameFolderRequest,
   ): Promise<RenameFolderResponse> {
+    this.logger.log(
+      `폴더 이름변경 요청: folderId=${folderId}, newName=${request.newName}, userId=${RequestContext.getUserId()}`,
+    );
     return this.folderCommandService.이름변경(folderId, request);
   }
 
@@ -158,7 +167,9 @@ export class FolderController {
     @Param('folderId') folderId: string,
     @Body() request: MoveFolderRequest,
   ): Promise<MoveFolderResponse> {
-
+    this.logger.log(
+      `폴더 이동 요청: folderId=${folderId}, targetParentId=${request.targetParentId}, userId=${RequestContext.getUserId()}`,
+    );
     return this.folderCommandService.이동(folderId, request);
   }
 
@@ -179,6 +190,9 @@ export class FolderController {
     trashedAt: string;
   }> {
     const userId = RequestContext.getUserId() || 'unknown';
+    this.logger.log(
+      `폴더 삭제(휴지통 이동) 요청: folderId=${folderId}, userId=${userId}`,
+    );
     return this.folderCommandService.delete(folderId, userId);
   }
 }

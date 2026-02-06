@@ -1,4 +1,4 @@
-import { Injectable, Inject, NotFoundException, BadRequestException } from '@nestjs/common';
+import { Injectable, Inject, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
 import { v4 as uuidv4 } from 'uuid';
 import { createPaginationInfo } from '../../common/types/pagination';
 import { RequestContext } from '../../common/context/request-context';
@@ -22,8 +22,8 @@ import {
   FolderDomainService,
 } from '../../domain/folder';
 import { FileDomainService } from '../../domain/file/service/file-domain.service';
-import { JOB_QUEUE_PORT } from '../../infra/queue/job-queue.port';
-import type { IJobQueuePort } from '../../infra/queue/job-queue.port';
+import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
+import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 import {
   NAS_FILE_SYNC_QUEUE_PREFIX,
   NasFileRestoreJobData,
@@ -49,6 +49,8 @@ import {
  */
 @Injectable()
 export class TrashService {
+  private readonly logger = new Logger(TrashService.name);
+
   constructor(
     private readonly trashDomainService: TrashDomainService,
     private readonly fileDomainService: FileDomainService,
@@ -724,7 +726,7 @@ export class TrashService {
         success++;
       } catch (error) {
         failed++;
-        console.error(`휴지통 비우기 실패: ${item.id}`, error);
+        this.logger.error(`휴지통 비우기 실패: itemId=${item.id}, ${error.message}`, error.stack);
       }
     }
 

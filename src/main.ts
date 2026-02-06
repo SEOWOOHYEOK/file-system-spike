@@ -8,11 +8,15 @@ process.env.UV_THREADPOOL_SIZE = '16';
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { ValidationPipe } from '@nestjs/common';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { AppModule } from './app.module';
 import { Logger } from '@nestjs/common';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Winston 로거를 NestJS 기본 로거로 교체
+  app.useLogger(app.get(WINSTON_MODULE_NEST_PROVIDER));
 
   // CORS 설정 (Frontend 개발 서버 허용)
   // .env 파일에서 CORS 허용 origin 읽어오도록 NV 처리
@@ -20,6 +24,7 @@ async function bootstrap() {
     ? process.env.CORS_ORIGIN.split(',').map((o) => o.trim())
     : [];
 
+  //TODO 추후 정의필요
   app.enableCors({
     origin: allowedOrigins,
     credentials: true,

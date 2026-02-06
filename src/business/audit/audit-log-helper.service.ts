@@ -161,17 +161,6 @@ export class AuditLogHelper {
     });
   }
 
-  /**
-   * 파일 복사 로그
-   */
-  async logFileCopy(
-    params: FileLogParams & { newFileId: string; newPath: string },
-  ): Promise<void> {
-    await this.logFileAction(AuditAction.FILE_COPY, params, {
-      newFileId: params.newFileId,
-      newPath: params.newPath,
-    });
-  }
 
   /**
    * 파일 삭제 (휴지통 이동) 로그

@@ -16,7 +16,7 @@ import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/commo
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import type { IProgressStoragePort, SyncProgress } from '../progress-storage.port';
+import type { IProgressStoragePort, SyncProgress } from '../../../domain/queue/ports/progress-storage.port';
 
 const DEFAULT_TTL_MS = 3600000; // 1시간 (ms)
 const CLEANUP_INTERVAL_MS = 5 * 60 * 1000; // 5분

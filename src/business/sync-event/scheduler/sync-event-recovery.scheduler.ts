@@ -7,7 +7,7 @@ import {
   SyncEventDomainService,
 } from '../../../domain/sync-event';
 import { SYNC_EVENT_REPOSITORY, type ISyncEventRepository } from '../../../domain/sync-event/repositories/sync-event.repository.interface';
-import { JOB_QUEUE_PORT, type IJobQueuePort } from '../../../infra/queue/job-queue.port';
+import { JOB_QUEUE_PORT, type IJobQueuePort } from '../../../domain/queue/ports/job-queue.port';
 import {
   NAS_FILE_SYNC_QUEUE_PREFIX,
   NasFileSyncJobData,

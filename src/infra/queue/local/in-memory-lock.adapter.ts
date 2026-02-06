@@ -11,7 +11,7 @@ import type {
   IDistributedLockPort,
   LockResult,
   LockOptions,
-} from '../distributed-lock.port';
+} from '../../../domain/queue/ports/distributed-lock.port';
 
 const DEFAULT_TTL = 30000; // 30초
 const DEFAULT_WAIT_TIMEOUT = 10000; // 10초

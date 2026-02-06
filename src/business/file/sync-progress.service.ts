@@ -7,7 +7,7 @@ import { Injectable, Inject } from '@nestjs/common';
 import {
   PROGRESS_STORAGE_PORT,
   type IProgressStoragePort,
-} from '../../infra/queue/progress-storage.port';
+} from '../../domain/queue/ports/progress-storage.port';
 import { SyncProgressResponseDto } from '../../interface/controller/file/dto/sync-progress-response.dto';
 
 @Injectable()

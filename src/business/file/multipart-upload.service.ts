@@ -14,6 +14,7 @@ import {
 import { DataSource } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { createHash } from 'crypto';
+import { PassThrough } from 'stream';
 
 import {
   UploadPartEntity,
@@ -39,14 +40,14 @@ import {
 import { FolderAvailabilityStatus } from '../../domain/folder';
 import { SyncEventFactory } from '../../domain/sync-event';
 import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';
-import { JOB_QUEUE_PORT } from '../../infra/queue/job-queue.port';
+import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
 import {
   NAS_FILE_SYNC_QUEUE_PREFIX,
   type NasFileUploadJobData,
 } from '../worker/nas-file-sync.worker';
 
 import type { ICacheStoragePort } from '../../domain/storage/ports/cache-storage.port';
-import type { IJobQueuePort } from '../../infra/queue/job-queue.port';
+import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 
 import { UploadSessionDomainService } from '../../domain/upload-session/service/upload-session-domain.service';
 import { FileDomainService } from '../../domain/file/service/file-domain.service';
@@ -504,7 +505,7 @@ export class MultipartUploadService {
 
     // 파트 파일 정리 (비동기)
     this.cleanupParts(parts).catch((err) => {
-      console.error('Failed to cleanup parts:', err);
+      this.logger.error(`파트 파일 정리 실패: ${err.message}`, err.stack);
     });
 
     // 파트 레코드 삭제
@@ -525,34 +526,66 @@ export class MultipartUploadService {
   }
 
   /**
-   * 파트 병합
+   * 파트 병합 (스트리밍 방식)
+   *
+   * 기존 Buffer.concat 방식은 Node.js Buffer 최대 크기(~4GB) 제한으로
+   * 4GB 초과 파일에서 RangeError 발생.
+   * → 스트리밍으로 변경하여 메모리 사용량을 최소화하고 파일 크기 제한 해소.
+   *
    * @returns SHA-256 체크섬
    */
   private async mergeParts(fileId: string, parts: UploadPartEntity[]): Promise<string> {
-    // 파트를 순서대로 읽어서 병합
     const sortedParts = parts.sort((a, b) => a.partNumber - b.partNumber);
-    const buffers: Buffer[] = [];
+    const hash = createHash('sha256');
 
-    for (const part of sortedParts) {
-      if (!part.objectKey) {
-        throw new InternalServerErrorException({
-          code: 'PART_OBJECT_KEY_MISSING',
-          message: `파트 ${part.partNumber}의 objectKey가 없습니다.`,
+    // PassThrough: 모든 파트를 순차적으로 하나의 스트림으로 연결
+    const mergeStream = new PassThrough();
+
+    // 캐시 스토리지에 스트림 쓰기 시작 (백그라운드)
+    const writePromise = this.cacheStorage.파일스트림쓰기(fileId, mergeStream);
+
+    try {
+      for (const part of sortedParts) {
+        if (!part.objectKey) {
+          throw new InternalServerErrorException({
+            code: 'PART_OBJECT_KEY_MISSING',
+            message: `파트 ${part.partNumber}의 objectKey가 없습니다.`,
+          });
+        }
+
+        const partStream = await this.cacheStorage.파일스트림읽기(part.objectKey);
+
+        // 파트 스트림 → mergeStream 전달 (backpressure 처리)
+        await new Promise<void>((resolve, reject) => {
+          partStream.on('data', (chunk: Buffer) => {
+            hash.update(chunk);
+            if (!mergeStream.write(chunk)) {
+              partStream.pause();
+              mergeStream.once('drain', () => partStream.resume());
+            }
+          });
+          partStream.on('end', resolve);
+          partStream.on('error', (err) => {
+            mergeStream.destroy(err);
+            reject(err);
+          });
         });
       }
-      const partData = await this.cacheStorage.파일읽기(part.objectKey);
-      buffers.push(partData);
+
+      // 모든 파트 전달 완료
+      mergeStream.end();
+
+      // 스트림 쓰기 완료 대기
+      await writePromise;
+    } catch (error) {
+      // 에러 발생 시 스트림 정리
+      if (!mergeStream.destroyed) {
+        mergeStream.destroy();
+      }
+      throw error;
     }
 
-    // 병합된 파일 저장
-    const mergedBuffer = Buffer.concat(buffers);
-
-    // SHA-256 체크섬 계산
-    const checksum = createHash('sha256').update(mergedBuffer).digest('hex');
-
-    await this.cacheStorage.파일쓰기(fileId, mergedBuffer);
-
-    return checksum;
+    return hash.digest('hex');
   }
 
   /**
@@ -564,7 +597,7 @@ export class MultipartUploadService {
         try {
           await this.cacheStorage.파일삭제(part.objectKey);
         } catch (err) {
-          console.error(`Failed to delete part ${part.partNumber}:`, err);
+          this.logger.error(`파트 삭제 실패: partNumber=${part.partNumber}, ${err.message}`, err.stack);
         }
       }
     }

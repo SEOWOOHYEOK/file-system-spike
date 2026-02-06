@@ -14,6 +14,7 @@ import {
   HttpStatus,
   UseGuards,
   Req,
+  Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import type { Request } from 'express';
@@ -36,6 +37,9 @@ import {
 } from './multipart.swagger';
 
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { AuditAction } from '../../../common/decorators';
+import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
+import { TargetType } from '../../../domain/audit/enums/common.enum';
 
 /**
  * 초기화 요청 DTO
@@ -63,6 +67,8 @@ interface CompleteRequestBody {
 @UseGuards(JwtAuthGuard)
 @Controller('v1/files/multipart')
 export class MultipartController {
+  private readonly logger = new Logger(MultipartController.name);
+
   constructor(
     private readonly multipartUploadService: MultipartUploadService,
   ) { }
@@ -76,6 +82,9 @@ export class MultipartController {
   async initiate(
     @Body() body: InitiateRequestBody,
   ): Promise<InitiateMultipartResponse> {
+    this.logger.log(
+      `멀티파트 업로드 초기화 요청: fileName=${body.fileName}, folderId=${body.folderId}, totalSize=${body.totalSize}, userId=${RequestContext.getUserId()}`,
+    );
     return this.multipartUploadService.initiate({
       fileName: body.fileName,
       folderId: body.folderId,
@@ -103,6 +112,10 @@ export class MultipartController {
     }
     const data = Buffer.concat(chunks);
 
+    this.logger.debug(
+      `멀티파트 파트 업로드: sessionId=${sessionId}, partNumber=${partNumber}, dataSize=${data.length}`,
+    );
+
     return this.multipartUploadService.uploadPart({
       sessionId,
       partNumber: parseInt(partNumber, 10),
@@ -116,11 +129,20 @@ export class MultipartController {
   @Post(':sessionId/complete')
   @ApiMultipartComplete()
   @HttpCode(HttpStatus.OK)
+  @AuditAction({
+    action: AuditActionEnum.FILE_UPLOAD,
+    targetType: TargetType.FILE,
+    targetIdParam: 'fileId',
+    targetNameParam: 'name',
+  })
   async complete(
     @Param('sessionId') sessionId: string,
     @Body() body?: CompleteRequestBody,
   ): Promise<CompleteMultipartResponse> {
     const userId = RequestContext.getUserId();
+    this.logger.log(
+      `멀티파트 업로드 완료 요청: sessionId=${sessionId}, userId=${userId}`,
+    );
     return this.multipartUploadService.complete({
       sessionId,
       parts: body?.parts,
@@ -148,6 +170,9 @@ export class MultipartController {
   async abort(
     @Param('sessionId') sessionId: string,
   ): Promise<AbortSessionResponse> {
+    this.logger.log(
+      `멀티파트 업로드 취소 요청: sessionId=${sessionId}, userId=${RequestContext.getUserId()}`,
+    );
     return this.multipartUploadService.abort(sessionId);
   }
 }

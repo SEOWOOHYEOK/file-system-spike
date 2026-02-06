@@ -29,7 +29,7 @@ import type {
   QueueStats,
   ProcessorOptions,
   JobsByStatusResult,
-} from '../job-queue.port';
+} from '../../../domain/queue/ports/job-queue.port';
 
 /**
  * 저장되는 작업 파일 구조

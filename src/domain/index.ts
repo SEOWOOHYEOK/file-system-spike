@@ -11,6 +11,8 @@ export * from './folder';
 // 휴지통 도메인
 export * from './trash';
 
+// 큐 도메인
+export * from './queue';
 
 // 도메인 모듈
 export * from './domain.module';

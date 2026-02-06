@@ -13,14 +13,11 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 
 import {
-  FILE_STORAGE_OBJECT_REPOSITORY,
-} from '../../domain/storage';
-import {
   CACHE_STORAGE_PORT,
 } from '../../domain/storage/ports/cache-storage.port';
 import type { CacheDetailedStats } from '../../domain/storage/file/repositories/file-storage-object.repository.interface';
+import { FileCacheStorageDomainService } from '../../domain/storage/file/service/file-cache-storage-domain.service';
 
-import type { IFileStorageObjectRepository } from '../../domain/storage';
 import type { ICacheStoragePort } from '../../domain/storage/ports/cache-storage.port';
 
 /**
@@ -61,8 +58,7 @@ export class CacheEvictionWorker {
 
   constructor(
     private readonly configService: ConfigService,
-    @Inject(FILE_STORAGE_OBJECT_REPOSITORY)
-    private readonly fileStorageObjectRepository: IFileStorageObjectRepository,
+    private readonly fileCacheStorageDomainService: FileCacheStorageDomainService,
     @Inject(CACHE_STORAGE_PORT)
     private readonly cacheStorage: ICacheStoragePort,
   ) {
@@ -102,7 +98,7 @@ export class CacheEvictionWorker {
   async runEviction(): Promise<EvictionResult> {
     // 중복 실행 방지
     if (this.isRunning) {
-      this.logger.warn('Eviction already in progress, skipping...');
+      this.logger.warn('캐시 정리가 이미 진행 중, 건너뜀...');
       return { evictedCount: 0, freedBytes: 0, skippedCount: 0, errorCount: 0 };
     }
 
@@ -110,21 +106,21 @@ export class CacheEvictionWorker {
     const startTime = Date.now();
 
     try {
-      this.logger.log('Starting cache eviction check...');
+      this.logger.log('캐시 정리 점검 시작...');
 
       // 1. 현재 캐시 사용량 확인
       const currentUsage = await this.getCacheUsage();
       const usagePercent = (currentUsage / this.maxSizeBytes) * 100;
 
       this.logger.log(
-        `Cache usage: ${this.formatBytes(currentUsage)} / ${this.formatBytes(this.maxSizeBytes)} ` +
+        `캐시 사용량: ${this.formatBytes(currentUsage)} / ${this.formatBytes(this.maxSizeBytes)} ` +
         `(${usagePercent.toFixed(1)}%)`,
       );
 
       // 2. 임계값 미만이면 종료
       if (usagePercent < this.thresholdPercent) {
         this.logger.log(
-          `Usage ${usagePercent.toFixed(1)}% is below threshold ${this.thresholdPercent}%, no eviction needed.`,
+          `사용률 ${usagePercent.toFixed(1)}%가 임계값 ${this.thresholdPercent}% 미만, 정리 불필요.`,
         );
         return { evictedCount: 0, freedBytes: 0, skippedCount: 0, errorCount: 0 };
       }
@@ -134,8 +130,7 @@ export class CacheEvictionWorker {
       const bytesToFree = currentUsage - targetBytes;
 
       this.logger.log(
-        `Eviction required: need to free ${this.formatBytes(bytesToFree)} ` +
-        `(target: ${this.targetPercent}%)`,
+        `정리 필요: ${this.formatBytes(bytesToFree)} 해제 필요 (목표: ${this.targetPercent}%)`,
       );
 
       // 4. Eviction 실행
@@ -143,14 +138,12 @@ export class CacheEvictionWorker {
 
       const duration = Date.now() - startTime;
       this.logger.log(
-        `Eviction completed in ${duration}ms: ` +
-        `evicted=${result.evictedCount}, freed=${this.formatBytes(result.freedBytes)}, ` +
-        `skipped=${result.skippedCount}, errors=${result.errorCount}`,
+        `캐시 정리 완료 (${duration}ms): 제거=${result.evictedCount}, 해제=${this.formatBytes(result.freedBytes)}, 건너뜀=${result.skippedCount}, 오류=${result.errorCount}`,
       );
 
       return result;
     } catch (error) {
-      this.logger.error('Eviction failed', error);
+      this.logger.error('캐시 정리 실패', error);
       return { evictedCount: 0, freedBytes: 0, skippedCount: 0, errorCount: 1 };
     } finally {
       this.isRunning = false;
@@ -165,7 +158,7 @@ export class CacheEvictionWorker {
       const stats = await this.calculateDirectoryStats(this.cachePath);
       return stats.totalBytes;
     } catch (error) {
-      this.logger.error(`Failed to calculate cache size: ${this.cachePath}`, error);
+      this.logger.error(`캐시 크기 계산 실패: ${this.cachePath}`, error);
       return 0;
     }
   }
@@ -185,10 +178,11 @@ export class CacheEvictionWorker {
   }> {
     // DB 통계와 디스크 통계를 병렬 조회
     const [dbStats, diskStats] = await Promise.all([
-      this.fileStorageObjectRepository.getCacheDetailedStats(),
+      this.fileCacheStorageDomainService.캐시상세통계조회(),
       this.getDiskStats(),
     ]);
 
+  
     const currentBytes = diskStats.totalBytes;
 
     return {
@@ -209,7 +203,7 @@ export class CacheEvictionWorker {
     try {
       return await this.calculateDirectoryStats(this.cachePath);
     } catch (error) {
-      this.logger.error(`Failed to calculate disk stats: ${this.cachePath}`, error);
+      this.logger.error(`디스크 통계 계산 실패: ${this.cachePath}`, error);
       return { fileCount: 0, totalBytes: 0 };
     }
   }
@@ -225,12 +219,12 @@ export class CacheEvictionWorker {
 
     while (freedBytes < bytesToFree) {
       // LRU 기준으로 제거 대상 조회
-      const candidates = await this.fileStorageObjectRepository.findEvictionCandidatesLRU(
+      const candidates = await this.fileCacheStorageDomainService.LRU제거후보조회(
         this.batchSize,
       );
 
       if (candidates.length === 0) {
-        this.logger.warn('No more eviction candidates available');
+        this.logger.warn('더 이상 정리 대상 없음');
         break;
       }
 
@@ -241,7 +235,7 @@ export class CacheEvictionWorker {
 
         try {
           // Atomic Mark: AVAILABLE -> EVICTING
-          const affected = await this.fileStorageObjectRepository.tryMarkEvicting(
+          const affected = await this.fileCacheStorageDomainService.제거중상태설정(
             candidate.fileId,
           );
 
@@ -249,7 +243,7 @@ export class CacheEvictionWorker {
             // 이미 lease 중이거나 상태가 변경됨
             skippedCount++;
             this.logger.debug(
-              `Skipped file ${candidate.fileId}: already in use or status changed`,
+              `파일 건너뜀 ${candidate.fileId}: 사용 중이거나 상태 변경됨`,
             );
             continue;
           }
@@ -260,7 +254,7 @@ export class CacheEvictionWorker {
             fileSize = await this.cacheStorage.파일크기조회(candidate.objectKey);
           } catch {
             // 파일이 없으면 0으로 처리
-            this.logger.debug(`File size unknown for ${candidate.objectKey}`);
+            this.logger.debug(`파일 크기 알 수 없음: ${candidate.objectKey}`);
           }
 
           // 캐시 파일 삭제
@@ -268,24 +262,24 @@ export class CacheEvictionWorker {
             await this.cacheStorage.파일삭제(candidate.objectKey);
           } catch (deleteError) {
             this.logger.warn(
-              `Failed to delete cache file: ${candidate.objectKey}`,
+              `캐시 파일 삭제 실패: ${candidate.objectKey}`,
               deleteError,
             );
             // 파일 삭제 실패해도 DB 레코드는 삭제 (orphan 정리)
           }
 
           // DB 레코드 삭제
-          await this.fileStorageObjectRepository.deleteCacheRecord(candidate.fileId);
+          await this.fileCacheStorageDomainService.캐시레코드삭제(candidate.fileId);
 
           freedBytes += fileSize;
           evictedCount++;
 
           this.logger.debug(
-            `Evicted file: ${candidate.fileId} (${this.formatBytes(fileSize)})`,
+            `파일 제거 완료: ${candidate.fileId} (${this.formatBytes(fileSize)})`,
           );
         } catch (error) {
           errorCount++;
-          this.logger.error(`Failed to evict file ${candidate.fileId}`, error);
+          this.logger.error(`파일 제거 실패: ${candidate.fileId}`, error);
         }
       }
     }
@@ -324,7 +318,7 @@ export class CacheEvictionWorker {
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        this.logger.warn(`Failed to read directory: ${dirPath}`);
+        this.logger.warn(`디렉토리 읽기 실패: ${dirPath}`);
       }
     }
 

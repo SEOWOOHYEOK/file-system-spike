@@ -4,7 +4,8 @@
  * ============================================================
  *
  * 🎯 테스트 대상:
- *   - NasSyncWorker
+ *   - NasSyncWorker (라우터 역할)
+ *   - 개별 핸들러들은 각자의 spec에서 테스트
  *
  * 📋 비즈니스 맥락:
  *   - NAS 파일 동기화 작업 처리
@@ -25,16 +26,35 @@ jest.mock('uuid', () => ({
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { NasSyncWorker, NAS_FILE_SYNC_QUEUE_PREFIX } from './nas-file-sync.worker';
-import { JOB_QUEUE_PORT } from '../../infra/queue/job-queue.port';
-import { DISTRIBUTED_LOCK_PORT } from '../../infra/queue/distributed-lock.port';
+import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
+import { DISTRIBUTED_LOCK_PORT } from '../../domain/queue/ports/distributed-lock.port';
 import { CACHE_STORAGE_PORT } from '../../domain/storage/ports/cache-storage.port';
 import { NAS_STORAGE_PORT } from '../../domain/storage/ports/nas-storage.port';
+import { PROGRESS_STORAGE_PORT } from '../../domain/queue/ports/progress-storage.port';
 import { FILE_REPOSITORY, StorageType, AvailabilityStatus } from '../../domain/file';
 import { FILE_STORAGE_OBJECT_REPOSITORY } from '../../domain/storage/file/repositories/file-storage-object.repository.interface';
 import { FOLDER_REPOSITORY } from '../../domain/folder';
 import { TRASH_REPOSITORY } from '../../domain/trash';
 import { SYNC_EVENT_REPOSITORY } from '../../domain/sync-event/repositories/sync-event.repository.interface';
+import { TRASH_QUERY_SERVICE } from '../../domain/trash/repositories/trash.repository.interface';
 import { SyncEventEntity, SyncEventStatus, SyncEventType, SyncEventTargetType } from '../../domain/sync-event/entities/sync-event.entity';
+
+// Domain Services (needed by handlers)
+import { FileDomainService } from '../../domain/file/service/file-domain.service';
+import { FileNasStorageDomainService } from '../../domain/storage/file/service/file-nas-storage-domain.service';
+import { FileCacheStorageDomainService } from '../../domain/storage/file/service/file-cache-storage-domain.service';
+import { FolderDomainService } from '../../domain/folder/service/folder-domain.service';
+import { TrashDomainService } from '../../domain/trash/service/trash-domain.service';
+import { SyncEventDomainService } from '../../domain/sync-event/service/sync-event-domain.service';
+
+// Handlers & Helpers
+import { SyncEventLifecycleHelper } from './shared/sync-event-lifecycle.helper';
+import { FileUploadHandler } from './handlers/file-upload.handler';
+import { FileRenameHandler } from './handlers/file-rename.handler';
+import { FileMoveHandler } from './handlers/file-move.handler';
+import { FileTrashHandler } from './handlers/file-trash.handler';
+import { FileRestoreHandler } from './handlers/file-restore.handler';
+import { FilePurgeHandler } from './handlers/file-purge.handler';
 
 describe('NasSyncWorker', () => {
   const mockJobQueue = {
@@ -52,6 +72,12 @@ describe('NasSyncWorker', () => {
   const mockNasStorage = {
     파일스트림쓰기: jest.fn(),
     파일이동: jest.fn(),
+  };
+  const mockProgressStorage = {
+    set: jest.fn(),
+    update: jest.fn(),
+    get: jest.fn(),
+    delete: jest.fn(),
   };
   const mockFileRepository = {
     findById: jest.fn(),
@@ -73,6 +99,10 @@ describe('NasSyncWorker', () => {
     save: jest.fn(),
     updateStatus: jest.fn(),
   };
+  const mockTrashQueryService = {
+    findByTargetId: jest.fn(),
+    findByOriginalFolderId: jest.fn(),
+  };
 
   let worker: NasSyncWorker;
 
@@ -80,15 +110,35 @@ describe('NasSyncWorker', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         NasSyncWorker,
+        // Shared helpers
+        SyncEventLifecycleHelper,
+        // Domain Services (real classes with mocked repositories)
+        FileDomainService,
+        FileNasStorageDomainService,
+        FileCacheStorageDomainService,
+        FolderDomainService,
+        TrashDomainService,
+        SyncEventDomainService,
+        // File action handlers
+        FileUploadHandler,
+        FileRenameHandler,
+        FileMoveHandler,
+        FileTrashHandler,
+        FileRestoreHandler,
+        FilePurgeHandler,
+        // Ports
         { provide: JOB_QUEUE_PORT, useValue: mockJobQueue },
         { provide: DISTRIBUTED_LOCK_PORT, useValue: mockDistributedLock },
         { provide: CACHE_STORAGE_PORT, useValue: mockCacheStorage },
         { provide: NAS_STORAGE_PORT, useValue: mockNasStorage },
+        { provide: PROGRESS_STORAGE_PORT, useValue: mockProgressStorage },
+        // Repositories (consumed by domain services)
         { provide: FILE_REPOSITORY, useValue: mockFileRepository },
         { provide: FILE_STORAGE_OBJECT_REPOSITORY, useValue: mockFileStorageObjectRepository },
         { provide: FOLDER_REPOSITORY, useValue: mockFolderRepository },
         { provide: TRASH_REPOSITORY, useValue: mockTrashRepository },
         { provide: SYNC_EVENT_REPOSITORY, useValue: mockSyncEventRepository },
+        { provide: TRASH_QUERY_SERVICE, useValue: mockTrashQueryService },
       ],
     }).compile();
 
@@ -197,7 +247,9 @@ describe('NasSyncWorker', () => {
         createdAt: new Date(),
       });
 
-      mockCacheStorage.파일스트림읽기.mockResolvedValue({});
+      // mock stream with pipe method
+      const mockStream = { pipe: jest.fn().mockReturnThis() };
+      mockCacheStorage.파일스트림읽기.mockResolvedValue(mockStream);
 
       await worker.onModuleInit();
       const fileSyncProcessor = mockJobQueue.processJobs.mock.calls[0][1];
@@ -331,6 +383,7 @@ describe('NasSyncWorker', () => {
         id: fileId,
         name: 'test.txt',
         permanentDelete: permanentDeleteMock,
+        isTrashed: jest.fn().mockReturnValue(false),
       };
 
       mockFileRepository.findById.mockResolvedValue(mockFile);
@@ -375,7 +428,7 @@ describe('NasSyncWorker', () => {
       // ═══════════════════════════════════════════════════════
       // 핵심: NAS 삭제 완료 후 permanentDelete() 호출
       expect(permanentDeleteMock).toHaveBeenCalled();
-      expect(mockFileRepository.save).toHaveBeenCalledWith(mockFile);
+      expect(mockFileRepository.save).toHaveBeenCalledWith(mockFile, undefined);
       expect(mockTrashRepository.delete).toHaveBeenCalledWith(trashMetadataId);
     });
 
@@ -407,6 +460,7 @@ describe('NasSyncWorker', () => {
         id: fileId,
         name: '333.txt',
         restore: jest.fn(),
+        isTrashed: jest.fn().mockReturnValue(true),
       };
       mockFileRepository.findById.mockResolvedValue(mockFile);
       mockFileRepository.save.mockResolvedValue(mockFile);
