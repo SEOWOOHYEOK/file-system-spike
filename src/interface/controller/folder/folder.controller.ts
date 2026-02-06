@@ -28,6 +28,10 @@ import {
   SearchQuery,
   SearchResponse,
 } from '../../../domain/folder';
+import {
+  SearchHistoryQuery,
+  SearchHistoryResponse,
+} from '../../../domain/search-history';
 import { RequestContext } from '../../../common/context/request-context';
 import {
   ApiFolderCreate,
@@ -37,6 +41,9 @@ import {
   ApiFolderMove,
   ApiFolderDelete,
   ApiFolderSearch,
+  ApiSearchHistory,
+  ApiDeleteSearchHistory,
+  ApiDeleteAllSearchHistory,
 } from './folder.swagger';
 import { AuditAction } from '../../../common/decorators';
 import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
@@ -92,13 +99,52 @@ export class FolderController {
   }
 
   /**
+   * GET /folders/search/history - 내 검색 내역 조회
+   */
+  @Get('search/history')
+  @ApiSearchHistory()
+  async getSearchHistory(
+    @Query() query: SearchHistoryQuery,
+  ): Promise<SearchHistoryResponse> {
+    const userId = RequestContext.getUserId() || 'unknown';
+    return this.searchService.getSearchHistory(
+      userId,
+      query.page ?? 1,
+      query.pageSize ?? 20,
+    );
+  }
+
+  /**
+   * DELETE /folders/search/history/:historyId - 검색 내역 단건 삭제
+   */
+  @Delete('search/history/:historyId')
+  @ApiDeleteSearchHistory()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async deleteSearchHistory(
+    @Param('historyId') historyId: string,
+  ): Promise<void> {
+    const userId = RequestContext.getUserId() || 'unknown';
+    return this.searchService.deleteSearchHistory(historyId, userId);
+  }
+
+  /**
+   * DELETE /folders/search/history - 전체 검색 내역 삭제
+   */
+  @Delete('search/history')
+  @ApiDeleteAllSearchHistory()
+  async deleteAllSearchHistory(): Promise<{ deletedCount: number }> {
+    const userId = RequestContext.getUserId() || 'unknown';
+    return this.searchService.deleteAllSearchHistory(userId);
+  }
+
+  /**
    * GET /folders/search - 파일/폴더 검색
    */
   @Get('search')
   @ApiFolderSearch()
-
   async search(@Query() query: SearchQuery): Promise<SearchResponse> {
-    return this.searchService.search(query);
+    const userId = RequestContext.getUserId();
+    return this.searchService.search(query, userId);
   }
 
   /**

@@ -607,3 +607,142 @@ export const ApiFolderSearch = () =>
     }),
     ApiResponse({ status: 400, description: '잘못된 검색 파라미터 (키워드 2자 미만 등)' }),
   );
+
+/**
+ * GET /folders/search/history - 내 검색 내역 조회
+ */
+export function ApiSearchHistory() {
+  return applyDecorators(
+    ApiBearerAuth(),
+    ApiOperation({
+      summary: '내 검색 내역 조회',
+      description: `**동작:**
+- 현재 로그인한 사용자의 검색 기록을 최신순으로 조회합니다.
+- 동일한 키워드/검색타입으로 재검색 시 기존 내역이 갱신됩니다.
+- 페이지네이션을 지원합니다.
+
+**테스트 케이스:**
+- 검색 내역이 있는 경우: 최신순 정렬된 내역 목록 반환
+- 검색 내역이 없는 경우: 빈 배열 반환
+- 페이지네이션: page, pageSize 파라미터 동작 확인`,
+    }),
+    ApiQuery({
+      name: 'page',
+      required: false,
+      type: Number,
+      description: '페이지 번호 (1부터 시작, 기본값: 1)',
+      example: 1,
+    }),
+    ApiQuery({
+      name: 'pageSize',
+      required: false,
+      type: Number,
+      description: '페이지 크기 (기본값: 20, 최대: 50)',
+      example: 20,
+    }),
+    ApiResponse({
+      status: 200,
+      description: '검색 내역 조회 성공',
+      schema: {
+        type: 'object',
+        properties: {
+          items: {
+            type: 'array',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', example: 'uuid', description: '검색 내역 ID' },
+                keyword: { type: 'string', example: '회의록', description: '검색 키워드' },
+                searchType: {
+                  type: 'string',
+                  enum: ['all', 'file', 'folder'],
+                  example: 'all',
+                  description: '검색 대상 타입',
+                },
+                filters: {
+                  type: 'object',
+                  nullable: true,
+                  example: { mimeType: 'application/pdf' },
+                  description: '적용된 필터 (없으면 null)',
+                },
+                resultCount: { type: 'number', example: 15, description: '검색 결과 수' },
+                searchedAt: {
+                  type: 'string',
+                  example: '2024-01-20T09:00:00.000Z',
+                  description: '검색 일시',
+                },
+              },
+            },
+          },
+          pagination: {
+            type: 'object',
+            properties: {
+              page: { type: 'number', example: 1 },
+              pageSize: { type: 'number', example: 20 },
+              totalItems: { type: 'number', example: 42 },
+              totalPages: { type: 'number', example: 3 },
+              hasNext: { type: 'boolean', example: true },
+              hasPrev: { type: 'boolean', example: false },
+            },
+          },
+        },
+      },
+    }),
+  );
+}
+
+/**
+ * DELETE /folders/search/history/:historyId - 검색 내역 단건 삭제
+ */
+export function ApiDeleteSearchHistory() {
+  return applyDecorators(
+    ApiBearerAuth(),
+    ApiOperation({
+      summary: '검색 내역 단건 삭제',
+      description: `**동작:**
+- 지정한 검색 내역 1건을 삭제합니다.
+- 본인의 검색 내역만 삭제 가능합니다.
+
+**테스트 케이스:**
+- 정상 삭제: 204 응답
+- 존재하지 않는 내역: 404 에러
+- 다른 사용자의 내역: 404 에러 (접근 불가)`,
+    }),
+    ApiParam({
+      name: 'historyId',
+      description: '검색 내역 ID',
+      type: 'string',
+      format: 'uuid',
+    }),
+    ApiResponse({ status: 204, description: '삭제 성공' }),
+    ApiResponse({ status: 404, description: '검색 내역을 찾을 수 없음' }),
+  );
+}
+
+/**
+ * DELETE /folders/search/history - 전체 검색 내역 삭제
+ */
+export function ApiDeleteAllSearchHistory() {
+  return applyDecorators(
+    ApiBearerAuth(),
+    ApiOperation({
+      summary: '전체 검색 내역 삭제',
+      description: `**동작:**
+- 현재 로그인한 사용자의 모든 검색 내역을 삭제합니다.
+
+**테스트 케이스:**
+- 검색 내역이 있는 경우: 삭제된 건수 반환
+- 검색 내역이 없는 경우: deletedCount = 0 반환`,
+    }),
+    ApiResponse({
+      status: 200,
+      description: '전체 삭제 성공',
+      schema: {
+        type: 'object',
+        properties: {
+          deletedCount: { type: 'number', example: 15, description: '삭제된 검색 내역 수' },
+        },
+      },
+    }),
+  );
+}

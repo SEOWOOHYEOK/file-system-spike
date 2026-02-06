@@ -18,3 +18,6 @@ export * from './file-history.orm-entity';
 
 // Favorite
 export * from './favorite.orm-entity';
+
+// Search History
+export * from './search-history.orm-entity';

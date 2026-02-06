@@ -76,6 +76,11 @@ import {
 } from '../../domain/favorite/repositories/favorite.repository.interface';
 import { FavoriteOrmEntity } from './entities/favorite.orm-entity';
 import { FavoriteRepository } from './repositories/favorite.repository';
+import { SearchHistoryOrmEntity } from './entities/search-history.orm-entity';
+import { SearchHistoryRepository } from './repositories/search-history.repository';
+import {
+  SEARCH_HISTORY_REPOSITORY,
+} from '../../domain/search-history/repositories/search-history.repository.interface';
 
 /**
  * TypeORM forFeature에 등록할 엔티티 목록
@@ -95,6 +100,7 @@ const entities = [
   FileHistoryOrmEntity,
   UserOrmEntity,
   FavoriteOrmEntity,
+  SearchHistoryOrmEntity,
 ];
 
 @Module({
@@ -173,6 +179,11 @@ const entities = [
       provide: FAVORITE_REPOSITORY,
       useClass: FavoriteRepository,
     },
+    // Search History Repository
+    {
+      provide: SEARCH_HISTORY_REPOSITORY,
+      useClass: SearchHistoryRepository,
+    },
   ],
   exports: [
     FILE_REPOSITORY,
@@ -189,6 +200,7 @@ const entities = [
     FILE_HISTORY_REPOSITORY,
     USER_REPOSITORY,
     FAVORITE_REPOSITORY,
+    SEARCH_HISTORY_REPOSITORY,
   ],
 })
 export class RepositoryModule { }

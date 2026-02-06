@@ -14,3 +14,4 @@ export * from './security-log.repository';
 export * from './file-history.repository';
 export * from './user.repository';
 export * from './favorite.repository';
+export * from './search-history.repository';

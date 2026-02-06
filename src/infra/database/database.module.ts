@@ -33,6 +33,9 @@ import { FileHistoryOrmEntity } from './entities/file-history.orm-entity';
 // Favorite Entity
 import { FavoriteOrmEntity } from './entities/favorite.orm-entity';
 
+// Search History Entity
+import { SearchHistoryOrmEntity } from './entities/search-history.orm-entity';
+
 // Organization Entities (조직 관련 엔티티)
 import {
   Rank,
@@ -63,6 +66,8 @@ const entities = [
   FileHistoryOrmEntity,
   // Favorite 엔티티
   FavoriteOrmEntity,
+  // Search History 엔티티
+  SearchHistoryOrmEntity,
   // Organization 관련 엔티티
   Rank,
   Position,

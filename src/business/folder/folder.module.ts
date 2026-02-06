@@ -7,6 +7,7 @@ import { FileDomainModule } from '../../domain/file/file.module';
 import { TrashDomainModule } from '../../domain/trash/trash.module';
 import { SyncEventDomainModule } from '../../domain/sync-event/sync-event.module';
 import { StorageDomainModule } from '../../domain/storage/storage.module';
+import { SearchHistoryDomainModule } from '../../domain/search-history/search-history.module';
 import { AuditModule } from '../audit/audit.module';
 import { FolderQueryService } from './folder-query.service';
 import { FolderCommandService } from './folder-command.service';
@@ -27,6 +28,7 @@ import { SearchService } from './search.service';
     TrashDomainModule,
     SyncEventDomainModule,
     StorageDomainModule,
+    SearchHistoryDomainModule,
     AuditModule,
   ],
   providers: [FolderQueryService, FolderCommandService, SearchService],

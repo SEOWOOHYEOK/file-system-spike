@@ -1,11 +1,11 @@
 /**
  * 검색 비즈니스 서비스
- * 파일/폴더 통합 검색 기능 제공
+ * 파일/폴더 통합 검색 기능 및 검색 내역 관리 제공
  * 
  * DDD 규칙: Business Layer는 Repository를 직접 주입받지 않고
  * Domain Service를 통해 도메인 로직을 실행합니다.
  */
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import {
   SearchQuery,
   SearchResponse,
@@ -20,18 +20,27 @@ import {
 import { createPaginationInfo } from '../../common/types/pagination';
 import { FileDomainService } from '../../domain/file/service/file-domain.service';
 import type { FileSearchFilterOptions } from '../../domain/file/repositories/file.repository.interface';
+import {
+  SearchHistoryDomainService,
+  SearchHistoryType,
+  SearchHistoryItem,
+  SearchHistoryResponse,
+} from '../../domain/search-history';
 
 @Injectable()
 export class SearchService {
+  private readonly logger = new Logger(SearchService.name);
+
   constructor(
     private readonly folderDomainService: FolderDomainService,
     private readonly fileDomainService: FileDomainService,
+    private readonly searchHistoryDomainService: SearchHistoryDomainService,
   ) {}
 
   /**
    * 파일/폴더 통합 검색
    */
-  async search(query: SearchQuery): Promise<SearchResponse> {
+  async search(query: SearchQuery, userId?: string): Promise<SearchResponse> {
     const {
       keyword,
       type,
@@ -59,17 +68,116 @@ export class SearchService {
     const hasFileFilters = mimeType || createdBy || createdAtFrom || createdAtTo;
 
     // 검색 타입에 따른 분기 처리
+    let response: SearchResponse;
+
     if (type === SearchResultType.FOLDER) {
       // 폴더 검색 시 파일 전용 필터는 무시
-      return this.searchFoldersOnly(keyword, sortBy, sortOrder, page, pageSize, offset);
+      response = await this.searchFoldersOnly(keyword, sortBy, sortOrder, page, pageSize, offset);
+    } else if (type === SearchResultType.FILE) {
+      response = await this.searchFilesOnly(keyword, sortBy, sortOrder, page, pageSize, offset, fileFilterOptions);
+    } else {
+      // 전체 검색 (폴더 + 파일)
+      response = await this.searchAll(keyword, sortBy, sortOrder, page, pageSize, offset, hasFileFilters ? fileFilterOptions : undefined);
     }
 
-    if (type === SearchResultType.FILE) {
-      return this.searchFilesOnly(keyword, sortBy, sortOrder, page, pageSize, offset, fileFilterOptions);
+    // 검색 내역 비동기 기록 (실패해도 검색 결과에 영향 없음)
+    if (userId) {
+      this.recordSearchHistory(userId, query, response).catch((error) => {
+        this.logger.warn(`검색 내역 기록 실패: ${error.message}`);
+      });
     }
 
-    // 전체 검색 (폴더 + 파일)
-    return this.searchAll(keyword, sortBy, sortOrder, page, pageSize, offset, hasFileFilters ? fileFilterOptions : undefined);
+    return response;
+  }
+
+  /**
+   * 검색 내역 비동기 기록
+   */
+  private async recordSearchHistory(
+    userId: string,
+    query: SearchQuery,
+    response: SearchResponse,
+  ): Promise<void> {
+    const searchType = this.mapSearchType(query.type);
+
+    // 필터 정보 구성 (키워드 외 추가 필터가 있는 경우만)
+    const filters: Record<string, any> = {};
+    if (query.mimeType) filters.mimeType = query.mimeType;
+    if (query.createdBy) filters.createdBy = query.createdBy;
+    if (query.createdAtFrom) filters.createdAtFrom = query.createdAtFrom;
+    if (query.createdAtTo) filters.createdAtTo = query.createdAtTo;
+
+    const hasFilters = Object.keys(filters).length > 0;
+
+    await this.searchHistoryDomainService.검색내역기록(
+      userId,
+      query.keyword,
+      searchType,
+      response.pagination.totalItems,
+      hasFilters ? filters : undefined,
+    );
+  }
+
+  /**
+   * SearchResultType → SearchHistoryType 변환
+   */
+  private mapSearchType(type?: SearchResultType): SearchHistoryType {
+    switch (type) {
+      case SearchResultType.FILE:
+        return SearchHistoryType.FILE;
+      case SearchResultType.FOLDER:
+        return SearchHistoryType.FOLDER;
+      default:
+        return SearchHistoryType.ALL;
+    }
+  }
+
+  /**
+   * 내 검색 내역 조회
+   */
+  async getSearchHistory(
+    userId: string,
+    page: number = 1,
+    pageSize: number = 20,
+  ): Promise<SearchHistoryResponse> {
+    const offset = (page - 1) * pageSize;
+    const { items, total } = await this.searchHistoryDomainService.검색내역조회(
+      userId,
+      pageSize,
+      offset,
+    );
+
+    const historyItems: SearchHistoryItem[] = items.map((item) => ({
+      id: item.id,
+      keyword: item.keyword,
+      searchType: item.searchType,
+      filters: item.filters,
+      resultCount: item.resultCount,
+      searchedAt: item.searchedAt.toISOString(),
+    }));
+
+    return {
+      items: historyItems,
+      pagination: createPaginationInfo(page, pageSize, total),
+    };
+  }
+
+  /**
+   * 검색 내역 단건 삭제
+   */
+  async deleteSearchHistory(id: string, userId: string): Promise<void> {
+    const deleted = await this.searchHistoryDomainService.검색내역삭제(id, userId);
+    if (!deleted) {
+      throw new NotFoundException(`검색 내역을 찾을 수 없습니다. (id: ${id})`);
+    }
+  }
+
+  /**
+   * 전체 검색 내역 삭제
+   */
+  async deleteAllSearchHistory(userId: string): Promise<{ deletedCount: number }> {
+    const deletedCount = await this.searchHistoryDomainService.전체검색내역삭제(userId);
+    return { deletedCount };
   }
 
   /**
