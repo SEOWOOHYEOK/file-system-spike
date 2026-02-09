@@ -16,3 +16,4 @@ export * from './system-event.repository';
 export * from './user.repository';
 export * from './favorite.repository';
 export * from './search-history.repository';
+export * from './error-message.repository';

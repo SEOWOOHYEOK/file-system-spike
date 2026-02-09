@@ -22,6 +22,7 @@ import {
   FileHistoryOrmEntity,
   SystemEventOrmEntity,
   UserOrmEntity,
+  ErrorMessageOrmEntity,
 } from './entities';
 
 // Repository Implementations
@@ -39,6 +40,7 @@ import {
   FileHistoryRepository,
   SystemEventRepository,
   UserRepository,
+  ErrorMessageRepository,
 } from './repositories';
 import { SyncEventRepository } from './repositories/sync-event.repository';
 
@@ -96,6 +98,9 @@ import {
 import {
   NAS_HEALTH_HISTORY_REPOSITORY,
 } from '../../domain/nas-health-history/repositories/nas-health-history.repository.interface';
+import {
+  ERROR_MESSAGE_REPOSITORY,
+} from '../../domain/error-message/repositories/error-message.repository.interface';
 
 /**
  * TypeORM forFeature에 등록할 엔티티 목록
@@ -119,6 +124,7 @@ const entities = [
   SearchHistoryOrmEntity,
   SystemConfigOrmEntity,
   NasHealthHistoryOrmEntity,
+  ErrorMessageOrmEntity,
 ];
 
 @Module({
@@ -217,6 +223,11 @@ const entities = [
       provide: NAS_HEALTH_HISTORY_REPOSITORY,
       useClass: NasHealthHistoryRepository,
     },
+    // Error Message Repository
+    {
+      provide: ERROR_MESSAGE_REPOSITORY,
+      useClass: ErrorMessageRepository,
+    },
   ],
   exports: [
     FILE_REPOSITORY,
@@ -237,6 +248,7 @@ const entities = [
     SEARCH_HISTORY_REPOSITORY,
     SYSTEM_CONFIG_REPOSITORY,
     NAS_HEALTH_HISTORY_REPOSITORY,
+    ERROR_MESSAGE_REPOSITORY,
   ],
 })
 export class RepositoryModule { }
