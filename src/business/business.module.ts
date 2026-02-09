@@ -8,6 +8,7 @@ import { AdminBusinessModule } from './admin/admin.module';
 import { RoleModule } from './role/role.module';
 import { UserModule } from './user/user.module';
 import { ExternalShareModule } from './external-share/external-share.module';
+import { ShareRequestModule } from './share-request/share-request.module';
 import { AuditModule } from './audit/audit.module';
 import { SyncEventBusinessModule } from './sync-event/sync-event.module';
 import { FavoriteBusinessModule } from './favorite/favorite.module';
@@ -37,6 +38,7 @@ const workerModules = appMode !== 'api'
     RoleModule,
     UserModule,
     ExternalShareModule,
+    ShareRequestModule,
     AuditModule,
     SyncEventBusinessModule,
     FavoriteBusinessModule,
@@ -50,6 +52,7 @@ const workerModules = appMode !== 'api'
     RoleModule,
     UserModule,
     ExternalShareModule,
+    ShareRequestModule,
     AuditModule,
     SyncEventBusinessModule,
     FavoriteBusinessModule,

@@ -7,6 +7,7 @@ import { AdminController } from './admin.controller';
 import { AuditLogController } from './audit-log.controller';
 import { RoleController } from './role/role.controller';
 import { ShareAdminController } from './share/share-admin.controller';
+import { ShareRequestAdminController } from './share-request/share-request-admin.controller';
 import { ExternalUserAdminController } from './external-user/external-user-admin.controller';
 import { UserAdminController } from './user/user-admin.controller';
 import { ObservabilityController } from './observability.controller';
@@ -47,6 +48,7 @@ import { RepositoryModule } from '../../../infra/database/repository.module';
     AuditLogController,
     RoleController,
     ShareAdminController,
+    ShareRequestAdminController,
     ExternalUserAdminController,
     UserAdminController,
     ObservabilityController,

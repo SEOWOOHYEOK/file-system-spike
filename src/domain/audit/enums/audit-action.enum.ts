@@ -120,3 +120,35 @@ export const AuditActionCategory: Record<AuditAction, ActionCategory> = {
   [AuditAction.FAVORITE_VIEW]: ActionCategory.USER,
   [AuditAction.ACTIVITY_VIEW]: ActionCategory.USER,
 };
+
+
+
+// {
+//   "id": "log_123",
+//   "occurredAt": "2025-02-09T09:30:19+09:00",
+
+//   "eventName": "파일 다운로드",
+//   "eventType": "FILE_OPERATION",
+//   "result": "SUCCESS",
+
+//   "actor": {
+//     "id": "u_9",
+//     "name": "김철수",
+//     "ip": "192.168.1.10",
+//     "userAgent": "Chrome/121.0"
+//   },
+
+//   "resource": {
+//     "type": "FILE",
+//     "id": "f_101",
+//     "name": "프로젝트_제안서_v2.pdf"
+//   },
+
+//   "api": {
+//     "method": "GET",
+//     "path": "/api/files/download",
+//     "statusCode": 200
+//   },
+
+//   "message": "사용자가 파일을 다운로드했습니다."
+// }
