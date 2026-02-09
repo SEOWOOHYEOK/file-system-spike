@@ -12,6 +12,7 @@ import { SSOModule } from './integrations/sso';
 import { OrganizationMigrationModule } from './integrations/migration';
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
 import { createWinstonConfig } from './common/logger/winston.config';
+import { ErrorMessageModule } from './common/error-message/error-message.module';
 
 /**
  * 루트 애플리케이션 모듈
@@ -49,6 +50,8 @@ const appMode = process.env.APP_MODE || 'all';
     OrganizationMigrationModule,
     // 인프라 레이어
     RepositoryModule,
+    // 공통 모듈
+    ErrorMessageModule,
     // 도메인 레이어
     DomainModule,
     // 비즈니스 레이어
