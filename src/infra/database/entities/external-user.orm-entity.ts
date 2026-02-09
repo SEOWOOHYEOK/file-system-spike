@@ -36,6 +36,9 @@ export class ExternalUserOrmEntity {
   @Column({ type: 'varchar', length: 50, nullable: true })
   phone: string | null;
 
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  department: string | null;
+
   @Column({ name: 'is_active', type: 'boolean', default: true })
   @Index()
   isActive: boolean;

@@ -17,6 +17,10 @@ export enum PermissionEnum {
   FILE_SHARE_READ = 'FILE_SHARE_READ',
   FILE_SHARE_DELETE = 'FILE_SHARE_DELETE',
 
+  // File Share Request Management (NEW)
+  FILE_SHARE_DIRECT = 'FILE_SHARE_DIRECT',     // 공유 직접 생성 (자동승인)
+  FILE_SHARE_REQUEST = 'FILE_SHARE_REQUEST',    // 공유 요청 (승인 필요)
+
   // Folder Management
   FOLDER_READ = 'FOLDER_READ',
   FOLDER_WRITE = 'FOLDER_WRITE',
@@ -41,6 +45,8 @@ export const PermissionDescriptions: Record<PermissionEnum, string> = {
   [PermissionEnum.FILE_SHARE_CREATE]: '파일 공유 생성',
   [PermissionEnum.FILE_SHARE_READ]: '파일 공유 조회',
   [PermissionEnum.FILE_SHARE_DELETE]: '파일 공유 삭제',
+  [PermissionEnum.FILE_SHARE_DIRECT]: '파일 공유 직접 생성 (자동승인)',
+  [PermissionEnum.FILE_SHARE_REQUEST]: '파일 공유 요청 (승인 필요)',
   [PermissionEnum.FOLDER_READ]: '폴더 조회',
   [PermissionEnum.FOLDER_WRITE]: '폴더 생성/수정',
   [PermissionEnum.FOLDER_DELETE]: '폴더 삭제',

@@ -12,6 +12,7 @@ export class PublicShare {
   fileId: string;
   ownerId: string;
   externalUserId: string;
+  internalUserId?: string;
 
   permissions: SharePermission[];
 
@@ -30,6 +31,7 @@ export class PublicShare {
 
   // 기간 제한
   expiresAt?: Date;
+  startAt?: Date;
 
   // 관리자 차단
   isBlocked: boolean;

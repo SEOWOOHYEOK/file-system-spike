@@ -26,9 +26,9 @@ export class PublicShareOrmEntity {
   @Index()
   ownerId: string;
 
-  @Column({ name: 'external_user_id', type: 'uuid' })
+  @Column({ name: 'external_user_id', type: 'uuid', nullable: true })
   @Index()
-  externalUserId: string;
+  externalUserId: string | null;
 
   @Column('simple-array')
   permissions: SharePermission[];
@@ -47,6 +47,13 @@ export class PublicShareOrmEntity {
 
   @Column({ name: 'expires_at', type: 'timestamp', nullable: true })
   expiresAt: Date | null;
+
+  @Column({ name: 'start_at', type: 'timestamp', nullable: true })
+  startAt: Date | null;
+
+  @Column({ name: 'internal_user_id', type: 'uuid', nullable: true })
+  @Index()
+  internalUserId: string | null;
 
   @Column({ name: 'is_blocked', type: 'boolean', default: false })
   @Index()

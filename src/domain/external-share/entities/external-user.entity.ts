@@ -17,6 +17,7 @@ export class ExternalUser {
   email: string;
   company?: string;
   phone?: string;
+  department?: string;
 
   // 상태
   isActive: boolean;
