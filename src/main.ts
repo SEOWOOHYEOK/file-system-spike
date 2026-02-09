@@ -11,6 +11,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { AppModule } from './app.module';
 import { Logger } from '@nestjs/common';
+import { GlobalExceptionFilter } from './common/exceptions/global-exception.filter';
+import { ErrorMessageService } from './common/error-message/error-message.service';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -38,6 +40,11 @@ async function bootstrap() {
       // forbidNonWhitelisted: false, // 정의되지 않은 속성 허용 (경고 없음)
     }),
   );
+
+  // 전역 예외 필터 등록
+  const errorMessageService = app.get(ErrorMessageService);
+  const winstonLogger = app.get(WINSTON_MODULE_NEST_PROVIDER);
+  app.useGlobalFilters(new GlobalExceptionFilter(errorMessageService, winstonLogger));
 
   // Swagger 설정
   const config = new DocumentBuilder()
