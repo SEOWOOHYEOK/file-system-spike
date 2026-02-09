@@ -193,4 +193,19 @@ export class SeaweedFSCacheAdapter implements ICacheStoragePort {
     const contentLength = response.headers.get('Content-Length');
     return contentLength ? parseInt(contentLength, 10) : 0;
   }
+
+  async 디렉토리삭제(dirKey: string): Promise<void> {
+    // SeaweedFS Filer: 디렉토리 DELETE 시 recursive=true 파라미터로 하위 포함 삭제
+    const url = `${this.getFilerPath(dirKey)}?recursive=true`;
+
+    const response = await fetch(url, {
+      method: 'DELETE',
+    });
+
+    if (!response.ok && response.status !== 404) {
+      throw new Error(`SeaweedFS directory delete failed: ${response.status} ${response.statusText}`);
+    }
+
+    this.logger.debug(`Directory deleted in SeaweedFS: ${dirKey}`);
+  }
 }

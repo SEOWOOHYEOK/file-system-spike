@@ -604,7 +604,7 @@ export class MultipartUploadService {
     // 세션 취소 처리
     await this.uploadSessionDomainService.엔티티세션취소(session);
 
-    // 파트 파일 정리 (비동기)
+    // 파트 파일 + 세션 디렉토리 정리 (비동기)
     (async () => {
       for (const part of parts) {
         if (part.objectKey) {
@@ -614,6 +614,12 @@ export class MultipartUploadService {
             this.logger.error(`파트 삭제 실패: partNumber=${part.partNumber}, ${(err as Error).message}`);
           }
         }
+      }
+      // 세션 디렉토리 삭제 (cache/multipart/{sessionId}/)
+      try {
+        await this.cacheStorage.디렉토리삭제(`multipart/${sessionId}`);
+      } catch (err) {
+        this.logger.warn(`세션 디렉토리 삭제 실패: ${(err as Error).message}`);
       }
     })().catch((err) => {
       this.logger.error(`파트 파일 정리 실패: ${(err as Error).message}`, (err as Error).stack);

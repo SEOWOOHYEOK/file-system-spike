@@ -469,6 +469,14 @@ export class FileUploadHandler {
         }
       }
     }
+
+    // 3. 세션 디렉토리 삭제 (cache/multipart/{sessionId}/)
+    try {
+      await this.cacheStorage.디렉토리삭제(`multipart/${sessionId}`);
+    } catch (e) {
+      this.logger.warn(`세션 디렉토리 삭제 실패: ${(e as Error).message}`);
+    }
+
     this.logger.debug(`파트 파일 정리 완료: ${sessionId} (${parts.length}개)`);
   }
 }

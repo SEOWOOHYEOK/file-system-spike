@@ -76,6 +76,13 @@ export interface ICacheStoragePort {
    * @returns 파일 크기 (bytes)
    */
   파일크기조회(objectKey: string): Promise<number>;
+
+  /**
+   * 디렉토리 삭제 (비어있는 디렉토리 또는 하위 포함 삭제)
+   * 디렉토리가 존재하지 않아도 에러를 발생시키지 않음
+   * @param dirKey - 디렉토리 경로/키
+   */
+  디렉토리삭제(dirKey: string): Promise<void>;
 }
 
 /**

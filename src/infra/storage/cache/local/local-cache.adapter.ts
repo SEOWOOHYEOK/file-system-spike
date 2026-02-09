@@ -178,4 +178,16 @@ export class LocalCacheAdapter implements ICacheStoragePort {
     const stats = await fs.stat(filePath);
     return stats.size;
   }
+
+  async 디렉토리삭제(dirKey: string): Promise<void> {
+    const dirPath = this.getFullPath(dirKey);
+    try {
+      await fs.rm(dirPath, { recursive: true, force: true });
+      this.logger.debug(`Directory deleted: ${dirKey}`);
+    } catch (error: any) {
+      if (error.code !== 'ENOENT') {
+        throw error;
+      }
+    }
+  }
 }

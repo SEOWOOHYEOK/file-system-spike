@@ -113,6 +113,7 @@ export class FolderController {
       query.pageSize ?? 20,
     );
   }
+  
 
   /**
    * DELETE /folders/search/history/:historyId - 검색 내역 단건 삭제

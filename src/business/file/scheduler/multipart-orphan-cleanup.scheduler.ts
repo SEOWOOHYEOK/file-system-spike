@@ -284,6 +284,13 @@ export class MultipartOrphanCleanupScheduler {
           this.logger.warn(`Failed to delete part file: ${part.objectKey}`, error);
         }
       }
+
+      // 세션 디렉토리 삭제 (cache/multipart/{sessionId}/)
+      try {
+        await this.cacheStorage.디렉토리삭제(`multipart/${sessionId}`);
+      } catch {
+        // 디렉토리 삭제 실패는 무시
+      }
     } catch (error) {
       errorCount++;
       this.logger.error(`Failed to query parts for session ${sessionId}:`, error);
