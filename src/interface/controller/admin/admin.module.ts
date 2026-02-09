@@ -12,6 +12,7 @@ import { ExternalUserAdminController } from './external-user/external-user-admin
 import { UserAdminController } from './user/user-admin.controller';
 import { ObservabilityController } from './observability.controller';
 import { TimelineAdminController } from './timeline/timeline-admin.controller';
+import { ErrorMessageAdminController } from './error-message/error-message-admin.controller';
 
 // 비즈니스 모듈
 import { AuditModule } from '../../../business/audit/audit.module';
@@ -54,6 +55,7 @@ import { RepositoryModule } from '../../../infra/database/repository.module';
     UserAdminController,
     ObservabilityController,
     TimelineAdminController,
+    ErrorMessageAdminController,
   ],
 })
 export class AdminModule {}
