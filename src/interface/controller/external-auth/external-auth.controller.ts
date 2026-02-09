@@ -9,8 +9,11 @@ import {
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import Request from 'express';
 import { ExternalAuthService } from '../../../business/external-share/external-auth.service';
-import { ExternalUser } from '../../../common/decorators/external-user.decorator';
+import { User } from '../../../common/decorators/user.decorator';
 import { ExternalJwtAuthGuard } from '../../../common/guards';
+import { AuditAction } from '../../../common/decorators';
+import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
+import { TargetType } from '../../../domain/audit/enums/common.enum';
 import {
   ApiExternalLogin,
   ApiExternalLogout,
@@ -74,8 +77,12 @@ export class ExternalAuthController {
   @ApiExternalLogout()
   @ApiBearerAuth()
   @UseGuards(ExternalJwtAuthGuard)
+  @AuditAction({
+    action: AuditActionEnum.LOGOUT,
+    targetType: TargetType.USER,
+  })
   async logout(
-    @ExternalUser() user: { id: string },
+    @User() user: { id: string },
     @Req() req: Request,
   ): Promise<ExternalLogoutResponseDto> {
     const accessToken = req['accessToken'] as string;
@@ -90,8 +97,12 @@ export class ExternalAuthController {
   @ApiChangePassword()
   @ApiBearerAuth()
   @UseGuards(ExternalJwtAuthGuard)
+  @AuditAction({
+    action: AuditActionEnum.PASSWORD_CHANGE,
+    targetType: TargetType.USER,
+  })
   async changePassword(
-    @ExternalUser() user: { id: string },
+    @User() user: { id: string },
     @Body() dto: ChangePasswordRequestDto,
     @Req() req: Request,
   ): Promise<ChangePasswordResponseDto> {

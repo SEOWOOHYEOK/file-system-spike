@@ -7,57 +7,48 @@ jest.mock('uuid', () => ({
 
 import { TrashService } from './trash.service';
 import {
-  TRASH_REPOSITORY,
-  TRASH_QUERY_SERVICE,
   RestorePreviewRequest,
   RestorePathStatus,
   RestoreExecuteRequest,
+  TrashDomainService,
 } from '../../domain/trash';
 import {
-  FILE_REPOSITORY,
   FileState,
 } from '../../domain/file';
 import {
-  FOLDER_REPOSITORY,
   FolderState,
 } from '../../domain/folder';
-import {
-  FILE_STORAGE_OBJECT_REPOSITORY,
-  FOLDER_STORAGE_OBJECT_REPOSITORY,
-} from '../../domain/storage';
+import { FileDomainService } from '../../domain/file/service/file-domain.service';
+import { FolderDomainService } from '../../domain/folder/service/folder-domain.service';
+import { SyncEventDomainService } from '../../domain/sync-event/service/sync-event-domain.service';
 import { JOB_QUEUE_PORT } from '../../domain/queue/ports/job-queue.port';
-import { SYNC_EVENT_REPOSITORY, SyncEventStatus } from '../../domain/sync-event';
+import { SyncEventStatus } from '../../domain/sync-event';
+import { FileHistoryService } from '../audit/file-history.service';
 
-// Mock Repositories
-const mockTrashRepository = {
-  findById: jest.fn(),
-  findAll: jest.fn(),
-  delete: jest.fn(),
+// Mock Domain Services
+const mockTrashDomainService = {
+  조회: jest.fn(),
+  상세목록조회: jest.fn(),
+  전체목록조회: jest.fn(),
+  삭제: jest.fn(),
 };
 
-const mockTrashQueryService = {
-  getTrashList: jest.fn(),
+const mockFileDomainService = {
+  조회: jest.fn(),
+  조건조회: jest.fn(),
+  중복확인: jest.fn(),
+  저장: jest.fn(),
 };
 
-const mockFileRepository = {
-  findById: jest.fn(),
-  existsByNameInFolder: jest.fn(),
-  findOne: jest.fn(),
-  save: jest.fn(),
+const mockFolderDomainService = {
+  조회: jest.fn(),
+  조건조회: jest.fn(),
+  저장: jest.fn(),
 };
 
-const mockFileStorageObjectRepository = {
-  findByFileIdAndType: jest.fn(),
-  save: jest.fn(),
-};
-
-const mockFolderRepository = {
-  findById: jest.fn(),
-  findOne: jest.fn(),
-};
-
-const mockFolderStorageObjectRepository = {
-  findByFolderId: jest.fn(),
+const mockSyncEventDomainService = {
+  아이디목록조회: jest.fn(),
+  저장: jest.fn(),
 };
 
 const mockJobQueuePort = {
@@ -65,14 +56,10 @@ const mockJobQueuePort = {
   getJob: jest.fn(),
 };
 
-const mockSyncEventRepository = {
-  findById: jest.fn(),
-  findByIds: jest.fn(),
-  findByFileId: jest.fn(),
-  findByStatus: jest.fn(),
-  save: jest.fn(),
-  delete: jest.fn(),
-  updateStatus: jest.fn(),
+const mockFileHistoryService = {
+  logFileCreated: jest.fn().mockResolvedValue(undefined),
+  logFileRestored: jest.fn().mockResolvedValue(undefined),
+  logFileDeleted: jest.fn().mockResolvedValue(undefined),
 };
 
 describe('TrashService', () => {
@@ -82,14 +69,12 @@ describe('TrashService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         TrashService,
-        { provide: TRASH_REPOSITORY, useValue: mockTrashRepository },
-        { provide: TRASH_QUERY_SERVICE, useValue: mockTrashQueryService },
-        { provide: FILE_REPOSITORY, useValue: mockFileRepository },
-        { provide: FILE_STORAGE_OBJECT_REPOSITORY, useValue: mockFileStorageObjectRepository },
-        { provide: FOLDER_REPOSITORY, useValue: mockFolderRepository },
-        { provide: FOLDER_STORAGE_OBJECT_REPOSITORY, useValue: mockFolderStorageObjectRepository },
+        { provide: TrashDomainService, useValue: mockTrashDomainService },
+        { provide: FileDomainService, useValue: mockFileDomainService },
+        { provide: FolderDomainService, useValue: mockFolderDomainService },
+        { provide: SyncEventDomainService, useValue: mockSyncEventDomainService },
         { provide: JOB_QUEUE_PORT, useValue: mockJobQueuePort },
-        { provide: SYNC_EVENT_REPOSITORY, useValue: mockSyncEventRepository },
+        { provide: FileHistoryService, useValue: mockFileHistoryService },
       ],
     }).compile();
 
@@ -109,7 +94,7 @@ describe('TrashService', () => {
       const request: RestorePreviewRequest = { trashMetadataIds: ['trash1'] };
       
       // Mock trash metadata
-      mockTrashRepository.findById.mockResolvedValue({
+      mockTrashDomainService.조회.mockResolvedValue({
         id: 'trash1',
         fileId: 'file1',
         originalPath: '/projects/2024/report.pdf',  // 파일의 전체 경로
@@ -119,7 +104,7 @@ describe('TrashService', () => {
       });
 
       // Mock file info
-      mockFileRepository.findById.mockResolvedValue({
+      mockFileDomainService.조회.mockResolvedValue({
         id: 'file1',
         name: 'report.pdf',
         mimeType: 'application/pdf',
@@ -128,14 +113,14 @@ describe('TrashService', () => {
       });
 
       // Mock folder lookup by path (핵심: 부모 폴더 경로로 찾음)
-      mockFolderRepository.findOne.mockResolvedValue({
+      mockFolderDomainService.조건조회.mockResolvedValue({
         id: 'folder-new',
         path: '/projects/2024/',  // 부모 폴더 경로
         state: FolderState.ACTIVE,
       });
 
       // Mock conflict check (no conflict)
-      mockFileRepository.existsByNameInFolder.mockResolvedValue(false);
+      mockFileDomainService.중복확인.mockResolvedValue(false);
 
       // When
       const result = await service.previewRestore(request);
@@ -149,9 +134,9 @@ describe('TrashService', () => {
       }));
       expect(result.summary.available).toBe(1);
       
-      // 핵심: 부모 폴더 경로로 조회해야 함
-      expect(mockFolderRepository.findOne).toHaveBeenCalledWith({
-        path: '/projects/2024/',  // 파일명 제외한 부모 폴더 경로
+      // 핵심: 부모 폴더 경로로 조회해야 함 (trailing slash 없음)
+      expect(mockFolderDomainService.조건조회).toHaveBeenCalledWith({
+        path: '/projects/2024',  // 파일명 제외한 부모 폴더 경로
         state: FolderState.ACTIVE,
       });
     });
@@ -160,15 +145,16 @@ describe('TrashService', () => {
       // Given - 루트 폴더에 있는 파일
       const request: RestorePreviewRequest = { trashMetadataIds: ['trash-root'] };
       
-      mockTrashRepository.findById.mockResolvedValue({
+      mockTrashDomainService.조회.mockResolvedValue({
         id: 'trash-root',
         fileId: 'file-root',
         originalPath: '/333.txt',  // 루트 폴더의 파일
         originalFolderId: 'root-folder-id',
         isFile: () => true,
+        isFolder: () => false,
       });
 
-      mockFileRepository.findById.mockResolvedValue({
+      mockFileDomainService.조회.mockResolvedValue({
         id: 'file-root',
         name: '333.txt',
         mimeType: 'text/plain',
@@ -176,13 +162,13 @@ describe('TrashService', () => {
       });
 
       // 루트 폴더 (/) 를 찾아야 함
-      mockFolderRepository.findOne.mockResolvedValue({
+      mockFolderDomainService.조건조회.mockResolvedValue({
         id: 'root-folder-id',
         path: '/',
         state: FolderState.ACTIVE,
       });
 
-      mockFileRepository.existsByNameInFolder.mockResolvedValue(false);
+      mockFileDomainService.중복확인.mockResolvedValue(false);
 
       // When
       const result = await service.previewRestore(request);
@@ -192,7 +178,7 @@ describe('TrashService', () => {
       expect(result.items[0].resolveFolderId).toBe('root-folder-id');
       
       // 핵심: 루트 폴더 경로 "/" 로 조회해야 함
-      expect(mockFolderRepository.findOne).toHaveBeenCalledWith({
+      expect(mockFolderDomainService.조건조회).toHaveBeenCalledWith({
         path: '/',  // 루트 폴더
         state: FolderState.ACTIVE,
       });
@@ -202,21 +188,22 @@ describe('TrashService', () => {
       // Given
       const request: RestorePreviewRequest = { trashMetadataIds: ['trash2'] };
       
-      mockTrashRepository.findById.mockResolvedValue({
+      mockTrashDomainService.조회.mockResolvedValue({
         id: 'trash2',
         fileId: 'file2',
         originalPath: '/archive/old/',
         originalFolderId: 'folder-deleted',
         isFile: () => true,
+        isFolder: () => false,
       });
 
-      mockFileRepository.findById.mockResolvedValue({
+      mockFileDomainService.조회.mockResolvedValue({
         id: 'file2',
         name: 'old.txt',
       });
 
       // Mock folder lookup (not found)
-      mockFolderRepository.findOne.mockResolvedValue(null);
+      mockFolderDomainService.조건조회.mockResolvedValue(null);
 
       // When
       const result = await service.previewRestore(request);
@@ -233,27 +220,28 @@ describe('TrashService', () => {
       // Given
       const request: RestorePreviewRequest = { trashMetadataIds: ['trash3'] };
       
-      mockTrashRepository.findById.mockResolvedValue({
+      mockTrashDomainService.조회.mockResolvedValue({
         id: 'trash3',
         fileId: 'file3',
         originalPath: '/docs/',
         isFile: () => true,
+        isFolder: () => false,
       });
 
-      mockFileRepository.findById.mockResolvedValue({
+      mockFileDomainService.조회.mockResolvedValue({
         id: 'file3',
         name: 'duplicate.txt',
         mimeType: 'text/plain',
         createdAt: new Date('2024-01-01'),
       });
 
-      mockFolderRepository.findOne.mockResolvedValue({
+      mockFolderDomainService.조건조회.mockResolvedValue({
         id: 'folder-exist',
         path: '/docs/',
       });
 
       // Mock conflict check (conflict exists)
-      mockFileRepository.existsByNameInFolder.mockResolvedValue(true);
+      mockFileDomainService.중복확인.mockResolvedValue(true);
 
       // When
       const result = await service.previewRestore(request);
@@ -272,7 +260,7 @@ describe('TrashService', () => {
       const query = { page: 1, limit: 10 };
       const now = new Date();
       
-      mockTrashQueryService.getTrashList.mockResolvedValue({
+      mockTrashDomainService.상세목록조회.mockResolvedValue({
         items: [
           {
             type: 'FILE',
@@ -293,7 +281,7 @@ describe('TrashService', () => {
       });
 
       // Mock for restoreInfo mapping
-      mockFolderRepository.findOne.mockResolvedValue({ id: 'folder1' });
+      mockFolderDomainService.조건조회.mockResolvedValue({ id: 'folder1' });
 
       // When
       const result = await service.getTrashList(query);
@@ -315,7 +303,7 @@ describe('TrashService', () => {
       const query = { page: 1, limit: 10 };
       const now = new Date();
       
-      mockTrashQueryService.getTrashList.mockResolvedValue({
+      mockTrashDomainService.상세목록조회.mockResolvedValue({
         items: [
           {
             type: 'FILE',
@@ -336,7 +324,7 @@ describe('TrashService', () => {
       });
 
       // Mock for restoreInfo mapping (folder not found)
-      mockFolderRepository.findOne.mockResolvedValue(null);
+      mockFolderDomainService.조건조회.mockResolvedValue(null);
 
       // When
       const result = await service.getTrashList(query);
@@ -347,9 +335,9 @@ describe('TrashService', () => {
         resolveFolderId: null,
       });
       
-      // 핵심: 부모 폴더 경로로 조회해야 함
-      expect(mockFolderRepository.findOne).toHaveBeenCalledWith({
-        path: '/deleted-folder/',  // 파일명 제외
+      // 핵심: 부모 폴더 경로로 조회해야 함 (trailing slash 없음)
+      expect(mockFolderDomainService.조건조회).toHaveBeenCalledWith({
+        path: '/deleted-folder',  // 파일명 제외
         state: FolderState.ACTIVE,
       });
     });
@@ -359,7 +347,7 @@ describe('TrashService', () => {
       const query = { page: 1, limit: 10 };
       const now = new Date();
       
-      mockTrashQueryService.getTrashList.mockResolvedValue({
+      mockTrashDomainService.상세목록조회.mockResolvedValue({
         items: [
           {
             type: 'FILE',
@@ -379,7 +367,7 @@ describe('TrashService', () => {
         totalSizeBytes: 9,
       });
 
-      mockFolderRepository.findOne.mockResolvedValue({
+      mockFolderDomainService.조건조회.mockResolvedValue({
         id: 'root-folder',
         path: '/',
       });
@@ -394,7 +382,7 @@ describe('TrashService', () => {
       });
       
       // 핵심: 루트 폴더 경로 "/" 로 조회해야 함
-      expect(mockFolderRepository.findOne).toHaveBeenCalledWith({
+      expect(mockFolderDomainService.조건조회).toHaveBeenCalledWith({
         path: '/',
         state: FolderState.ACTIVE,
       });
@@ -414,13 +402,14 @@ describe('TrashService', () => {
       const userId = 'user1';
 
       // Mock trash metadata for trash1 (auto resolve)
-      mockTrashRepository.findById
+      mockTrashDomainService.조회
         .mockResolvedValueOnce({
           id: 'trash1',
           fileId: 'file1',
           originalPath: '/docs/',
           originalFolderId: 'folder1',
           isFile: () => true,
+          isFolder: () => false,
           deletedAt: new Date(),
         })
         .mockResolvedValueOnce({
@@ -429,11 +418,12 @@ describe('TrashService', () => {
           originalPath: '/archive/',
           originalFolderId: 'folder2',
           isFile: () => true,
+          isFolder: () => false,
           deletedAt: new Date(),
         });
 
       // Mock file info
-      mockFileRepository.findById
+      mockFileDomainService.조회
         .mockResolvedValueOnce({
           id: 'file1',
           name: 'doc.pdf',
@@ -452,11 +442,14 @@ describe('TrashService', () => {
         });
 
       // Mock folder lookup (for auto resolve)
-      mockFolderRepository.findOne.mockResolvedValue({ id: 'resolved-folder', path: '/docs/' });
-      mockFolderRepository.findById.mockResolvedValue({ id: 'custom-folder', path: '/custom/' });
+      mockFolderDomainService.조건조회.mockResolvedValue({ id: 'resolved-folder', path: '/docs/' });
+      mockFolderDomainService.조회.mockResolvedValue({ id: 'custom-folder', path: '/custom/' });
 
       // Mock conflict check (no conflicts)
-      mockFileRepository.existsByNameInFolder.mockResolvedValue(false);
+      mockFileDomainService.중복확인.mockResolvedValue(false);
+
+      // Mock sync event save
+      mockSyncEventDomainService.저장.mockResolvedValue(undefined);
 
       // Mock job queue
       mockJobQueuePort.addJob
@@ -481,15 +474,16 @@ describe('TrashService', () => {
       };
       const userId = 'user1';
 
-      mockTrashRepository.findById.mockResolvedValue({
+      mockTrashDomainService.조회.mockResolvedValue({
         id: 'trash-conflict',
         fileId: 'file-conflict',
         originalPath: '/docs/',
         isFile: () => true,
+        isFolder: () => false,
         deletedAt: new Date(),
       });
 
-      mockFileRepository.findById.mockResolvedValue({
+      mockFileDomainService.조회.mockResolvedValue({
         id: 'file-conflict',
         name: 'conflict.pdf',
         mimeType: 'application/pdf',
@@ -498,10 +492,10 @@ describe('TrashService', () => {
         isTrashed: () => true,
       });
 
-      mockFolderRepository.findOne.mockResolvedValue({ id: 'target-folder' });
+      mockFolderDomainService.조건조회.mockResolvedValue({ id: 'target-folder' });
 
       // Mock conflict exists
-      mockFileRepository.existsByNameInFolder.mockResolvedValue(true);
+      mockFileDomainService.중복확인.mockResolvedValue(true);
 
       // When
       const result = await service.executeRestore(request, userId);
@@ -520,15 +514,16 @@ describe('TrashService', () => {
       };
       const userId = 'user1';
 
-      mockTrashRepository.findById.mockResolvedValue({
+      mockTrashDomainService.조회.mockResolvedValue({
         id: 'trash-no-path',
         fileId: 'file-no-path',
         originalPath: '/deleted-folder/',
         isFile: () => true,
+        isFolder: () => false,
         deletedAt: new Date(),
       });
 
-      mockFileRepository.findById.mockResolvedValue({
+      mockFileDomainService.조회.mockResolvedValue({
         id: 'file-no-path',
         name: 'orphan.txt',
         state: FileState.TRASHED,
@@ -536,7 +531,7 @@ describe('TrashService', () => {
       });
 
       // Folder not found
-      mockFolderRepository.findOne.mockResolvedValue(null);
+      mockFolderDomainService.조건조회.mockResolvedValue(null);
 
       // When
       const result = await service.executeRestore(request, userId);
@@ -555,14 +550,14 @@ describe('TrashService', () => {
       const userId = 'user1';
       const permanentDeleteMock = jest.fn();
 
-      mockTrashRepository.findById.mockResolvedValue({
+      mockTrashDomainService.조회.mockResolvedValue({
         id: trashMetadataId,
         fileId: 'file-to-purge',
         isFile: () => true,
         isFolder: () => false,
       });
 
-      mockFileRepository.findById.mockResolvedValue({
+      mockFileDomainService.조회.mockResolvedValue({
         id: 'file-to-purge',
         name: 'delete-me.txt',
         state: 'TRASHED',
@@ -580,12 +575,14 @@ describe('TrashService', () => {
       expect(result.name).toBe('delete-me.txt');
       expect(result.type).toBe('FILE');
       
-      // 핵심: purge 호출 시 바로 permanentDelete()를 호출하지 않음
-      // NAS worker에서 실제 삭제 완료 후 상태 변경
-      expect(permanentDeleteMock).not.toHaveBeenCalled();
-      expect(mockFileRepository.save).not.toHaveBeenCalled();
+      // permanentDelete()가 즉시 호출되고, 저장됨
+      expect(permanentDeleteMock).toHaveBeenCalled();
+      expect(mockFileDomainService.저장).toHaveBeenCalled();
       
-      // job이 큐에 추가되어야 함
+      // 휴지통 메타데이터도 삭제됨
+      expect(mockTrashDomainService.삭제).toHaveBeenCalledWith(trashMetadataId);
+      
+      // job이 큐에 추가되어야 함 (캐시/NAS 스토리지 삭제)
       expect(mockJobQueuePort.addJob).toHaveBeenCalledWith(
         'NAS_FILE_SYNC',
         expect.objectContaining({
@@ -598,7 +595,7 @@ describe('TrashService', () => {
 
     it('should throw error when trash item not found', async () => {
       // Given
-      mockTrashRepository.findById.mockResolvedValue(null);
+      mockTrashDomainService.조회.mockResolvedValue(null);
 
       // When & Then
       await expect(service.purgeFile('non-existent', 'user1'))
@@ -613,7 +610,7 @@ describe('TrashService', () => {
       const userId = 'user1';
       const permanentDeleteMock = jest.fn();
 
-      mockTrashRepository.findById.mockResolvedValue({
+      mockTrashDomainService.조회.mockResolvedValue({
         id: trashMetadataId,
         folderId: 'folder-to-purge',
         fileId: null, // fileId가 없어야 isFile()에서 file 조회 안함
@@ -621,7 +618,7 @@ describe('TrashService', () => {
         isFolder: () => true,
       });
 
-      mockFolderRepository.findById.mockResolvedValue({
+      mockFolderDomainService.조회.mockResolvedValue({
         id: 'folder-to-purge',
         name: 'folder-to-delete',
         state: 'TRASHED',
@@ -639,11 +636,14 @@ describe('TrashService', () => {
       expect(result.name).toBe('folder-to-delete');
       expect(result.type).toBe('FOLDER');
       
-      // 핵심: purge 호출 시 바로 permanentDelete()를 호출하지 않음
-      // NAS worker에서 실제 삭제 완료 후 상태 변경
-      expect(permanentDeleteMock).not.toHaveBeenCalled();
+      // permanentDelete()가 즉시 호출되고, 저장됨
+      expect(permanentDeleteMock).toHaveBeenCalled();
+      expect(mockFolderDomainService.저장).toHaveBeenCalled();
       
-      // job이 큐에 추가되어야 함
+      // 휴지통 메타데이터도 삭제됨
+      expect(mockTrashDomainService.삭제).toHaveBeenCalledWith(trashMetadataId);
+      
+      // job이 큐에 추가되어야 함 (NAS 스토리지 삭제)
       expect(mockJobQueuePort.addJob).toHaveBeenCalledWith(
         'NAS_FOLDER_SYNC',
         expect.objectContaining({
@@ -660,17 +660,17 @@ describe('TrashService', () => {
       // Given
       const userId = 'user1';
 
-      const trashItem1 = { id: 'trash1', fileId: 'file1', isFile: () => true };
-      const trashItem2 = { id: 'trash2', fileId: 'file2', isFile: () => true };
+      const trashItem1 = { id: 'trash1', fileId: 'file1', isFile: () => true, isFolder: () => false };
+      const trashItem2 = { id: 'trash2', fileId: 'file2', isFile: () => true, isFolder: () => false };
 
-      mockTrashRepository.findAll.mockResolvedValue([trashItem1, trashItem2]);
+      mockTrashDomainService.전체목록조회.mockResolvedValue([trashItem1, trashItem2]);
 
-      // Mock findById for both purgeFile calls (called within emptyTrash -> purgeFile)
-      mockTrashRepository.findById
+      // Mock 조회 for both purgeFile calls (called within emptyTrash -> purgeFile)
+      mockTrashDomainService.조회
         .mockResolvedValueOnce(trashItem1)
         .mockResolvedValueOnce(trashItem2);
 
-      mockFileRepository.findById
+      mockFileDomainService.조회
         .mockResolvedValueOnce({
           id: 'file1',
           name: 'file1.txt',
@@ -684,8 +684,8 @@ describe('TrashService', () => {
           permanentDelete: jest.fn(),
         });
 
-      mockFileRepository.save.mockResolvedValue({});
-      mockTrashRepository.delete.mockResolvedValue(undefined);
+      mockFileDomainService.저장.mockResolvedValue({});
+      mockTrashDomainService.삭제.mockResolvedValue(undefined);
 
       // When
       const result = await service.emptyTrash(userId);
@@ -702,7 +702,7 @@ describe('TrashService', () => {
       const syncEventIds = ['sync1', 'sync2', 'sync3'];
       const now = new Date();
 
-      mockSyncEventRepository.findByIds.mockResolvedValue([
+      mockSyncEventDomainService.아이디목록조회.mockResolvedValue([
         {
           id: 'sync1',
           status: SyncEventStatus.DONE,
@@ -747,7 +747,7 @@ describe('TrashService', () => {
       const syncEventIds = ['sync1', 'sync2'];
       const now = new Date();
 
-      mockSyncEventRepository.findByIds.mockResolvedValue([
+      mockSyncEventDomainService.아이디목록조회.mockResolvedValue([
         {
           id: 'sync1',
           status: SyncEventStatus.DONE,

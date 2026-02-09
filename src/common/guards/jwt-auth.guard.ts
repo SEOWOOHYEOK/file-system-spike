@@ -1,74 +1,36 @@
-import {
-  Injectable,
-  CanActivate,
-  ExecutionContext,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { Request } from 'express';
-import { RequestContext } from '../context/request-context';
-import { UserType } from '../../domain/audit/enums/common.enum';
+import { BaseJwtAuthGuard } from './base-jwt-auth.guard';
+import { AuthUserLookupService } from '../../business/auth/auth-user-lookup.service';
+import type { AuthenticatedUser } from '../auth/authenticated-user.interface';
 
 /**
- * JWT 인증 가드
+ * 내부 사용자 JWT 인증 가드
  *
- * Authorization 헤더에서 Bearer 토큰을 추출하고 검증합니다.
- * 검증된 payload는 request.user에 설정됩니다.
- * RequestContext에 사용자 정보를 설정합니다.
+ * Authorization 헤더에서 Bearer 토큰을 추출하고 INNER_SECRET으로 검증합니다.
+ * 검증 후 DB에서 사용자 정보를 조회하여 request.user에 설정합니다.
+ *
+ * 보안:
+ * - JWT payload에는 userId만 포함 (개인정보 노출 방지)
+ * - DB 조회를 통해 isActive 실시간 검증 (비활성 사용자 차단)
+ * - RequestContext에 사용자 정보 자동 설정
  */
 @Injectable()
-export class JwtAuthGuard implements CanActivate {
+export class JwtAuthGuard extends BaseJwtAuthGuard {
   constructor(
-    private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
-  ) {}
-
-  async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest<Request>();
-    const token = this.extractTokenFromHeader(request);
-
-    if (!token) {
-      throw new UnauthorizedException('인증 토큰이 필요합니다.');
-    }
-
-    try {
-      const secret =
-        this.configService.get<string>('INNER_SECRET') 
-
-      if (!secret) {
-        throw new UnauthorizedException('JWT 시크릿이 설정되지 않았습니다.');
-      }
-
-      const payload = await this.jwtService.verifyAsync(token, { secret });
-
-      // request.user에 payload 설정
-      request['user'] = payload;
-
-      // RequestContext에 사용자 정보 설정
-      // auth.controller.ts의 JWT payload 구조: { id, employeeNumber, name, email }
-      RequestContext.setUser({
-        userId: payload.id,
-        userType: UserType.INTERNAL,
-        userName: payload.name,
-        userEmail: payload.email,
-      });
-      
-    } catch (error: any) {
-      if (error.name === 'TokenExpiredError') {
-        throw new UnauthorizedException('토큰이 만료되었습니다.');
-      }
-      if (error.name === 'JsonWebTokenError') {
-        throw new UnauthorizedException('유효하지 않은 토큰입니다.');
-      }
-      throw new UnauthorizedException(error.message || '인증 실패');
-    }
-
-    return true;
+    jwtService: JwtService,
+    configService: ConfigService,
+    private readonly authUserLookupService: AuthUserLookupService,
+  ) {
+    super(jwtService, configService);
   }
 
-  private extractTokenFromHeader(request: Request): string | undefined {
-    const [type, token] = request.headers.authorization?.split(' ') ?? [];
-    return type === 'Bearer' ? token : undefined;
+  protected getSecret(): string {
+    return this.configService.get<string>('INNER_SECRET') ?? '';
+  }
+
+  protected async lookupUser(userId: string): Promise<AuthenticatedUser> {
+    return this.authUserLookupService.lookupInternal(userId);
   }
 }

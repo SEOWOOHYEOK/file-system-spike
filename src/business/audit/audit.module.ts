@@ -2,7 +2,9 @@ import { Module } from '@nestjs/common';
 import { AuditLogService } from './audit-log.service';
 import { SecurityLogService } from './security-log.service';
 import { FileHistoryService } from './file-history.service';
+import { SystemEventService } from './system-event.service';
 import { AuditLogHelper } from './audit-log-helper.service';
+import { UnifiedTimelineService } from './unified-timeline.service';
 import { AuditDomainModule } from '../../domain/audit/audit.module';
 
 /**
@@ -19,13 +21,17 @@ import { AuditDomainModule } from '../../domain/audit/audit.module';
     AuditLogService,
     SecurityLogService,
     FileHistoryService,
+    SystemEventService,
     AuditLogHelper,
+    UnifiedTimelineService,
   ],
   exports: [
     AuditLogService,
     SecurityLogService,
     FileHistoryService,
+    SystemEventService,
     AuditLogHelper,
+    UnifiedTimelineService,
   ],
 })
 export class AuditModule {}

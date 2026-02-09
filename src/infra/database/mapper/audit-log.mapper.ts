@@ -10,6 +10,8 @@ import {
   ClientType,
   Sensitivity,
 } from '../../../domain/audit/enums/common.enum';
+import { Severity } from '../../../domain/audit/enums/security-event.enum';
+import { SystemAction } from '../../../domain/audit/enums/system-action.enum';
 import { AuditLogOrmEntity } from '../entities/audit-log.orm-entity';
 
 /**
@@ -48,6 +50,18 @@ export class AuditLogMapper {
       durationMs: orm.durationMs || undefined,
       metadata: (orm.metadata as AuditLogMetadata) || undefined,
       tags: orm.tags || undefined,
+      httpMethod: orm.httpMethod || undefined,
+      apiEndpoint: orm.apiEndpoint || undefined,
+      parentEventId: orm.parentEventId || undefined,
+      severity: (orm.severity as Severity) || undefined,
+      errorCode: orm.errorCode || undefined,
+      responseStatusCode: orm.responseStatusCode || undefined,
+      systemAction: (orm.systemAction as SystemAction) || undefined,
+      systemActionDetail: orm.systemActionDetail || undefined,
+      followUpScheduled: orm.followUpScheduled || undefined,
+      followUpAt: orm.followUpAt || undefined,
+      retryCount: orm.retryCount || undefined,
+      description: orm.description || '',
       createdAt: orm.createdAt,
     });
   }
@@ -82,6 +96,18 @@ export class AuditLogMapper {
       durationMs: domain.durationMs || null,
       metadata: domain.metadata || null,
       tags: domain.tags || null,
+      httpMethod: domain.httpMethod || null,
+      apiEndpoint: domain.apiEndpoint || null,
+      parentEventId: domain.parentEventId || null,
+      severity: domain.severity || null,
+      errorCode: domain.errorCode || null,
+      responseStatusCode: domain.responseStatusCode || null,
+      systemAction: domain.systemAction || null,
+      systemActionDetail: domain.systemActionDetail || null,
+      followUpScheduled: domain.followUpScheduled || null,
+      followUpAt: domain.followUpAt || null,
+      retryCount: domain.retryCount || null,
+      description: domain.description || '',
       createdAt: domain.createdAt,
     };
   }

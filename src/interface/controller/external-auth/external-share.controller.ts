@@ -15,7 +15,7 @@ import { ExternalJwtAuthGuard } from '../../../common/guards';
 import type { Response } from 'express';
 import { ExternalShareAccessService } from '../../../business/external-share/external-share-access.service';
 import { AccessAction } from '../../../domain/external-share/entities/share-access-log.entity';
-import { ExternalUser } from '../../../common/decorators/external-user.decorator';
+import { User } from '../../../common/decorators/user.decorator';
 import {
   ApiGetMyShares,
   ApiGetShareDetail,
@@ -29,6 +29,9 @@ import {
 } from './dto/external-share-access.dto';
 import { PaginationQueryDto, PaginatedResponseDto } from '../../common/dto';
 import { createByteCountingStream, formatContentRange } from '../../../common/utils';
+import { AuditAction } from '../../../common/decorators';
+import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
+import { TargetType } from '../../../domain/audit/enums/common.enum';
 
 /**
  * 외부 사용자 파일 접근 컨트롤러
@@ -54,7 +57,7 @@ export class ExternalShareController {
   @Get()
   @ApiGetMyShares()
   async getMyShares(
-    @ExternalUser() user: { id: string },
+    @User() user: { id: string },
     @Query() query: PaginationQueryDto,
   ): Promise<PaginatedResponseDto<MyShareListItemDto>> {
     return this.accessService.getMyShares(user.id, query);
@@ -66,7 +69,7 @@ export class ExternalShareController {
   @Get(':shareId')
   @ApiGetShareDetail()
   async getShareDetail(
-    @ExternalUser() user: { id: string },
+    @User() user: { id: string },
     @Param('shareId', ParseUUIDPipe) shareId: string,
   ): Promise<ShareDetailResponseDto> {
     const result = await this.accessService.getShareDetail(user.id, shareId);
@@ -82,8 +85,13 @@ export class ExternalShareController {
    */
   @Get(':shareId/content')
   @ApiGetContent()
+  @AuditAction({
+    action: AuditActionEnum.SHARE_ACCESS,
+    targetType: TargetType.SHARE,
+    targetIdParam: 'shareId',
+  })
   async getContent(
-    @ExternalUser() user: { id: string },
+    @User() user: { id: string },
     @Param('shareId', ParseUUIDPipe) shareId: string,
     @Query() tokenQuery: ContentTokenQueryDto,
     @Headers('user-agent') userAgent: string,
@@ -183,8 +191,13 @@ export class ExternalShareController {
    */
   @Get(':shareId/download')
   @ApiDownloadFile()
+  @AuditAction({
+    action: AuditActionEnum.SHARE_DOWNLOAD,
+    targetType: TargetType.SHARE,
+    targetIdParam: 'shareId',
+  })
   async downloadFile(
-    @ExternalUser() user: { id: string },
+    @User() user: { id: string },
     @Param('shareId', ParseUUIDPipe) shareId: string,
     @Query() tokenQuery: ContentTokenQueryDto,
     @Headers('user-agent') userAgent: string,

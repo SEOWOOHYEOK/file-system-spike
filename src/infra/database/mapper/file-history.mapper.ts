@@ -25,6 +25,15 @@ export class FileHistoryMapper {
       checksumBefore: orm.checksumBefore || undefined,
       checksumAfter: orm.checksumAfter || undefined,
       changeSummary: orm.changeSummary || undefined,
+      description: orm.description || '',
+      requestId: orm.requestId || undefined,
+      traceId: orm.traceId || undefined,
+      parentEventId: orm.parentEventId || undefined,
+      httpMethod: orm.httpMethod || undefined,
+      apiEndpoint: orm.apiEndpoint || undefined,
+      errorCode: orm.errorCode || undefined,
+      retryCount: orm.retryCount || undefined,
+      tags: orm.tags || undefined,
       createdAt: orm.createdAt,
     });
   }
@@ -45,6 +54,15 @@ export class FileHistoryMapper {
       checksumBefore: domain.checksumBefore || null,
       checksumAfter: domain.checksumAfter || null,
       changeSummary: domain.changeSummary || null,
+      description: domain.description || '',
+      requestId: domain.requestId || null,
+      traceId: domain.traceId || null,
+      parentEventId: domain.parentEventId || null,
+      httpMethod: domain.httpMethod || null,
+      apiEndpoint: domain.apiEndpoint || null,
+      errorCode: domain.errorCode || null,
+      retryCount: domain.retryCount || null,
+      tags: domain.tags || null,
       createdAt: domain.createdAt,
     };
   }

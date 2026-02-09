@@ -12,6 +12,7 @@ export * from './upload-part.repository';
 export * from './audit-log.repository';
 export * from './security-log.repository';
 export * from './file-history.repository';
+export * from './system-event.repository';
 export * from './user.repository';
 export * from './favorite.repository';
 export * from './search-history.repository';

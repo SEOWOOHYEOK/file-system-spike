@@ -67,6 +67,11 @@ describe('FileManageService', () => {
   const mockJobQueue = {
     addJob: jest.fn(),
   };
+  const mockFileHistoryService = {
+    logFileRenamed: jest.fn().mockResolvedValue(undefined),
+    logFileMoved: jest.fn().mockResolvedValue(undefined),
+    logFileTrashed: jest.fn().mockResolvedValue(undefined),
+  };
 
   const queryRunner = {
     connect: jest.fn(),
@@ -91,6 +96,7 @@ describe('FileManageService', () => {
       mockFileNasStorageDomainService as any,
       mockJobQueue as any,
       mockDataSource as any,
+      mockFileHistoryService as any,
     );
   });
 

@@ -62,6 +62,9 @@ describe('FileUploadService', () => {
   const mockJobQueue = {
     addJob: jest.fn(),
   };
+  const mockFileHistoryService = {
+    logFileCreated: jest.fn().mockResolvedValue(undefined),
+  };
 
 
   let service: FileUploadService;
@@ -76,7 +79,8 @@ describe('FileUploadService', () => {
       mockFileNasStorageDomainService as any,
       mockFolderNasStorageObjectDomainService as any,
       mockCacheStorage as any,
-      mockJobQueue as any
+      mockJobQueue as any,
+      mockFileHistoryService as any,
     );
   });
 

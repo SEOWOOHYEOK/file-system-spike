@@ -39,6 +39,8 @@ import {
   SyncEventDomainService,
   SyncEventFactory,
 } from '../../domain/sync-event';
+import { FileHistoryService } from '../audit/file-history.service';
+import { UserType } from '../../domain/audit/enums/common.enum';
 
 /**
  * 휴지통 비즈니스 서비스
@@ -58,6 +60,8 @@ export class TrashService {
     private readonly syncEventDomainService: SyncEventDomainService,
     @Inject(JOB_QUEUE_PORT)
     private readonly jobQueuePort: IJobQueuePort,
+    // Audit
+    private readonly fileHistoryService: FileHistoryService,
   ) { }
 
   /**
@@ -422,6 +426,15 @@ export class TrashService {
         syncEvent.markQueued();
         await this.syncEventDomainService.저장(syncEvent);
 
+        // 파일 이력 기록 (감사 로그)
+        await this.fileHistoryService.logFileRestored({
+          fileId: file.id,
+          changedBy: userId,
+          userType: UserType.INTERNAL,
+          fileName: file.name,
+          restoredPath: trashMetadata.originalPath,
+        }).catch((err) => this.logger.warn('파일 이력 기록 실패', err));
+
         syncEventIds.push(syncEventId);
         queued++;
       }
@@ -629,6 +642,14 @@ export class TrashService {
 
       //TRASH_METADATA 삭제
       await this.trashDomainService.삭제(trashMetadataId);
+
+      // 파일 이력 기록 (감사 로그)
+      await this.fileHistoryService.logFileDeleted({
+        fileId: file.id,
+        changedBy: userId,
+        userType: UserType.INTERNAL,
+        fileName: file.name,
+      }).catch((err) => this.logger.warn('파일 이력 기록 실패', err));
 
       // 큐에 영구삭제 작업 추가 (캐시/NAS 스토리지 삭제)
       // 파일 상태는 NAS 작업 완료 후 worker에서 변경

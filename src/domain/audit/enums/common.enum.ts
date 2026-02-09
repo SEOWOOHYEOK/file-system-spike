@@ -24,6 +24,7 @@ export enum TargetType {
   USER = 'user',
   FAVORITE = 'favorite',
   ACTIVITY = 'activity',
+  SYSTEM = 'system',
 }
 
 /**
@@ -36,6 +37,7 @@ export const TargetTypeDescription: Record<TargetType, string> = {
   [TargetType.USER]: '사용자',
   [TargetType.FAVORITE]: '즐겨찾기',
   [TargetType.ACTIVITY]: '활동',
+  [TargetType.SYSTEM]: '시스템',
 };
 
 /**

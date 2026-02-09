@@ -8,6 +8,9 @@ import { VerifyTokenRequestDto, VerifyTokenResponseDto } from './dto/verify-toke
 import { LoginRequestDto, LoginResponseDto } from './dto/login.dto';
 import { RefreshTokenRequestDto, RefreshTokenResponseDto } from './dto/refresh-token.dto';
 import { MigrateOrganizationRequestDto, MigrateOrganizationResponseDto } from './dto/migrate-organization.dto';
+import { AuditAction } from '../../../common/decorators/audit-action.decorator';
+import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
+import { TargetType } from '../../../domain/audit/enums/common.enum';
 
 /**
  * 인증 컨트롤러
@@ -31,6 +34,10 @@ export class AuthController {
      * SSO를 통해 로그인하고 JWT 토큰을 발급합니다.
      */
     @Post('login')
+    @AuditAction({
+        action: AuditActionEnum.LOGIN_SUCCESS,
+        targetType: TargetType.USER,
+    })
     @ApiOperation({
         summary: 'SSO 로그인',
         description: 'SSO를 통해 로그인하고 JWT 토큰을 발급합니다.',
@@ -51,12 +58,10 @@ export class AuthController {
                 withDetail: true,
             });
 
-            // JWT 토큰 생성
+            // JWT 토큰 생성 (보안: userId만 포함, 개인정보 제외)
             const jwtPayload = {
-                id: employee.id,
-                employeeNumber: employee.employeeNumber,
-                name: employee.name,
-                email: employee.email,
+                sub: employee.id,
+                type: 'internal',
             };
 
             const token = this.jwtService.sign(jwtPayload);
@@ -109,12 +114,10 @@ export class AuthController {
                 withDetail: true,
             });
 
-            // 새로운 JWT 토큰 생성
+            // 새로운 JWT 토큰 생성 (보안: userId만 포함, 개인정보 제외)
             const jwtPayload = {
-                id: employee.id,
-                employeeNumber: employee.employeeNumber,
-                name: employee.name,
-                email: employee.email,
+                sub: employee.id,
+                type: 'internal',
             };
 
             const token = this.jwtService.sign(jwtPayload);
@@ -147,21 +150,30 @@ export class AuthController {
      * 만료시간 없이 유효한 JWT 토큰을 생성합니다.
      */
     @Post('generate-token')
+    @AuditAction({
+        action: AuditActionEnum.TOKEN_GENERATE,
+        targetType: TargetType.SYSTEM,
+    })
     @ApiOperation({
         summary: 'JWT 토큰 생성',
         description: '만료시간 없이 유효한 JWT 토큰을 생성합니다.',
     })
     async generateToken(@Body() dto: GenerateTokenRequestDto): Promise<GenerateTokenResponseDto> {
         try {
-            const payload: any = {
+            // 사번으로 직원 조회하여 userId 획득
+            const employee = await this.ssoService.getEmployee({
                 employeeNumber: dto.employeeNumber,
-                name: dto.name,
-                email: dto.email,
-                ...dto.additionalData,
+                withDetail: false,
+            });
+
+            // 보안: userId만 포함하는 최소 JWT payload 생성
+            const jwtPayload = {
+                sub: employee.id,
+                type: 'internal',
             };
 
             // 만료시간 없이 토큰 생성
-            const token = this.jwtService.sign(payload);
+            const token = this.jwtService.sign(jwtPayload);
 
             return {
                 success: true,
@@ -211,12 +223,10 @@ export class AuthController {
             return {
                 valid: true,
                 payload: {
-                    id: payload.id,
-                    employeeNumber: payload.employeeNumber,
-                    name: payload.name,
-                    email: payload.email,
-                    iat: payload.iat, // iat: 토큰이 발급된 시간(issued at)
-                    exp: payload.exp, // exp: 토큰 만료 시간(expiration)
+                    sub: payload.sub,     // 사용자 ID
+                    type: payload.type,   // 사용자 타입 (internal/external)
+                    iat: payload.iat,     // 토큰 발급 시간(issued at)
+                    exp: payload.exp,     // 토큰 만료 시간(expiration)
                     ...payload,
                 },
             };
@@ -252,6 +262,10 @@ export class AuthController {
      * SSO에서 모든 조직 데이터를 가져옵니다.
      */
     @Post('migrate-organization')
+    @AuditAction({
+        action: AuditActionEnum.ORG_MIGRATION,
+        targetType: TargetType.SYSTEM,
+    })
     @ApiOperation({
         summary: '조직 데이터 마이그레이션',
         description: 'SSO에서 모든 조직 데이터를 가져옵니다. (부서, 직원, 직급, 직책 등)',

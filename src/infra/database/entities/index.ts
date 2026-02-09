@@ -15,6 +15,7 @@ export * from './user.orm-entity';
 export * from './audit-log.orm-entity';
 export * from './security-log.orm-entity';
 export * from './file-history.orm-entity';
+export * from './system-event.orm-entity';
 
 // Favorite
 export * from './favorite.orm-entity';

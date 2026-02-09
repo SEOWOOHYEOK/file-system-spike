@@ -48,6 +48,24 @@ export interface CreateFileHistoryParams {
   checksumAfter?: string;
   /** 변경 요약 설명 */
   changeSummary?: string;
+  /** 이 변경을 유발한 HTTP 요청 ID */
+  requestId?: string;
+  /** 작업 전체 추적 ID */
+  traceId?: string;
+  /** 이 변경을 유발한 상위 이벤트 ID */
+  parentEventId?: string;
+  /** 어떤 HTTP 메서드로 유발되었는지 */
+  httpMethod?: string;
+  /** 어떤 API 엔드포인트에서 유발되었는지 */
+  apiEndpoint?: string;
+  /** 구조화된 에러 코드 */
+  errorCode?: string;
+  /** 재시도 횟수 */
+  retryCount?: number;
+  /** 검색/분류용 태그 */
+  tags?: string[];
+  /** 인간 친화적 설명 (changeSummary를 보완/대체) */
+  description?: string;
 }
 
 /**
@@ -168,8 +186,77 @@ export class FileHistory {
    * 변경 요약 설명
    * - 사람이 읽을 수 있는 변경 설명
    * - 예: "이름 변경: report.pdf → 2024_report_final.pdf"
+   * @deprecated description 필드로 대체 예정
    */
   changeSummary?: string;
+
+  /**
+   * 인간 친화적 설명
+   * - EventDescriptionBuilder에 의해 생성된 구조화된 설명
+   * - changeSummary를 보완/대체하는 필드
+   * - 기본값: 빈 문자열
+   */
+  description: string;
+
+  // ========== 상관관계 (신규) ==========
+  /**
+   * 이 변경을 유발한 HTTP 요청 ID
+   * - 동일 요청에서 발생한 모든 변경을 추적
+   */
+  requestId?: string;
+
+  /**
+   * 작업 전체 추적 ID
+   * - 분산 시스템에서 작업 추적에 사용
+   * - 최대 64자
+   */
+  traceId?: string;
+
+  /**
+   * 이 변경을 유발한 상위 이벤트 ID
+   * - 이벤트 체인 추적에 사용
+   */
+  parentEventId?: string;
+
+  // ========== API 컨텍스트 (신규) ==========
+  /**
+   * 어떤 HTTP 메서드로 유발되었는지
+   * - 예: "POST", "PUT", "DELETE"
+   * - 최대 10자
+   */
+  httpMethod?: string;
+
+  /**
+   * 어떤 API 엔드포인트에서 유발되었는지
+   * - 예: "/api/files/upload", "/api/files/:id/rename"
+   * - 최대 255자
+   */
+  apiEndpoint?: string;
+
+  // ========== 에러 추적 (신규) ==========
+  /**
+   * 구조화된 에러 코드
+   * - 에러 발생 시 기록
+   * - 예: "FILE_NOT_FOUND", "PERMISSION_DENIED"
+   * - 최대 100자
+   */
+  errorCode?: string;
+
+  // ========== 재시도 (신규) ==========
+  /**
+   * 재시도 횟수
+   * - 실패 후 재시도한 경우 기록
+   * - 기본값: 0
+   */
+  retryCount?: number;
+
+  // ========== 분류 (신규) ==========
+  /**
+   * 검색/분류용 태그
+   * - 배열 형태로 저장
+   * - 예: ["urgent", "backup", "automated"]
+   */
+  tags?: string[];
 
   // ========== 시간 필드 ==========
   /**
@@ -200,6 +287,15 @@ export class FileHistory {
       checksumBefore: params.checksumBefore,
       checksumAfter: params.checksumAfter,
       changeSummary: params.changeSummary,
+      description: params.description || '',
+      requestId: params.requestId,
+      traceId: params.traceId,
+      parentEventId: params.parentEventId,
+      httpMethod: params.httpMethod,
+      apiEndpoint: params.apiEndpoint,
+      errorCode: params.errorCode,
+      retryCount: params.retryCount,
+      tags: params.tags,
       createdAt: new Date(),
     });
   }

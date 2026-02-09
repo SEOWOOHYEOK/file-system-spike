@@ -17,6 +17,7 @@ import { FileHistoryDomainService } from './service/file-history-domain.service'
     FileHistoryDomainService,
   ],
   exports: [
+    RepositoryModule,
     AuditLogDomainService,
     SecurityLogDomainService,
     FileHistoryDomainService,

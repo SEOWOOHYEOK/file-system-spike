@@ -12,6 +12,7 @@ import { ShareRequestModule } from './share-request/share-request.module';
 import { AuditModule } from './audit/audit.module';
 import { SyncEventBusinessModule } from './sync-event/sync-event.module';
 import { FavoriteBusinessModule } from './favorite/favorite.module';
+import { AuthModule } from './auth/auth.module';
 
 /**
  * 비즈니스 레이어 통합 모듈
@@ -30,6 +31,7 @@ const workerModules = appMode !== 'api'
 
 @Module({
   imports: [
+    AuthModule,
     FileBusinessModule,
     FolderBusinessModule,
     TrashBusinessModule,
@@ -44,6 +46,7 @@ const workerModules = appMode !== 'api'
     FavoriteBusinessModule,
   ],
   exports: [
+    AuthModule,
     FileBusinessModule,
     FolderBusinessModule,
     TrashBusinessModule,

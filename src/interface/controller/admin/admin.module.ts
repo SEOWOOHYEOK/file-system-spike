@@ -11,6 +11,7 @@ import { ShareRequestAdminController } from './share-request/share-request-admin
 import { ExternalUserAdminController } from './external-user/external-user-admin.controller';
 import { UserAdminController } from './user/user-admin.controller';
 import { ObservabilityController } from './observability.controller';
+import { TimelineAdminController } from './timeline/timeline-admin.controller';
 
 // 비즈니스 모듈
 import { AuditModule } from '../../../business/audit/audit.module';
@@ -52,6 +53,7 @@ import { RepositoryModule } from '../../../infra/database/repository.module';
     ExternalUserAdminController,
     UserAdminController,
     ObservabilityController,
+    TimelineAdminController,
   ],
 })
 export class AdminModule {}

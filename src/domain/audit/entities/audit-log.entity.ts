@@ -10,6 +10,8 @@ import {
   ClientType,
   Sensitivity,
 } from '../enums/common.enum';
+import { Severity } from '../enums/security-event.enum';
+import { SystemAction } from '../enums/system-action.enum';
 
 /**
  * 감사 로그 메타데이터 인터페이스
@@ -115,6 +117,44 @@ export interface CreateAuditLogParams {
   metadata?: AuditLogMetadata;
   /** 검색/분류용 태그 배열 */
   tags?: string[];
+
+  // ========== API 컨텍스트 (신규) ==========
+  /** HTTP 메서드 - 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' */
+  httpMethod?: string;
+  /** API 엔드포인트 - '/v1/files/upload', '/v1/share-requests' 등 */
+  apiEndpoint?: string;
+
+  // ========== 인과관계 (신규) ==========
+  /** 이 행위를 유발한 상위 이벤트 ID */
+  parentEventId?: string;
+
+  // ========== 보안 이벤트 통합 (신규) ==========
+  /** 심각도 - 'INFO' | 'WARN' | 'HIGH' | 'CRITICAL' */
+  severity?: Severity;
+
+  // ========== 에러 추적 (신규) ==========
+  /** 구조화된 에러 코드 (필터/집계용) */
+  errorCode?: string;
+
+  // ========== System Response (신규) ==========
+  /** HTTP 응답 상태 코드 */
+  responseStatusCode?: number;
+  /** 시스템이 취한 대응 조치 */
+  systemAction?: SystemAction;
+  /** 시스템 대응 조치 상세 설명 - "NAS unhealthy → 업로드 거부" */
+  systemActionDetail?: string;
+  /** 후속 작업 예약 여부 */
+  followUpScheduled?: boolean;
+  /** 후속 작업 예정 시각 */
+  followUpAt?: Date;
+
+  // ========== 재시도 (신규) ==========
+  /** 재시도 횟수 */
+  retryCount?: number;
+
+  // ========== 인간 친화적 설명 (신규) ==========
+  /** 풍부한 컨텍스트의 한국어 설명 (기본값: 빈 문자열) */
+  description?: string;
 }
 
 /**
@@ -321,6 +361,97 @@ export class AuditLog {
    */
   tags?: string[];
 
+  // ========== API 컨텍스트 (신규) ==========
+  /**
+   * HTTP 메서드
+   * - GET, POST, PUT, DELETE, PATCH 등
+   * - API 요청 추적에 활용
+   */
+  httpMethod?: string;
+
+  /**
+   * API 엔드포인트
+   * - 요청된 API 경로
+   * - 예: '/v1/files/upload', '/v1/share-requests'
+   */
+  apiEndpoint?: string;
+
+  // ========== 인과관계 (신규) ==========
+  /**
+   * 상위 이벤트 ID
+   * - 이 행위를 유발한 상위 이벤트의 ID
+   * - 이벤트 체인 추적에 활용
+   */
+  parentEventId?: string;
+
+  // ========== 보안 이벤트 통합 (신규) ==========
+  /**
+   * 심각도
+   * - INFO: 정보 (관찰만)
+   * - WARN: 경고 (부분 제한 필요)
+   * - HIGH: 높음 (즉시 확인 필요)
+   * - CRITICAL: 심각 (즉시 차단 필요)
+   */
+  severity?: Severity;
+
+  // ========== 에러 추적 (신규) ==========
+  /**
+   * 구조화된 에러 코드
+   * - 필터/집계용 에러 코드
+   * - 예: 'FILE_NOT_FOUND', 'PERMISSION_DENIED'
+   */
+  errorCode?: string;
+
+  // ========== System Response (신규) ==========
+  /**
+   * HTTP 응답 상태 코드
+   * - 200, 404, 500 등
+   * - API 응답 추적에 활용
+   */
+  responseStatusCode?: number;
+
+  /**
+   * 시스템 대응 조치
+   * - 시스템이 이벤트에 대해 취한 자동 대응 조치
+   * - SystemAction enum 참조
+   */
+  systemAction?: SystemAction;
+
+  /**
+   * 시스템 대응 조치 상세 설명
+   * - 대응 조치의 구체적인 내용
+   * - 예: "NAS unhealthy → 업로드 거부"
+   */
+  systemActionDetail?: string;
+
+  /**
+   * 후속 작업 예약 여부
+   * - 시스템이 후속 작업을 예약했는지 여부
+   */
+  followUpScheduled?: boolean;
+
+  /**
+   * 후속 작업 예정 시각
+   * - 예약된 후속 작업의 실행 시각
+   */
+  followUpAt?: Date;
+
+  // ========== 재시도 (신규) ==========
+  /**
+   * 재시도 횟수
+   * - 실패한 작업의 재시도 횟수
+   * - 재시도 패턴 분석에 활용
+   */
+  retryCount?: number;
+
+  // ========== 인간 친화적 설명 (신규) ==========
+  /**
+   * 풍부한 컨텍스트의 한국어 설명
+   * - 이벤트에 대한 상세한 설명
+   * - 로그 조회 시 바로 이해 가능한 형태
+   */
+  description: string;
+
   // ========== 시간 필드 (Time) ==========
   /**
    * 이벤트 발생 시각
@@ -366,6 +497,18 @@ export class AuditLog {
       durationMs: params.durationMs,
       metadata: params.metadata,
       tags: params.tags,
+      httpMethod: params.httpMethod,
+      apiEndpoint: params.apiEndpoint,
+      parentEventId: params.parentEventId,
+      severity: params.severity,
+      errorCode: params.errorCode,
+      responseStatusCode: params.responseStatusCode,
+      systemAction: params.systemAction,
+      systemActionDetail: params.systemActionDetail,
+      followUpScheduled: params.followUpScheduled,
+      followUpAt: params.followUpAt,
+      retryCount: params.retryCount,
+      description: params.description || '',
       createdAt: new Date(),
     });
   }

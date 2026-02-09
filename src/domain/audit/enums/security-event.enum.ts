@@ -1,6 +1,19 @@
 /**
  * 보안 이벤트 타입
  *
+ * @deprecated 이 enum은 더 이상 사용되지 않습니다.
+ * 보안 이벤트는 이제 AuditAction enum의 SECURITY 카테고리로 통합되었습니다.
+ * 
+ * 마이그레이션 가이드:
+ * - LOGIN_SUCCESS, LOGIN_FAILURE, LOGOUT → AuditAction.LOGIN_SUCCESS, AuditAction.LOGIN_FAILURE, AuditAction.LOGOUT
+ * - TOKEN_EXPIRED → AuditAction.TOKEN_EXPIRED
+ * - PERMISSION_DENIED → AuditAction.PERMISSION_DENIED
+ * - EXPIRED_LINK_ACCESS → AuditAction.EXPIRED_LINK_ACCESS
+ * - BLOCKED_SHARE_ACCESS → AuditAction.BLOCKED_SHARE_ACCESS
+ * - SUSPICIOUS_ACTIVITY → AuditAction.ACCESS_PATTERN_DEVIATION (charter-compliant neutral term)
+ * - NEW_DEVICE_ACCESS → AuditAction.NEW_DEVICE_ACCESS
+ * - UNUSUAL_LOCATION → AuditAction.NEW_DEVICE_ACCESS (charter-compliant neutral term)
+ *
  * 인증, 토큰, 계정, 접근 관련 보안 이벤트를 분류
  */
 export enum SecurityEventType {
@@ -27,8 +40,10 @@ export enum SecurityEventType {
   INVALID_TOKEN = 'INVALID_TOKEN', // 유효하지 않은 토큰
 
   // 이상 행위
+  /** @deprecated Use AuditAction.ACCESS_PATTERN_DEVIATION instead (charter-compliant neutral term) */
   SUSPICIOUS_ACTIVITY = 'SUSPICIOUS_ACTIVITY', // 의심스러운 활동
   NEW_DEVICE_ACCESS = 'NEW_DEVICE_ACCESS', // 새 디바이스 접근
+  /** @deprecated Use AuditAction.NEW_DEVICE_ACCESS instead (charter-compliant neutral term) */
   UNUSUAL_LOCATION = 'UNUSUAL_LOCATION', // 비정상 위치 접근
 }
 

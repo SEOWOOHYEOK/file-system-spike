@@ -30,6 +30,8 @@ import { FolderDomainService } from '../../domain/folder/service/folder-domain.s
 import { TrashDomainService } from '../../domain/trash/service/trash-domain.service';
 import { SyncEventDomainService } from '../../domain/sync-event/service/sync-event-domain.service';
 import { FileNasStorageDomainService } from '../../domain/storage/file/service/file-nas-storage-domain.service';
+import { FileHistoryService } from '../audit/file-history.service';
+import { UserType } from '../../domain/audit/enums/common.enum';
 
 
 /**
@@ -49,6 +51,8 @@ export class FileManageService {
     @Inject(JOB_QUEUE_PORT)
     private readonly jobQueue: IJobQueuePort,
     private readonly dataSource: DataSource,
+    // Audit
+    private readonly fileHistoryService: FileHistoryService,
   ) { }
 
   /**
@@ -111,6 +115,7 @@ export class FileManageService {
       );
 
       // 5. 파일명 업데이트
+      const previousName = file.name;
       file.rename(finalName);
       await this.fileDomainService.저장(file, txOptions);
 
@@ -147,6 +152,15 @@ export class FileManageService {
 
       await queryRunner.commitTransaction();
       this.logger.debug(`File renamed: ${fileId} -> ${finalName}`);
+
+      // 파일 이력 기록 (감사 로그)
+      await this.fileHistoryService.logFileRenamed({
+        fileId,
+        changedBy: userId,
+        userType: (RequestContext.getUserType() as UserType) || UserType.INTERNAL,
+        previousName,
+        newName: finalName,
+      }).catch((err) => this.logger.warn('파일 이력 기록 실패', err));
 
       // 8. Bull 큐 등록 (파일 기반 통합 큐) - 트랜잭션 커밋 후 실행
       if (oldObjectKey && newObjectKey) {
@@ -310,6 +324,17 @@ export class FileManageService {
       await queryRunner.commitTransaction();
       this.logger.debug(`File moved: ${fileId} -> folder ${targetFolderId}`);
 
+      // 파일 이력 기록 (감사 로그)
+      await this.fileHistoryService.logFileMoved({
+        fileId,
+        changedBy: userId,
+        userType: (RequestContext.getUserType() as UserType) || UserType.INTERNAL,
+        previousFolderId: originalFolderId || '',
+        previousPath: sourceFolderPath,
+        newFolderId: targetFolderId,
+        newPath: targetFolder.path,
+      }).catch((err) => this.logger.warn('파일 이력 기록 실패', err));
+
       // 8. Bull 큐 등록 (파일 기반 통합 큐) - 트랜잭션 커밋 후 실행
       if (sourcePath && targetPath && originalFolderId) {
         await this.jobQueue.addJob<NasFileMoveJobData>(
@@ -462,6 +487,15 @@ export class FileManageService {
 
       await queryRunner.commitTransaction();
       this.logger.debug(`File deleted (moved to trash): ${fileId}`);
+
+      // 파일 이력 기록 (감사 로그)
+      await this.fileHistoryService.logFileTrashed({
+        fileId,
+        changedBy: userId,
+        userType: (RequestContext.getUserType() as UserType) || UserType.INTERNAL,
+        fileName: file.name,
+        originalPath,
+      }).catch((err) => this.logger.warn('파일 이력 기록 실패', err));
 
       // 8. Bull 큐 등록 (파일 기반 통합 큐) - 트랜잭션 커밋 후 실행
       if (currentObjectKey && trashPath) {

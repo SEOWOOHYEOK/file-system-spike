@@ -20,6 +20,8 @@ import {
 } from '../worker/nas-file-sync.worker';
 import { normalizeFileName } from '../../common/utils';
 import { RequestContext } from '../../common/context/request-context';
+import { FileHistoryService } from '../audit/file-history.service';
+import { UserType } from '../../domain/audit/enums/common.enum';
 
 // Domain Services
 import { FileDomainService } from '../../domain/file/service/file-domain.service';
@@ -53,6 +55,8 @@ export class FileUploadService {
     private readonly cacheStorage: ICacheStoragePort,
     @Inject(JOB_QUEUE_PORT)
     private readonly jobQueue: IJobQueuePort,
+    // Audit
+    private readonly fileHistoryService: FileHistoryService,
   ) { }
 
   /**
@@ -163,6 +167,18 @@ export class FileUploadService {
     // 10. 큐 등록 성공 시 QUEUED로 변경
     syncEvent.markQueued();
     await this.syncEventDomainService.저장(syncEvent);
+
+    // 11. 파일 이력 기록 (감사 로그)
+    await this.fileHistoryService.logFileCreated({
+      fileId,
+      changedBy: RequestContext.getUserId() || 'unknown',
+      userType: (RequestContext.getUserType() as UserType) || UserType.INTERNAL,
+      name: finalFileName,
+      size: file.size,
+      mimeType: file.mimetype,
+      path: filePath,
+      checksum,
+    }).catch((err) => this.logger.warn('파일 이력 기록 실패', err));
 
     return {
       id: fileEntity.id,

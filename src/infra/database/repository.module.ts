@@ -20,6 +20,7 @@ import {
   AuditLogOrmEntity,
   SecurityLogOrmEntity,
   FileHistoryOrmEntity,
+  SystemEventOrmEntity,
   UserOrmEntity,
 } from './entities';
 
@@ -36,6 +37,7 @@ import {
   AuditLogRepository,
   SecurityLogRepository,
   FileHistoryRepository,
+  SystemEventRepository,
   UserRepository,
 } from './repositories';
 import { SyncEventRepository } from './repositories/sync-event.repository';
@@ -68,6 +70,9 @@ import {
 import {
   FILE_HISTORY_REPOSITORY,
 } from '../../domain/audit/repositories/file-history.repository.interface';
+import {
+  SYSTEM_EVENT_REPOSITORY,
+} from '../../domain/audit/repositories/system-event.repository';
 import {
   USER_REPOSITORY,
 } from '../../domain/user/repositories/user.repository.interface';
@@ -108,6 +113,7 @@ const entities = [
   AuditLogOrmEntity,
   SecurityLogOrmEntity,
   FileHistoryOrmEntity,
+  SystemEventOrmEntity,
   UserOrmEntity,
   FavoriteOrmEntity,
   SearchHistoryOrmEntity,
@@ -181,6 +187,11 @@ const entities = [
       provide: FILE_HISTORY_REPOSITORY,
       useClass: FileHistoryRepository,
     },
+    // System Event Repository
+    {
+      provide: SYSTEM_EVENT_REPOSITORY,
+      useClass: SystemEventRepository,
+    },
     // User Repository
     {
       provide: USER_REPOSITORY,
@@ -220,6 +231,7 @@ const entities = [
     AUDIT_LOG_REPOSITORY,
     SECURITY_LOG_REPOSITORY,
     FILE_HISTORY_REPOSITORY,
+    SYSTEM_EVENT_REPOSITORY,
     USER_REPOSITORY,
     FAVORITE_REPOSITORY,
     SEARCH_HISTORY_REPOSITORY,

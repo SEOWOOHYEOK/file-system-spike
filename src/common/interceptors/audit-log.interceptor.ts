@@ -15,18 +15,9 @@ import {
 import { AuditLogService } from '../../business/audit/audit-log.service';
 import { RequestContext } from '../context/request-context';
 import { detectClientType } from '../utils/device-fingerprint.util';
-import { ClientType, UserType } from '../../domain/audit/enums/common.enum';
-
-/**
- * 사용자 정보 인터페이스 (JWT 페이로드에서 추출)
- */
-interface UserPayload {
-  sub?: string;  // JWT 표준 subject 클레임
-  id?: string;   // 커스텀 id 필드 (auth.controller에서 사용)
-  email?: string;
-  name?: string;
-  type?: 'INTERNAL' | 'EXTERNAL';
-}
+import { ClientType, UserType, LogResult } from '../../domain/audit/enums/common.enum';
+import { EventDescriptionBuilder } from '../../domain/audit/service/description-builder';
+import { resolveSystemAction } from '../../domain/audit/service/system-action-resolver';
 
 /**
  * AuditLogInterceptor
@@ -81,7 +72,7 @@ export class AuditLogInterceptor implements NestInterceptor {
       catchError(async (error) => {
         try {
           const durationMs = Date.now() - startTime;
-          await this.logFailure(request, error, auditOptions, durationMs);
+          await this.logFailure(request, response, error, auditOptions, durationMs);
         } catch (logError) {
           this.logger.error('Failed to log audit failure', logError);
         }
@@ -103,9 +94,11 @@ export class AuditLogInterceptor implements NestInterceptor {
     const { action, targetType, targetIdParam, targetNameParam, extractMetadata } =
       options;
 
-    const context = RequestContext.get();
-    const user = this.extractUser(request);
-    const userId = this.extractUserId(user);
+    const ctx = RequestContext.get();
+    const userId = ctx?.userId;
+    const userType = ctx?.userType as UserType ?? UserType.INTERNAL;
+    const userName = ctx?.userName || 'unknown';
+    const userEmail = ctx?.userEmail || 'unknown';
 
     // 인증되지 않은 사용자는 감사 로그 스킵 (userId가 UUID 타입이므로)
     if (!userId) {
@@ -127,25 +120,56 @@ export class AuditLogInterceptor implements NestInterceptor {
       targetNameParam,
     );
 
+    // Extract new observability fields
+    const httpMethod = request.method;
+    const apiEndpoint = this.extractApiEndpoint(request);
+    const responseStatusCode = response.statusCode;
+
+    // Generate description using EventDescriptionBuilder
+    let description: string;
+    try {
+      description = EventDescriptionBuilder.forAuditLog({
+        action,
+        actorName: userName,
+        actorDepartment: undefined, // Department not available in current context
+        actorType: userType,
+        targetName: targetName,
+        result: LogResult.SUCCESS,
+        metadata: extractMetadata
+          ? extractMetadata(request, responseData)
+          : undefined,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to generate description for action ${action}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      // Fallback description
+      description = `${userName}가 ${action} 수행`;
+    }
+
     await this.auditLogService.logSuccess({
-      requestId: context?.requestId || 'unknown',
-      sessionId: context?.sessionId || 'unknown',
-      traceId: context?.traceId || 'unknown',
+      requestId: ctx?.requestId || 'unknown',
+      sessionId: ctx?.sessionId || 'unknown',
+      traceId: ctx?.traceId || 'unknown',
       userId,
-      userType: this.mapUserType(user?.type),
-      userName: user?.name || 'unknown',
-      userEmail: user?.email || 'unknown',
+      userType,
+      userName,
+      userEmail,
       action,
       targetType,
       targetId,
       targetName,
-      ipAddress: context?.ipAddress || 'unknown',
-      userAgent: context?.userAgent || 'unknown',
-      clientType: this.mapClientType(context?.userAgent),
+      ipAddress: ctx?.ipAddress || 'unknown',
+      userAgent: ctx?.userAgent || 'unknown',
+      clientType: this.mapClientType(ctx?.userAgent),
       durationMs,
       metadata: extractMetadata
         ? extractMetadata(request, responseData)
         : undefined,
+      httpMethod,
+      apiEndpoint,
+      responseStatusCode,
+      description,
     });
   }
 
@@ -154,15 +178,18 @@ export class AuditLogInterceptor implements NestInterceptor {
    */
   private async logFailure(
     request: Request,
+    response: Response,
     error: Error,
     options: AuditActionOptions,
     durationMs: number,
   ): Promise<void> {
     const { action, targetType, targetIdParam } = options;
 
-    const context = RequestContext.get();
-    const user = this.extractUser(request);
-    const userId = this.extractUserId(user);
+    const ctx = RequestContext.get();
+    const userId = ctx?.userId;
+    const userType = ctx?.userType as UserType ?? UserType.INTERNAL;
+    const userName = ctx?.userName || 'unknown';
+    const userEmail = ctx?.userEmail;
 
     // 인증되지 않은 사용자는 감사 로그 스킵 (userId가 UUID 타입이므로)
     if (!userId) {
@@ -178,38 +205,68 @@ export class AuditLogInterceptor implements NestInterceptor {
       return;
     }
 
+    // Extract new observability fields
+    const httpMethod = request.method;
+    const apiEndpoint = this.extractApiEndpoint(request);
+    // Get status code from error if it's an HttpException, otherwise from response
+    const responseStatusCode =
+      (error as any).status || response.statusCode || 500;
+    // Extract error code - check multiple possible properties
+    const errorCode = 
+      (error as any).code || 
+      (error as any).errorCode || 
+      (error as any).status?.toString() || 
+      'ERROR';
+    const failReason = error.message || 'Unknown error';
+    
+    // Resolve systemAction from errorCode
+    const systemAction = resolveSystemAction(errorCode);
+
+    // Generate description using EventDescriptionBuilder
+    let description: string;
+    try {
+      description = EventDescriptionBuilder.forAuditLog({
+        action,
+        actorName: userName,
+        actorDepartment: undefined, // Department not available in current context
+        actorType: userType,
+        targetName: undefined, // Target name may not be available in failure case
+        result: LogResult.FAIL,
+        failReason,
+        errorCode,
+      });
+    } catch (descError) {
+      this.logger.warn(
+        `Failed to generate description for action ${action}: ${descError instanceof Error ? descError.message : String(descError)}`,
+      );
+      // Fallback description
+      description = `${userName}가 ${action} 수행 실패: ${failReason}`;
+    }
+
     await this.auditLogService.logFailure({
-      requestId: context?.requestId || 'unknown',
-      sessionId: context?.sessionId,
-      traceId: context?.traceId,
+      requestId: ctx?.requestId || 'unknown',
+      sessionId: ctx?.sessionId,
+      traceId: ctx?.traceId,
       userId,
-      userType: this.mapUserType(user?.type),
-      userName: user?.name,
-      userEmail: user?.email,
+      userType,
+      userName,
+      userEmail,
       action,
       targetType,
       targetId,
-      ipAddress: context?.ipAddress || 'unknown',
-      userAgent: context?.userAgent || 'unknown',
-      clientType: this.mapClientType(context?.userAgent),
+      ipAddress: ctx?.ipAddress || 'unknown',
+      userAgent: ctx?.userAgent || 'unknown',
+      clientType: this.mapClientType(ctx?.userAgent),
       durationMs,
-      failReason: error.message || 'Unknown error',
-      resultCode: (error as any).status?.toString() || 'ERROR',
+      failReason,
+      resultCode: errorCode,
+      errorCode,
+      httpMethod,
+      apiEndpoint,
+      responseStatusCode,
+      systemAction,
+      description,
     });
-  }
-
-  /**
-   * 요청에서 사용자 정보 추출
-   */
-  private extractUser(request: Request): UserPayload | null {
-    return (request as any).user || null;
-  }
-
-  /**
-   * 사용자 ID 추출 (sub 또는 id 필드)
-   */
-  private extractUserId(user: UserPayload | null): string | undefined {
-    return user?.sub || user?.id;
   }
 
   /**
@@ -288,16 +345,6 @@ export class AuditLogInterceptor implements NestInterceptor {
   }
 
   /**
-   * 사용자 타입 매핑
-   */
-  private mapUserType(type?: string): UserType {
-    if (type === UserType.EXTERNAL) {
-      return UserType.EXTERNAL;
-    }
-    return UserType.INTERNAL;
-  }
-
-  /**
    * 클라이언트 타입 매핑
    */
   private mapClientType(userAgent?: string): ClientType {
@@ -326,5 +373,26 @@ export class AuditLogInterceptor implements NestInterceptor {
     }
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     return uuidRegex.test(value);
+  }
+
+  /**
+   * API 엔드포인트 추출
+   *
+   * @param request - Express Request 객체
+   * @returns 정규화된 API 엔드포인트 경로 (예: '/v1/files/:id')
+   */
+  private extractApiEndpoint(request: Request): string | undefined {
+    // NestJS route path (패턴 포함, 예: '/v1/files/:id')
+    if (request.route?.path) {
+      return request.route.path;
+    }
+
+    // Fallback: request.url에서 쿼리 스트링 제거
+    if (request.url) {
+      const urlWithoutQuery = request.url.split('?')[0];
+      return urlWithoutQuery;
+    }
+
+    return undefined;
   }
 }

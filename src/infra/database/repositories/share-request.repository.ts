@@ -62,7 +62,7 @@ export class ShareRequestRepository implements IShareRequestRepository {
 
     // 파일 ID 필터 (UUID 배열에 포함되는지 확인)
     if (filter.fileId) {
-      queryBuilder.andWhere('sr.file_ids @> ARRAY[:fileId]::uuid', {
+      queryBuilder.andWhere('sr.file_ids @> ARRAY[:fileId]::uuid[]', {
         fileId: filter.fileId,
       });
     }
@@ -160,7 +160,7 @@ export class ShareRequestRepository implements IShareRequestRepository {
     const found = await this.shareRequestRepository
       .createQueryBuilder('sr')
       .where('sr.status = :status', { status: ShareRequestStatus.PENDING })
-      .andWhere('sr.file_ids @> ARRAY[:fileId]::uuid', { fileId })
+      .andWhere('sr.file_ids @> ARRAY[:fileId]::uuid[]', { fileId })
       .andWhere(
         `EXISTS (
           SELECT 1 FROM jsonb_array_elements(sr.targets) AS target

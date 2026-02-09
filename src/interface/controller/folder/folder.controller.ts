@@ -89,11 +89,6 @@ export class FolderController {
    */
   @Get('root')
   @ApiFolderInfo()
-  // @AuditAction({
-  //   action: AuditActionEnum.FOLDER_VIEW,
-  //   targetType: TargetType.FOLDER,
-  //   targetIdParam: 'id',
-  // })
   async getRootFolderInfo(): Promise<FolderInfoResponse> {
     return this.folderQueryService.getRootFolderInfo();
   }

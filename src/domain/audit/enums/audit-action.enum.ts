@@ -25,7 +25,11 @@ export enum AuditAction {
   SHARE_CREATE = 'SHARE_CREATE', // 공유 링크 생성
   SHARE_REVOKE = 'SHARE_REVOKE', // 공유 링크 해제
   SHARE_ACCESS = 'SHARE_ACCESS', // 공유 링크 접근
+  SHARE_DOWNLOAD = 'SHARE_DOWNLOAD', // 공유 파일 다운로드
   SHARE_BLOCK = 'SHARE_BLOCK', // 공유 링크 차단
+  SHARE_UNBLOCK = 'SHARE_UNBLOCK', // 공유 링크 차단 해제
+  SHARE_BULK_BLOCK = 'SHARE_BULK_BLOCK', // 공유 일괄 차단
+  SHARE_BULK_UNBLOCK = 'SHARE_BULK_UNBLOCK', // 공유 일괄 차단 해제
 
   // 공유 요청 관련
   SHARE_REQUEST_CREATE = 'SHARE_REQUEST_CREATE', // 공유 요청 생성
@@ -51,6 +55,34 @@ export enum AuditAction {
 
   // 사용자 활동 관련
   ACTIVITY_VIEW = 'ACTIVITY_VIEW', // 최근 활동 조회
+
+  // 외부 사용자 관리
+  EXTERNAL_USER_CREATE = 'EXTERNAL_USER_CREATE', // 외부 사용자 생성
+  EXTERNAL_USER_UPDATE = 'EXTERNAL_USER_UPDATE', // 외부 사용자 수정
+  EXTERNAL_USER_DEACTIVATE = 'EXTERNAL_USER_DEACTIVATE', // 외부 사용자 비활성화
+  EXTERNAL_USER_ACTIVATE = 'EXTERNAL_USER_ACTIVATE', // 외부 사용자 활성화
+  EXTERNAL_USER_PASSWORD_RESET = 'EXTERNAL_USER_PASSWORD_RESET', // 외부 사용자 비밀번호 초기화
+
+  // 비밀번호 변경
+  PASSWORD_CHANGE = 'PASSWORD_CHANGE', // 비밀번호 변경
+
+  // 관리자 작업
+  USER_ROLE_ASSIGN = 'USER_ROLE_ASSIGN', // 사용자 Role 부여
+  USER_ROLE_REMOVE = 'USER_ROLE_REMOVE', // 사용자 Role 제거
+  USER_SYNC = 'USER_SYNC', // Employee → User 동기화
+  TOKEN_GENERATE = 'TOKEN_GENERATE', // JWT 토큰 수동 생성
+  ORG_MIGRATION = 'ORG_MIGRATION', // 조직 데이터 마이그레이션
+
+  // === 보안 이벤트 (SecurityEvent 흡수) ===
+  LOGIN_SUCCESS = 'LOGIN_SUCCESS', // 로그인 성공
+  LOGIN_FAILURE = 'LOGIN_FAILURE', // 로그인 실패
+  LOGOUT = 'LOGOUT', // 로그아웃
+  TOKEN_EXPIRED = 'TOKEN_EXPIRED', // 토큰 만료
+  PERMISSION_DENIED = 'PERMISSION_DENIED', // 권한 거부
+  EXPIRED_LINK_ACCESS = 'EXPIRED_LINK_ACCESS', // 만료 링크 접근
+  BLOCKED_SHARE_ACCESS = 'BLOCKED_SHARE_ACCESS', // 차단된 공유 접근
+  ACCESS_PATTERN_DEVIATION = 'ACCESS_PATTERN_DEVIATION', // 접근 패턴 이탈
+  NEW_DEVICE_ACCESS = 'NEW_DEVICE_ACCESS', // 신규 기기 접근
 }
 
 /**
@@ -73,7 +105,11 @@ export const AuditActionDescription: Record<AuditAction, string> = {
   [AuditAction.SHARE_CREATE]: '공유 링크 생성',
   [AuditAction.SHARE_REVOKE]: '공유 링크 해제',
   [AuditAction.SHARE_ACCESS]: '공유 링크 접근',
+  [AuditAction.SHARE_DOWNLOAD]: '공유 파일 다운로드',
   [AuditAction.SHARE_BLOCK]: '공유 링크 차단',
+  [AuditAction.SHARE_UNBLOCK]: '공유 링크 차단 해제',
+  [AuditAction.SHARE_BULK_BLOCK]: '공유 일괄 차단',
+  [AuditAction.SHARE_BULK_UNBLOCK]: '공유 일괄 차단 해제',
   [AuditAction.SHARE_REQUEST_CREATE]: '공유 요청 생성',
   [AuditAction.SHARE_REQUEST_APPROVE]: '공유 요청 승인',
   [AuditAction.SHARE_REQUEST_REJECT]: '공유 요청 거부',
@@ -89,6 +125,26 @@ export const AuditActionDescription: Record<AuditAction, string> = {
   [AuditAction.FAVORITE_REMOVE]: '즐겨찾기 해제',
   [AuditAction.FAVORITE_VIEW]: '즐겨찾기 조회',
   [AuditAction.ACTIVITY_VIEW]: '최근 활동 조회',
+  [AuditAction.EXTERNAL_USER_CREATE]: '외부 사용자 생성',
+  [AuditAction.EXTERNAL_USER_UPDATE]: '외부 사용자 수정',
+  [AuditAction.EXTERNAL_USER_DEACTIVATE]: '외부 사용자 비활성화',
+  [AuditAction.EXTERNAL_USER_ACTIVATE]: '외부 사용자 활성화',
+  [AuditAction.EXTERNAL_USER_PASSWORD_RESET]: '외부 사용자 비밀번호 초기화',
+  [AuditAction.PASSWORD_CHANGE]: '비밀번호 변경',
+  [AuditAction.USER_ROLE_ASSIGN]: '사용자 Role 부여',
+  [AuditAction.USER_ROLE_REMOVE]: '사용자 Role 제거',
+  [AuditAction.USER_SYNC]: 'Employee → User 동기화',
+  [AuditAction.TOKEN_GENERATE]: 'JWT 토큰 수동 생성',
+  [AuditAction.ORG_MIGRATION]: '조직 데이터 마이그레이션',
+  [AuditAction.LOGIN_SUCCESS]: '로그인 성공',
+  [AuditAction.LOGIN_FAILURE]: '로그인 실패',
+  [AuditAction.LOGOUT]: '로그아웃',
+  [AuditAction.TOKEN_EXPIRED]: '토큰 만료',
+  [AuditAction.PERMISSION_DENIED]: '권한 거부',
+  [AuditAction.EXPIRED_LINK_ACCESS]: '만료 링크 접근',
+  [AuditAction.BLOCKED_SHARE_ACCESS]: '차단된 공유 접근',
+  [AuditAction.ACCESS_PATTERN_DEVIATION]: '접근 패턴 이탈',
+  [AuditAction.NEW_DEVICE_ACCESS]: '신규 기기 접근',
 };
 
 /**
@@ -101,6 +157,7 @@ export enum ActionCategory {
   AUTH = 'auth',
   ADMIN = 'admin',
   USER = 'user',
+  SECURITY = 'security',
 }
 
 /**
@@ -123,7 +180,11 @@ export const AuditActionCategory: Record<AuditAction, ActionCategory> = {
   [AuditAction.SHARE_CREATE]: ActionCategory.SHARE,
   [AuditAction.SHARE_REVOKE]: ActionCategory.SHARE,
   [AuditAction.SHARE_ACCESS]: ActionCategory.SHARE,
+  [AuditAction.SHARE_DOWNLOAD]: ActionCategory.SHARE,
   [AuditAction.SHARE_BLOCK]: ActionCategory.SHARE,
+  [AuditAction.SHARE_UNBLOCK]: ActionCategory.SHARE,
+  [AuditAction.SHARE_BULK_BLOCK]: ActionCategory.SHARE,
+  [AuditAction.SHARE_BULK_UNBLOCK]: ActionCategory.SHARE,
   [AuditAction.SHARE_REQUEST_CREATE]: ActionCategory.SHARE,
   [AuditAction.SHARE_REQUEST_APPROVE]: ActionCategory.SHARE,
   [AuditAction.SHARE_REQUEST_REJECT]: ActionCategory.SHARE,
@@ -139,6 +200,26 @@ export const AuditActionCategory: Record<AuditAction, ActionCategory> = {
   [AuditAction.FAVORITE_REMOVE]: ActionCategory.USER,
   [AuditAction.FAVORITE_VIEW]: ActionCategory.USER,
   [AuditAction.ACTIVITY_VIEW]: ActionCategory.USER,
+  [AuditAction.EXTERNAL_USER_CREATE]: ActionCategory.ADMIN,
+  [AuditAction.EXTERNAL_USER_UPDATE]: ActionCategory.ADMIN,
+  [AuditAction.EXTERNAL_USER_DEACTIVATE]: ActionCategory.ADMIN,
+  [AuditAction.EXTERNAL_USER_ACTIVATE]: ActionCategory.ADMIN,
+  [AuditAction.EXTERNAL_USER_PASSWORD_RESET]: ActionCategory.ADMIN,
+  [AuditAction.PASSWORD_CHANGE]: ActionCategory.SECURITY,
+  [AuditAction.USER_ROLE_ASSIGN]: ActionCategory.ADMIN,
+  [AuditAction.USER_ROLE_REMOVE]: ActionCategory.ADMIN,
+  [AuditAction.USER_SYNC]: ActionCategory.ADMIN,
+  [AuditAction.TOKEN_GENERATE]: ActionCategory.SECURITY,
+  [AuditAction.ORG_MIGRATION]: ActionCategory.ADMIN,
+  [AuditAction.LOGIN_SUCCESS]: ActionCategory.SECURITY,
+  [AuditAction.LOGIN_FAILURE]: ActionCategory.SECURITY,
+  [AuditAction.LOGOUT]: ActionCategory.SECURITY,
+  [AuditAction.TOKEN_EXPIRED]: ActionCategory.SECURITY,
+  [AuditAction.PERMISSION_DENIED]: ActionCategory.SECURITY,
+  [AuditAction.EXPIRED_LINK_ACCESS]: ActionCategory.SECURITY,
+  [AuditAction.BLOCKED_SHARE_ACCESS]: ActionCategory.SECURITY,
+  [AuditAction.ACCESS_PATTERN_DEVIATION]: ActionCategory.SECURITY,
+  [AuditAction.NEW_DEVICE_ACCESS]: ActionCategory.SECURITY,
 };
 
 

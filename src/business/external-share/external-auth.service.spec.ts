@@ -1,18 +1,18 @@
 /**
  * ============================================================
- * 📦 ExternalAuthService 테스트 (Unit Test)
+ * ExternalAuthService 테스트 (Unit Test)
  * ============================================================
  *
- * 🎯 테스트 대상:
+ * 테스트 대상:
  *   - ExternalAuthService 클래스
  *
- * 📋 시나리오 매핑:
+ * 시나리오 매핑:
  *   - SC-001: 외부 사용자 로그인 성공
  *   - SC-002: Access Token 갱신 성공
  *   - SC-003: 로그아웃 성공
  *   - SC-004: 비밀번호 변경 성공
  *
- * ⚠️ 중요 고려사항:
+ * 중요 고려사항:
  *   - 비활성화된 계정은 로그인 불가
  *   - 5회 실패 시 30분 계정 잠금
  *   - 로그아웃/비밀번호 변경 시 토큰 블랙리스트 등록
@@ -23,40 +23,34 @@ import { UnauthorizedException, ForbiddenException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { ExternalAuthService } from './external-auth.service';
-import {
-  EXTERNAL_USER_REPOSITORY,
-  IExternalUserRepository,
-} from '../../domain/external-share/repositories/external-user.repository.interface';
+import { ExternalUserDomainService } from '../../domain/external-share';
 import { ExternalUser } from '../../domain/external-share/entities/external-user.entity';
 import { LoginAttemptService } from './security/login-attempt.service';
 import { TokenBlacklistService } from './security/token-blacklist.service';
+import { SecurityLogService } from '../audit/security-log.service';
 import * as bcrypt from 'bcrypt';
 
 describe('ExternalAuthService (Unit Tests)', () => {
   let service: ExternalAuthService;
-  let mockUserRepo: jest.Mocked<IExternalUserRepository>;
+  let mockExternalUserDomainService: {
+    저장: jest.Mock;
+    조회: jest.Mock;
+    사용자명조회: jest.Mock;
+  };
   let mockJwtService: jest.Mocked<JwtService>;
   let mockConfigService: jest.Mocked<ConfigService>;
   let mockLoginAttemptService: jest.Mocked<LoginAttemptService>;
   let mockTokenBlacklistService: jest.Mocked<TokenBlacklistService>;
 
   /**
-   * 🎭 Mock 설정
-   * 📍 mockUserRepo: ExternalUser 영속성 관리
-   * 📍 mockJwtService: JWT 토큰 발급/검증
-   * 📍 mockLoginAttemptService: 로그인 시도 횟수 관리
-   * 📍 mockTokenBlacklistService: 토큰 블랙리스트 관리
+   * Mock 설정
    */
   beforeEach(async () => {
-    mockUserRepo = {
-      save: jest.fn(),
-      findById: jest.fn(),
-      findByUsername: jest.fn(),
-      findByEmail: jest.fn(),
-      findAll: jest.fn(),
-      findAllActive: jest.fn(),
-      delete: jest.fn(),
-    } as jest.Mocked<IExternalUserRepository>;
+    mockExternalUserDomainService = {
+      저장: jest.fn(),
+      조회: jest.fn(),
+      사용자명조회: jest.fn(),
+    };
 
     mockJwtService = {
       sign: jest.fn().mockReturnValue('mock-jwt-token'),
@@ -81,11 +75,16 @@ describe('ExternalAuthService (Unit Tests)', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ExternalAuthService,
-        { provide: EXTERNAL_USER_REPOSITORY, useValue: mockUserRepo },
+        { provide: ExternalUserDomainService, useValue: mockExternalUserDomainService },
         { provide: JwtService, useValue: mockJwtService },
         { provide: ConfigService, useValue: mockConfigService },
         { provide: LoginAttemptService, useValue: mockLoginAttemptService },
         { provide: TokenBlacklistService, useValue: mockTokenBlacklistService },
+        { provide: SecurityLogService, useValue: {
+          logLoginSuccess: jest.fn().mockResolvedValue(undefined),
+          logLoginFailure: jest.fn().mockResolvedValue(undefined),
+          log: jest.fn().mockResolvedValue(undefined),
+        }},
       ],
     }).compile();
 
@@ -93,23 +92,14 @@ describe('ExternalAuthService (Unit Tests)', () => {
   });
 
   /**
-   * ════════════════════════════════════════════════════════════════
-   * 📌 SC-001: 외부 사용자 로그인 성공
-   * ════════════════════════════════════════════════════════════════
+   * SC-001: 외부 사용자 로그인 성공
    */
   describe('SC-001: 외부 사용자 로그인 성공', () => {
     /**
-     * 🎯 검증 목적: 정상적인 로그인 및 JWT 발급
-     *
-     * 전제조건:
-     * - 외부 사용자 계정이 존재함
-     * - 계정이 활성화 상태 (isActive: true)
-     * - 로그인 시도 제한에 걸리지 않음
+     * 검증 목적: 정상적인 로그인 및 JWT 발급
      */
     it('should login successfully and return access/refresh tokens', async () => {
-      // ═══════════════════════════════════════════════════════
-      // 📥 GIVEN (사전 조건 설정)
-      // ═══════════════════════════════════════════════════════
+      // GIVEN
       const hashedPassword = await bcrypt.hash('SecureP@ss123!', 10);
       const existingUser = new ExternalUser({
         id: 'ext-user-001',
@@ -122,31 +112,22 @@ describe('ExternalAuthService (Unit Tests)', () => {
         createdBy: 'admin-123',
       });
 
-      mockUserRepo.findByUsername.mockResolvedValue(existingUser);
-      mockUserRepo.save.mockImplementation(async (user) => user);
+      mockExternalUserDomainService.사용자명조회.mockResolvedValue(existingUser);
+      mockExternalUserDomainService.저장.mockImplementation(async (user) => user);
       mockJwtService.sign
         .mockReturnValueOnce('access-token-jwt')
         .mockReturnValueOnce('refresh-token-jwt');
 
-      // ═══════════════════════════════════════════════════════
-      // 🎬 WHEN (테스트 실행)
-      // ═══════════════════════════════════════════════════════
+      // WHEN
       const result = await service.login({
         username: 'external_user_001',
         password: 'SecureP@ss123!',
       });
 
-      // ═══════════════════════════════════════════════════════
-      // ✅ THEN (결과 검증)
-      // ═══════════════════════════════════════════════════════
-      // 검증 1: accessToken이 유효한 JWT 형식
+      // THEN
       expect(result.accessToken).toBe('access-token-jwt');
-
-      // 검증 2: refreshToken이 유효한 JWT 형식
       expect(result.refreshToken).toBe('refresh-token-jwt');
 
-
-      // 검증 4: user 정보가 올바르게 반환됨
       expect(result.user).toEqual({
         id: 'ext-user-001',
         username: 'external_user_001',
@@ -155,29 +136,33 @@ describe('ExternalAuthService (Unit Tests)', () => {
         company: '파트너사 A',
       });
 
-      // 검증 5: lastLoginAt 갱신을 위해 save 호출됨
-      expect(mockUserRepo.save).toHaveBeenCalled();
+      // lastLoginAt 갱신을 위해 save 호출됨
+      expect(mockExternalUserDomainService.저장).toHaveBeenCalled();
 
-      // 검증 6: 로그인 실패 카운터가 초기화됨
+      // 로그인 실패 카운터가 초기화됨
       expect(mockLoginAttemptService.clearFailedAttempts).toHaveBeenCalledWith('external_user_001');
 
-      // 검증 7: JWT 페이로드가 올바름
+      // JWT 페이로드가 올바름 (보안: userId만 포함, username 제외)
       expect(mockJwtService.sign).toHaveBeenCalledWith(
         expect.objectContaining({
           sub: 'ext-user-001',
-          username: 'external_user_001',
           type: 'external',
           tokenType: 'access',
         }),
         expect.any(Object),
       );
+      // username이 JWT 페이로드에 포함되지 않음
+      expect(mockJwtService.sign).not.toHaveBeenCalledWith(
+        expect.objectContaining({ username: expect.anything() }),
+        expect.any(Object),
+      );
     });
 
     /**
-     * 🎯 에러 시나리오: 사용자가 존재하지 않음
+     * 에러 시나리오: 사용자가 존재하지 않음
      */
     it('should throw UnauthorizedException when user not found', async () => {
-      mockUserRepo.findByUsername.mockResolvedValue(null);
+      mockExternalUserDomainService.사용자명조회.mockResolvedValue(null);
 
       await expect(
         service.login({ username: 'unknown', password: 'password' }),
@@ -188,7 +173,7 @@ describe('ExternalAuthService (Unit Tests)', () => {
     });
 
     /**
-     * 🎯 에러 시나리오: 비밀번호가 틀림
+     * 에러 시나리오: 비밀번호가 틀림
      */
     it('should throw UnauthorizedException when password is incorrect', async () => {
       const hashedPassword = await bcrypt.hash('correct_password', 10);
@@ -199,7 +184,7 @@ describe('ExternalAuthService (Unit Tests)', () => {
         isActive: true,
         createdBy: 'admin-123',
       });
-      mockUserRepo.findByUsername.mockResolvedValue(existingUser);
+      mockExternalUserDomainService.사용자명조회.mockResolvedValue(existingUser);
 
       await expect(
         service.login({ username: 'partner_user', password: 'wrong_password' }),
@@ -209,7 +194,7 @@ describe('ExternalAuthService (Unit Tests)', () => {
     });
 
     /**
-     * 🎯 에러 시나리오: 비활성화된 계정
+     * 에러 시나리오: 비활성화된 계정
      */
     it('should throw ForbiddenException when account is deactivated', async () => {
       const hashedPassword = await bcrypt.hash('correct_password', 10);
@@ -220,7 +205,7 @@ describe('ExternalAuthService (Unit Tests)', () => {
         isActive: false, // 비활성화
         createdBy: 'admin-123',
       });
-      mockUserRepo.findByUsername.mockResolvedValue(existingUser);
+      mockExternalUserDomainService.사용자명조회.mockResolvedValue(existingUser);
 
       await expect(
         service.login({ username: 'partner_user', password: 'correct_password' }),
@@ -228,7 +213,7 @@ describe('ExternalAuthService (Unit Tests)', () => {
     });
 
     /**
-     * 🎯 에러 시나리오: 계정 잠금 상태
+     * 에러 시나리오: 계정 잠금 상태
      */
     it('should throw ForbiddenException when account is locked', async () => {
       mockLoginAttemptService.canAttemptLogin.mockReturnValue({
@@ -243,23 +228,14 @@ describe('ExternalAuthService (Unit Tests)', () => {
   });
 
   /**
-   * ════════════════════════════════════════════════════════════════
-   * 📌 SC-002: Access Token 갱신 성공
-   * ════════════════════════════════════════════════════════════════
+   * SC-002: Access Token 갱신 성공
    */
   describe('SC-002: Access Token 갱신 성공', () => {
     /**
-     * 🎯 검증 목적: Refresh Token으로 새 Access Token 발급
-     *
-     * 전제조건:
-     * - 유효한 Refresh Token 보유
-     * - Refresh Token이 블랙리스트에 없음
-     * - 사용자 계정이 활성화 상태
+     * 검증 목적: Refresh Token으로 새 Access Token 발급
      */
     it('should refresh access token successfully', async () => {
-      // ═══════════════════════════════════════════════════════
-      // 📥 GIVEN (사전 조건 설정)
-      // ═══════════════════════════════════════════════════════
+      // GIVEN
       const refreshTokenPayload = {
         sub: 'ext-user-001',
         username: 'external_user_001',
@@ -277,34 +253,23 @@ describe('ExternalAuthService (Unit Tests)', () => {
         isActive: true,
         createdBy: 'admin',
       });
-      mockUserRepo.findById.mockResolvedValue(activeUser);
+      mockExternalUserDomainService.조회.mockResolvedValue(activeUser);
       mockJwtService.sign.mockReturnValue('new-access-token-jwt');
 
-      // ═══════════════════════════════════════════════════════
-      // 🎬 WHEN (테스트 실행)
-      // ═══════════════════════════════════════════════════════
+      // WHEN
       const result = await service.refreshToken({
         refreshToken: 'valid-refresh-token',
       });
 
-      // ═══════════════════════════════════════════════════════
-      // ✅ THEN (결과 검증)
-      // ═══════════════════════════════════════════════════════
-      // 검증 1: 새 accessToken 반환
+      // THEN
       expect(result.accessToken).toBe('new-access-token-jwt');
-
-      // 검증 2: expiresIn이 900 (15분)
       expect(result.expiresIn).toBe(900);
-
-      // 검증 3: 토큰이 블랙리스트 확인됨
       expect(mockTokenBlacklistService.isBlacklisted).toHaveBeenCalledWith('valid-refresh-token');
-
-      // 검증 4: 사용자 상태 확인됨
-      expect(mockUserRepo.findById).toHaveBeenCalledWith('ext-user-001');
+      expect(mockExternalUserDomainService.조회).toHaveBeenCalledWith('ext-user-001');
     });
 
     /**
-     * 🎯 에러 시나리오: 유효하지 않은 Refresh Token
+     * 에러 시나리오: 유효하지 않은 Refresh Token
      */
     it('should throw UnauthorizedException when refresh token is invalid', async () => {
       mockJwtService.verify.mockImplementation(() => {
@@ -317,7 +282,7 @@ describe('ExternalAuthService (Unit Tests)', () => {
     });
 
     /**
-     * 🎯 에러 시나리오: 블랙리스트에 등록된 Refresh Token
+     * 에러 시나리오: 블랙리스트에 등록된 Refresh Token
      */
     it('should throw UnauthorizedException when refresh token is blacklisted', async () => {
       mockJwtService.verify.mockReturnValue({
@@ -333,7 +298,7 @@ describe('ExternalAuthService (Unit Tests)', () => {
     });
 
     /**
-     * 🎯 에러 시나리오: 비활성화된 사용자
+     * 에러 시나리오: 비활성화된 사용자
      */
     it('should throw ForbiddenException when user is deactivated', async () => {
       mockJwtService.verify.mockReturnValue({
@@ -348,7 +313,7 @@ describe('ExternalAuthService (Unit Tests)', () => {
         isActive: false,
         createdBy: 'admin',
       });
-      mockUserRepo.findById.mockResolvedValue(deactivatedUser);
+      mockExternalUserDomainService.조회.mockResolvedValue(deactivatedUser);
 
       await expect(
         service.refreshToken({ refreshToken: 'valid-token' }),
@@ -357,36 +322,24 @@ describe('ExternalAuthService (Unit Tests)', () => {
   });
 
   /**
-   * ════════════════════════════════════════════════════════════════
-   * 📌 SC-003: 로그아웃 성공
-   * ════════════════════════════════════════════════════════════════
+   * SC-003: 로그아웃 성공
    */
   describe('SC-003: 로그아웃 성공', () => {
     /**
-     * 🎯 검증 목적: 토큰을 블랙리스트에 추가하여 무효화
-     *
-     * 전제조건:
-     * - 유효한 Access Token 보유
+     * 검증 목적: 토큰을 블랙리스트에 추가하여 무효화
      */
     it('should logout and add token to blacklist', async () => {
-      // ═══════════════════════════════════════════════════════
-      // 📥 GIVEN (사전 조건 설정)
-      // ═══════════════════════════════════════════════════════
+      // GIVEN
       const tokenPayload = {
         sub: 'ext-user-001',
         exp: Math.floor(Date.now() / 1000) + 900, // 15분 후
       };
       mockJwtService.verify.mockReturnValue(tokenPayload);
 
-      // ═══════════════════════════════════════════════════════
-      // 🎬 WHEN (테스트 실행)
-      // ═══════════════════════════════════════════════════════
+      // WHEN
       await service.logout('valid-access-token', 'ext-user-001');
 
-      // ═══════════════════════════════════════════════════════
-      // ✅ THEN (결과 검증)
-      // ═══════════════════════════════════════════════════════
-      // 검증: Access Token이 블랙리스트에 추가됨
+      // THEN
       expect(mockTokenBlacklistService.addToBlacklist).toHaveBeenCalledWith(
         'valid-access-token',
         'ext-user-001',
@@ -396,7 +349,7 @@ describe('ExternalAuthService (Unit Tests)', () => {
     });
 
     /**
-     * 🎯 검증 목적: 이미 만료된 토큰도 로그아웃 성공 처리
+     * 검증 목적: 이미 만료된 토큰도 로그아웃 성공 처리
      */
     it('should succeed even when token is already expired', async () => {
       mockJwtService.verify.mockImplementation(() => {
@@ -411,22 +364,14 @@ describe('ExternalAuthService (Unit Tests)', () => {
   });
 
   /**
-   * ════════════════════════════════════════════════════════════════
-   * 📌 SC-004: 비밀번호 변경 성공
-   * ════════════════════════════════════════════════════════════════
+   * SC-004: 비밀번호 변경 성공
    */
   describe('SC-004: 비밀번호 변경 성공', () => {
     /**
-     * 🎯 검증 목적: 현재 비밀번호 검증 후 새 비밀번호로 변경
-     *
-     * 전제조건:
-     * - 유효한 Access Token 보유
-     * - 현재 비밀번호를 알고 있음
+     * 검증 목적: 현재 비밀번호 검증 후 새 비밀번호로 변경
      */
     it('should change password successfully', async () => {
-      // ═══════════════════════════════════════════════════════
-      // 📥 GIVEN (사전 조건 설정)
-      // ═══════════════════════════════════════════════════════
+      // GIVEN
       const currentHashedPassword = await bcrypt.hash('SecureP@ss123!', 10);
       const existingUser = new ExternalUser({
         id: 'ext-user-001',
@@ -435,8 +380,8 @@ describe('ExternalAuthService (Unit Tests)', () => {
         isActive: true,
         createdBy: 'admin-123',
       });
-      mockUserRepo.findById.mockResolvedValue(existingUser);
-      mockUserRepo.save.mockImplementation(async (user) => user);
+      mockExternalUserDomainService.조회.mockResolvedValue(existingUser);
+      mockExternalUserDomainService.저장.mockImplementation(async (user) => user);
 
       const tokenPayload = {
         sub: 'ext-user-001',
@@ -444,9 +389,7 @@ describe('ExternalAuthService (Unit Tests)', () => {
       };
       mockJwtService.verify.mockReturnValue(tokenPayload);
 
-      // ═══════════════════════════════════════════════════════
-      // 🎬 WHEN (테스트 실행)
-      // ═══════════════════════════════════════════════════════
+      // WHEN
       await service.changePassword(
         'ext-user-001',
         {
@@ -456,18 +399,16 @@ describe('ExternalAuthService (Unit Tests)', () => {
         'current-access-token',
       );
 
-      // ═══════════════════════════════════════════════════════
-      // ✅ THEN (결과 검증)
-      // ═══════════════════════════════════════════════════════
-      // 검증 1: DB에서 passwordHash가 변경됨
-      expect(mockUserRepo.save).toHaveBeenCalled();
-      const savedUser = mockUserRepo.save.mock.calls[0][0];
+      // THEN
+      // DB에서 passwordHash가 변경됨
+      expect(mockExternalUserDomainService.저장).toHaveBeenCalled();
+      const savedUser = mockExternalUserDomainService.저장.mock.calls[0][0];
       expect(savedUser.passwordHash).not.toBe(currentHashedPassword);
 
-      // 검증 2: 새 비밀번호가 해시됨 (평문이 아님)
+      // 새 비밀번호가 해시됨 (평문이 아님)
       expect(savedUser.passwordHash).not.toBe('NewSecureP@ss456!');
 
-      // 검증 3: 기존 Access Token이 블랙리스트에 추가됨
+      // 기존 Access Token이 블랙리스트에 추가됨
       expect(mockTokenBlacklistService.addToBlacklist).toHaveBeenCalledWith(
         'current-access-token',
         'ext-user-001',
@@ -477,7 +418,7 @@ describe('ExternalAuthService (Unit Tests)', () => {
     });
 
     /**
-     * 🎯 에러 시나리오: 현재 비밀번호가 틀림
+     * 에러 시나리오: 현재 비밀번호가 틀림
      */
     it('should throw UnauthorizedException when current password is incorrect', async () => {
       const currentHashedPassword = await bcrypt.hash('correct_password', 10);
@@ -488,7 +429,7 @@ describe('ExternalAuthService (Unit Tests)', () => {
         isActive: true,
         createdBy: 'admin-123',
       });
-      mockUserRepo.findById.mockResolvedValue(existingUser);
+      mockExternalUserDomainService.조회.mockResolvedValue(existingUser);
 
       await expect(
         service.changePassword('ext-user-123', {
@@ -499,10 +440,10 @@ describe('ExternalAuthService (Unit Tests)', () => {
     });
 
     /**
-     * 🎯 에러 시나리오: 사용자를 찾을 수 없음
+     * 에러 시나리오: 사용자를 찾을 수 없음
      */
     it('should throw UnauthorizedException when user not found', async () => {
-      mockUserRepo.findById.mockResolvedValue(null);
+      mockExternalUserDomainService.조회.mockResolvedValue(null);
 
       await expect(
         service.changePassword('unknown-user', {
@@ -513,7 +454,7 @@ describe('ExternalAuthService (Unit Tests)', () => {
     });
 
     /**
-     * 🎯 검증 목적: 새 비밀번호로 로그인 가능한지 확인
+     * 검증 목적: 새 비밀번호로 로그인 가능한지 확인
      */
     it('should allow login with new password after change', async () => {
       // 1. 비밀번호 변경
@@ -531,8 +472,8 @@ describe('ExternalAuthService (Unit Tests)', () => {
         createdBy: 'admin',
       });
 
-      mockUserRepo.findById.mockResolvedValue(user);
-      mockUserRepo.save.mockImplementation(async (u) => u);
+      mockExternalUserDomainService.조회.mockResolvedValue(user);
+      mockExternalUserDomainService.저장.mockImplementation(async (u) => u);
       mockJwtService.verify.mockReturnValue({ sub: 'ext-user-001', exp: Date.now() / 1000 + 900 });
 
       await service.changePassword('ext-user-001', {
@@ -541,7 +482,7 @@ describe('ExternalAuthService (Unit Tests)', () => {
       });
 
       // 2. 새 비밀번호로 로그인 시도
-      const savedUser = mockUserRepo.save.mock.calls[0][0];
+      const savedUser = mockExternalUserDomainService.저장.mock.calls[0][0];
       const isNewPasswordValid = await bcrypt.compare(newPassword, savedUser.passwordHash);
       expect(isNewPasswordValid).toBe(true);
 

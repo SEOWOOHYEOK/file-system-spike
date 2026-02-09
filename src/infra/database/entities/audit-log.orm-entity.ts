@@ -146,6 +146,61 @@ export class AuditLogOrmEntity {
   @Column({ type: 'varchar', array: true, nullable: true })
   tags: string[] | null;
 
+  // API 컨텍스트 (신규)
+  @Column({ name: 'http_method', type: 'varchar', length: 10, nullable: true })
+  httpMethod: string | null;
+
+  @Column({ name: 'api_endpoint', type: 'varchar', length: 255, nullable: true })
+  apiEndpoint: string | null;
+
+  // 인과관계 (신규)
+  @Column({ name: 'parent_event_id', type: 'uuid', nullable: true })
+  parentEventId: string | null;
+
+  // 보안 이벤트 통합 (신규)
+  @Column({ type: 'varchar', length: 10, nullable: true })
+  severity: string | null; // 'INFO' | 'WARN' | 'HIGH' | 'CRITICAL'
+
+  // 에러 추적 (신규)
+  @Column({ name: 'error_code', type: 'varchar', length: 100, nullable: true })
+  errorCode: string | null;
+
+  // System Response (신규)
+  @Column({
+    name: 'response_status_code',
+    type: 'integer',
+    nullable: true,
+  })
+  responseStatusCode: number | null;
+
+  @Column({ name: 'system_action', type: 'varchar', length: 30, nullable: true })
+  systemAction: string | null;
+
+  @Column({
+    name: 'system_action_detail',
+    type: 'text',
+    nullable: true,
+  })
+  systemActionDetail: string | null;
+
+  @Column({
+    name: 'follow_up_scheduled',
+    type: 'boolean',
+    nullable: true,
+  })
+  followUpScheduled: boolean | null;
+
+  @Column({ name: 'follow_up_at', type: 'timestamptz', nullable: true })
+  followUpAt: Date | null;
+
+  // 재시도 (신규)
+  @Column({ name: 'retry_count', type: 'integer', nullable: true })
+  retryCount: number | null;
+
+  // 인간 친화적 설명 (신규)
+  @Column({ type: 'text', default: '' })
+  description: string;
+
   // 시간 필드 (Time)
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   @Index()

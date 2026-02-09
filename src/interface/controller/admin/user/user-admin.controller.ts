@@ -18,6 +18,9 @@ import { AssignRoleDto } from '../../../../domain/user/dto/assign-role.dto';
 import { UserFilterQueryDto } from './dto/user-admin-query.dto';
 import { UserWithEmployeeResponseDto, UserWithRoleResponseDto } from './dto/user-admin-response.dto';
 import { EmployeeStatus } from '../../../../integrations/migration/organization/entities/employee.entity';
+import { AuditAction } from '../../../../common/decorators/audit-action.decorator';
+import { AuditAction as AuditActionEnum } from '../../../../domain/audit/enums/audit-action.enum';
+import { TargetType } from '../../../../domain/audit/enums/common.enum';
 
 /**
  * User 관리 Admin API 컨트롤러
@@ -86,6 +89,11 @@ export class UserAdminController {
    * PATCH /admin/users/:id/role
    */
   @Patch(':id/role')
+  @AuditAction({
+    action: AuditActionEnum.USER_ROLE_ASSIGN,
+    targetType: TargetType.USER,
+    targetIdParam: 'id',
+  })
   @ApiOperation({ summary: 'User에게 Role 부여' })
   @ApiResponse({ status: 200, description: 'Role 부여 완료' })
   @ApiResponse({ status: 404, description: 'User 또는 Role을 찾을 수 없음' })
@@ -102,6 +110,11 @@ export class UserAdminController {
    * DELETE /admin/users/:id/role
    */
   @Delete(':id/role')
+  @AuditAction({
+    action: AuditActionEnum.USER_ROLE_REMOVE,
+    targetType: TargetType.USER,
+    targetIdParam: 'id',
+  })
   @ApiOperation({ summary: 'User의 Role 제거' })
   @ApiResponse({ status: 200, description: 'Role 제거 완료' })
   @ApiResponse({ status: 404, description: 'User를 찾을 수 없음' })
@@ -116,6 +129,10 @@ export class UserAdminController {
    * Admin 권한 필요
    */
   @Post('sync')
+  @AuditAction({
+    action: AuditActionEnum.USER_SYNC,
+    targetType: TargetType.SYSTEM,
+  })
   @ApiOperation({ summary: 'Employee → User 동기화 실행' })
   @ApiResponse({ status: 200, description: '동기화 결과 반환' })
   async syncUsers(): Promise<SyncResult> {

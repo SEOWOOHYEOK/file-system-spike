@@ -3,6 +3,7 @@ import {
   Inject,
   UnauthorizedException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -10,6 +11,10 @@ import * as bcrypt from 'bcrypt';
 import { ExternalUserDomainService } from '../../domain/external-share';
 import { LoginAttemptService } from './security/login-attempt.service';
 import { TokenBlacklistService } from './security/token-blacklist.service';
+import { SecurityLogService } from '../audit/security-log.service';
+import { SecurityEventType } from '../../domain/audit/enums/security-event.enum';
+import { UserType } from '../../domain/audit/enums/common.enum';
+import { RequestContext } from '../../common/context/request-context';
 
 /**
  * 로그인 DTO
@@ -71,6 +76,7 @@ export interface RefreshResult {
  */
 @Injectable()
 export class ExternalAuthService {
+  private readonly logger = new Logger(ExternalAuthService.name);
   private readonly SALT_ROUNDS = 10;
 
   // 토큰 만료 시간 설정
@@ -83,6 +89,7 @@ export class ExternalAuthService {
     private readonly configService: ConfigService,
     private readonly loginAttemptService: LoginAttemptService,
     private readonly tokenBlacklistService: TokenBlacklistService,
+    private readonly securityLogService: SecurityLogService,
   ) {}
 
   /**
@@ -107,7 +114,16 @@ export class ExternalAuthService {
     const user = await this.externalUserDomainService.사용자명조회(dto.username);
     if (!user) {
       // 실패 기록 (사용자 존재 여부를 노출하지 않기 위해 동일한 메시지)
-      this.loginAttemptService.recordFailedAttempt(dto.username);
+      const failResult = this.loginAttemptService.recordFailedAttempt(dto.username);
+      // 보안 로그: 로그인 실패 (사용자 미존재)
+      await this.securityLogService.logLoginFailure({
+        requestId: RequestContext.getRequestId() || 'unknown',
+        usernameAttempted: dto.username,
+        ipAddress: RequestContext.getIpAddress() || 'unknown',
+        userAgent: RequestContext.getUserAgent() || 'unknown',
+        attemptCount: failResult.failedCount,
+        reason: 'USER_NOT_FOUND',
+      }).catch((err) => this.logger.warn('보안 로그 기록 실패', err));
       throw new UnauthorizedException('아이디 또는 비밀번호가 올바르지 않습니다.');
     }
 
@@ -120,6 +136,15 @@ export class ExternalAuthService {
     const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
     if (!isPasswordValid) {
       const result = this.loginAttemptService.recordFailedAttempt(dto.username);
+      // 보안 로그: 로그인 실패 (비밀번호 오류)
+      await this.securityLogService.logLoginFailure({
+        requestId: RequestContext.getRequestId() || 'unknown',
+        usernameAttempted: dto.username,
+        ipAddress: RequestContext.getIpAddress() || 'unknown',
+        userAgent: RequestContext.getUserAgent() || 'unknown',
+        attemptCount: result.failedCount,
+        reason: result.isLocked ? 'ACCOUNT_LOCKED' : 'INVALID_PASSWORD',
+      }).catch((err) => this.logger.warn('보안 로그 기록 실패', err));
       if (result.isLocked) {
         throw new ForbiddenException(
           `비밀번호 ${result.failedCount}회 오류. 계정이 30분간 잠겼습니다.`,
@@ -137,8 +162,18 @@ export class ExternalAuthService {
     user.updateLastLogin();
     await this.externalUserDomainService.저장(user);
 
+    // 보안 로그: 로그인 성공
+    await this.securityLogService.logLoginSuccess({
+      requestId: RequestContext.getRequestId() || 'unknown',
+      sessionId: RequestContext.get()?.sessionId,
+      userId: user.id,
+      userType: UserType.EXTERNAL,
+      ipAddress: RequestContext.getIpAddress() || 'unknown',
+      userAgent: RequestContext.getUserAgent() || 'unknown',
+    }).catch((err) => this.logger.warn('보안 로그 기록 실패', err));
+
     // 토큰 발급
-    const tokens = this.generateTokens(user.id, user.username);
+    const tokens = this.generateTokens(user.id);
 
     return {
       ...tokens,
@@ -178,11 +213,10 @@ export class ExternalAuthService {
         throw new ForbiddenException('계정이 비활성화되었습니다.');
       }
 
-      // 새 Access Token 발급
+      // 새 Access Token 발급 (보안: userId만 포함)
       const accessToken = this.jwtService.sign(
         {
           sub: payload.sub,
-          username: payload.username,
           type: 'external',
           tokenType: 'access',
         },
@@ -219,6 +253,17 @@ export class ExternalAuthService {
     } catch {
       // 토큰이 이미 만료되었어도 로그아웃은 성공으로 처리
     }
+
+    // 보안 로그: 로그아웃
+    await this.securityLogService.log({
+      requestId: RequestContext.getRequestId() || 'unknown',
+      sessionId: RequestContext.get()?.sessionId,
+      eventType: SecurityEventType.LOGOUT,
+      userId,
+      userType: UserType.EXTERNAL,
+      ipAddress: RequestContext.getIpAddress() || 'unknown',
+      userAgent: RequestContext.getUserAgent() || 'unknown',
+    }).catch((err) => this.logger.warn('보안 로그 기록 실패', err));
   }
 
   /**
@@ -248,6 +293,17 @@ export class ExternalAuthService {
     const newPasswordHash = await bcrypt.hash(dto.newPassword, this.SALT_ROUNDS);
     user.updatePassword(newPasswordHash);
     await this.externalUserDomainService.저장(user);
+
+    // 보안 로그: 비밀번호 변경
+    await this.securityLogService.log({
+      requestId: RequestContext.getRequestId() || 'unknown',
+      sessionId: RequestContext.get()?.sessionId,
+      eventType: SecurityEventType.PASSWORD_CHANGED,
+      userId,
+      userType: UserType.EXTERNAL,
+      ipAddress: RequestContext.getIpAddress() || 'unknown',
+      userAgent: RequestContext.getUserAgent() || 'unknown',
+    }).catch((err) => this.logger.warn('보안 로그 기록 실패', err));
 
     // 기존 토큰 무효화
     if (currentAccessToken) {
@@ -296,17 +352,19 @@ export class ExternalAuthService {
 
   /**
    * Access Token + Refresh Token 생성
+   *
+   * 보안: userId만 포함하는 최소 JWT payload
+   * - username 등 개인정보는 토큰에 포함하지 않음
+   * - Guard에서 DB 조회를 통해 사용자 정보를 획득
    */
   private generateTokens(
     userId: string,
-    username: string,
   ): { accessToken: string; refreshToken: string; expiresIn: number } {
     const secret = this.getJwtSecret();
 
     const accessToken = this.jwtService.sign(
       {
         sub: userId,
-        username,
         type: 'external',
         tokenType: 'access',
       },
@@ -316,7 +374,6 @@ export class ExternalAuthService {
     const refreshToken = this.jwtService.sign(
       {
         sub: userId,
-        username,
         type: 'external',
         tokenType: 'refresh',
       },

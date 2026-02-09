@@ -58,6 +58,36 @@ export class FileHistoryOrmEntity {
   @Column({ name: 'change_summary', type: 'text', nullable: true })
   changeSummary: string | null;
 
+  @Column({ type: 'text', default: '' })
+  description: string;
+
+  @Column({ name: 'request_id', type: 'uuid', nullable: true })
+  @Index()
+  requestId: string | null;
+
+  @Column({ name: 'trace_id', type: 'varchar', length: 64, nullable: true })
+  @Index()
+  traceId: string | null;
+
+  @Column({ name: 'parent_event_id', type: 'uuid', nullable: true })
+  @Index()
+  parentEventId: string | null;
+
+  @Column({ name: 'http_method', type: 'varchar', length: 10, nullable: true })
+  httpMethod: string | null;
+
+  @Column({ name: 'api_endpoint', type: 'varchar', length: 255, nullable: true })
+  apiEndpoint: string | null;
+
+  @Column({ name: 'error_code', type: 'varchar', length: 100, nullable: true })
+  errorCode: string | null;
+
+  @Column({ name: 'retry_count', type: 'integer', nullable: true })
+  retryCount: number | null;
+
+  @Column({ type: 'text', array: true, nullable: true })
+  tags: string[] | null;
+
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   @Index()
   createdAt: Date;

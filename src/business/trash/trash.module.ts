@@ -4,6 +4,7 @@ import { FileDomainModule } from '../../domain/file/file.module';
 import { FolderDomainModule } from '../../domain/folder/folder.module';
 import { TrashDomainModule } from '../../domain/trash/trash.module';
 import { SyncEventDomainModule } from '../../domain/sync-event/sync-event.module';
+import { AuditModule } from '../audit/audit.module';
 import { TrashService } from './trash.service';
 
 /**
@@ -20,6 +21,7 @@ import { TrashService } from './trash.service';
     FolderDomainModule,
     TrashDomainModule,
     SyncEventDomainModule,
+    AuditModule,       // FileHistoryService 의존성 제공
   ],
   providers: [TrashService],
   exports: [TrashService],

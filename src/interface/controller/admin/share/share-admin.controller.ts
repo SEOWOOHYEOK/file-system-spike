@@ -30,6 +30,9 @@ import {
 } from './dto/share-admin-response.dto';
 import { PublicShareListItemDto } from '../../share/dto/public-share-response.dto';
 import { PaginationQueryDto, PaginatedResponseDto} from '../../../common/dto';
+import { AuditAction } from '../../../../common/decorators';
+import { AuditAction as AuditActionEnum } from '../../../../domain/audit/enums/audit-action.enum';
+import { TargetType } from '../../../../domain/audit/enums/common.enum';
 
 /**
  * 공유 관리 컨트롤러 (관리자용)
@@ -73,6 +76,11 @@ export class ShareAdminController {
    */
   @Patch(':id/block')
   @ApiBlockShare()
+  @AuditAction({
+    action: AuditActionEnum.SHARE_BLOCK,
+    targetType: TargetType.SHARE,
+    targetIdParam: 'id',
+  })
   async blockShare(
     @User() user: { id: string },
     @Param('id', ParseUUIDPipe) id: string,
@@ -86,6 +94,11 @@ export class ShareAdminController {
    */
   @Patch(':id/unblock')
   @ApiUnblockShare()
+  @AuditAction({
+    action: AuditActionEnum.SHARE_UNBLOCK,
+    targetType: TargetType.SHARE,
+    targetIdParam: 'id',
+  })
   async unblockShare(
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<ShareBlockResponseDto> {
@@ -110,6 +123,11 @@ export class ShareAdminController {
    */
   @Patch('files/:fileId/block-all')
   @ApiBlockAllSharesByFile()
+  @AuditAction({
+    action: AuditActionEnum.SHARE_BULK_BLOCK,
+    targetType: TargetType.FILE,
+    targetIdParam: 'fileId',
+  })
   async blockAllSharesByFile(
     @User() user: { id: string },
     @Param('fileId', ParseUUIDPipe) fileId: string,
@@ -122,6 +140,11 @@ export class ShareAdminController {
    */
   @Patch('files/:fileId/unblock-all')
   @ApiUnblockAllSharesByFile()
+  @AuditAction({
+    action: AuditActionEnum.SHARE_BULK_UNBLOCK,
+    targetType: TargetType.FILE,
+    targetIdParam: 'fileId',
+  })
   async unblockAllSharesByFile(
     @Param('fileId', ParseUUIDPipe) fileId: string,
   ): Promise<BulkUnblockResponseDto> {
@@ -133,6 +156,11 @@ export class ShareAdminController {
    */
   @Patch('external-users/:userId/block-all')
   @ApiBlockAllSharesByExternalUser()
+  @AuditAction({
+    action: AuditActionEnum.SHARE_BULK_BLOCK,
+    targetType: TargetType.USER,
+    targetIdParam: 'userId',
+  })
   async blockAllSharesByExternalUser(
     @User() user: { id: string },
     @Param('userId', ParseUUIDPipe) userId: string,
