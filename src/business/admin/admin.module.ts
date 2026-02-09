@@ -9,9 +9,12 @@ import { NasHealthCheckService } from '../../infra/storage/nas/nas-health-check.
 import { StorageConsistencyService } from './storage-consistency.service';
 import { SyncEventStatsService } from './sync-event-stats.service';
 import { QueueStatusService } from './queue-status.service';
+import { ObservabilityService } from './observability.service';
 import { FileDomainModule } from '../../domain/file/file.module';
 import { StorageDomainModule } from '../../domain/storage/storage.module';
 import { SyncEventDomainModule } from '../../domain/sync-event/sync-event.module';
+import { SystemConfigDomainModule } from '../../domain/system-config/system-config.module';
+import { NasHealthHistoryDomainModule } from '../../domain/nas-health-history/nas-health-history.module';
 
 /**
  * Admin 비즈니스 모듈
@@ -28,6 +31,8 @@ import { SyncEventDomainModule } from '../../domain/sync-event/sync-event.module
     FileDomainModule,
     StorageDomainModule,
     SyncEventDomainModule,
+    SystemConfigDomainModule,
+    NasHealthHistoryDomainModule,
   ],
   providers: [
     AdminService,
@@ -37,7 +42,8 @@ import { SyncEventDomainModule } from '../../domain/sync-event/sync-event.module
     StorageConsistencyService,
     SyncEventStatsService,
     QueueStatusService,
+    ObservabilityService,
   ],
-  exports: [AdminService, QueueStatusService, SyncEventStatsService],
+  exports: [AdminService, QueueStatusService, SyncEventStatsService, ObservabilityService],
 })
 export class AdminBusinessModule {}

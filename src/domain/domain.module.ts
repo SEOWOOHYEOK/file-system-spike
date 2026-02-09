@@ -10,6 +10,8 @@ import { UserDomainModule } from './user/user.module';
 import { RoleDomainModule } from './role/role.module';
 import { UploadSessionDomainModule } from './upload-session/upload-session.module';
 import { FavoriteDomainModule } from './favorite/favorite.module';
+import { SystemConfigDomainModule } from './system-config/system-config.module';
+import { NasHealthHistoryDomainModule } from './nas-health-history/nas-health-history.module';
 
 /**
  * 도메인 레이어 통합 모듈
@@ -28,6 +30,8 @@ import { FavoriteDomainModule } from './favorite/favorite.module';
     RoleDomainModule,
     UploadSessionDomainModule,
     FavoriteDomainModule,
+    SystemConfigDomainModule,
+    NasHealthHistoryDomainModule,
   ],
   exports: [
     FileDomainModule,
@@ -41,6 +45,8 @@ import { FavoriteDomainModule } from './favorite/favorite.module';
     RoleDomainModule,
     UploadSessionDomainModule,
     FavoriteDomainModule,
+    SystemConfigDomainModule,
+    NasHealthHistoryDomainModule,
   ],
 })
 export class DomainModule {}

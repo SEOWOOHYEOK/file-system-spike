@@ -17,9 +17,12 @@ import { RepositoryModule } from '../../infra/database/repository.module';
 import { StorageInfraModule } from '../../infra/storage/storage-infra.module';
 import { UploadSessionDomainModule } from '../../domain/upload-session/upload-session.module';
 import { FileBusinessModule } from '../file/file.module';
+import { AdminBusinessModule } from '../admin/admin.module';
+import { SystemConfigDomainModule } from '../../domain/system-config/system-config.module';
 
 import { SyncEventRecoveryScheduler } from '../sync-event/scheduler/sync-event-recovery.scheduler';
 import { MultipartOrphanCleanupScheduler } from '../file/scheduler/multipart-orphan-cleanup.scheduler';
+import { NasHealthCheckScheduler } from './nas-health-check.scheduler';
 
 @Module({
   imports: [
@@ -32,10 +35,15 @@ import { MultipartOrphanCleanupScheduler } from '../file/scheduler/multipart-orp
     StorageInfraModule,
     UploadSessionDomainModule,
     FileBusinessModule, // UploadQueueService 제공
+
+    // NasHealthCheckScheduler 의존성
+    AdminBusinessModule,
+    SystemConfigDomainModule,
   ],
   providers: [
     SyncEventRecoveryScheduler,
     MultipartOrphanCleanupScheduler,
+    NasHealthCheckScheduler,
   ],
 })
 export class WorkerSchedulerModule {}

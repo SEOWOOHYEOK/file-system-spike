@@ -81,6 +81,16 @@ import { SearchHistoryRepository } from './repositories/search-history.repositor
 import {
   SEARCH_HISTORY_REPOSITORY,
 } from '../../domain/search-history/repositories/search-history.repository.interface';
+import { SystemConfigOrmEntity } from './entities/system-config.orm-entity';
+import { NasHealthHistoryOrmEntity } from './entities/nas-health-history.orm-entity';
+import { SystemConfigRepository } from './repositories/system-config.repository';
+import { NasHealthHistoryRepository } from './repositories/nas-health-history.repository';
+import {
+  SYSTEM_CONFIG_REPOSITORY,
+} from '../../domain/system-config/repositories/system-config.repository.interface';
+import {
+  NAS_HEALTH_HISTORY_REPOSITORY,
+} from '../../domain/nas-health-history/repositories/nas-health-history.repository.interface';
 
 /**
  * TypeORM forFeature에 등록할 엔티티 목록
@@ -101,6 +111,8 @@ const entities = [
   UserOrmEntity,
   FavoriteOrmEntity,
   SearchHistoryOrmEntity,
+  SystemConfigOrmEntity,
+  NasHealthHistoryOrmEntity,
 ];
 
 @Module({
@@ -184,6 +196,16 @@ const entities = [
       provide: SEARCH_HISTORY_REPOSITORY,
       useClass: SearchHistoryRepository,
     },
+    // System Config Repository
+    {
+      provide: SYSTEM_CONFIG_REPOSITORY,
+      useClass: SystemConfigRepository,
+    },
+    // NAS Health History Repository
+    {
+      provide: NAS_HEALTH_HISTORY_REPOSITORY,
+      useClass: NasHealthHistoryRepository,
+    },
   ],
   exports: [
     FILE_REPOSITORY,
@@ -201,6 +223,8 @@ const entities = [
     USER_REPOSITORY,
     FAVORITE_REPOSITORY,
     SEARCH_HISTORY_REPOSITORY,
+    SYSTEM_CONFIG_REPOSITORY,
+    NAS_HEALTH_HISTORY_REPOSITORY,
   ],
 })
 export class RepositoryModule { }

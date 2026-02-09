@@ -36,6 +36,11 @@ import { FavoriteOrmEntity } from './entities/favorite.orm-entity';
 // Search History Entity
 import { SearchHistoryOrmEntity } from './entities/search-history.orm-entity';
 
+// System Config Entity
+import { SystemConfigOrmEntity } from './entities/system-config.orm-entity';
+// NAS Health History Entity
+import { NasHealthHistoryOrmEntity } from './entities/nas-health-history.orm-entity';
+
 // Organization Entities (조직 관련 엔티티)
 import {
   Rank,
@@ -68,6 +73,10 @@ const entities = [
   FavoriteOrmEntity,
   // Search History 엔티티
   SearchHistoryOrmEntity,
+  // System Config 엔티티
+  SystemConfigOrmEntity,
+  // NAS Health History 엔티티
+  NasHealthHistoryOrmEntity,
   // Organization 관련 엔티티
   Rank,
   Position,
