@@ -10,7 +10,6 @@ import {
 import { ApiTags, ApiBearerAuth, ApiExtraModels } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../../common/guards';
 import { PublicShareManagementService } from '../../../../business/external-share/public-share-management.service';
-import type { PaginationParams } from '../../../../common/types/pagination';
 import { User } from '../../../../common/decorators/user.decorator';
 import {
   ApiGetAllPublicShares,
@@ -54,13 +53,7 @@ export class ShareAdminController {
   async getAllPublicShares(
     @Query() query: PaginationQueryDto,
   ): Promise<PaginatedResponseDto<PublicShareListItemDto>> {
-    const pagination: PaginationParams = {
-      page: query.page,
-      pageSize: query.pageSize,
-      sortOrder: query.sortOrder,
-    };
-    const result = await this.shareService.getAllPublicShares(pagination);
-    return result;
+    return this.shareService.getAllPublicShares(query);
   }
 
   /**

@@ -15,7 +15,7 @@ import { ShareRequestCommandService } from '../../../../business/share-request/s
 import { ShareRequestQueryService } from '../../../../business/share-request/share-request-query.service';
 import type { PaginationParams } from '../../../../common/types/pagination';
 import { ShareRequestFilter } from '../../../../domain/share-request/repositories/share-request.repository.interface';
-import { PaginatedResponseDto } from '../../../common/dto/pagination.dto';
+import { PaginatedResponseDto } from '../../../common/dto';
 import {
   ShareRequestAdminQueryDto,
   ApproveRequestDto,
@@ -56,7 +56,7 @@ export class ShareRequestAdminController {
   constructor(
     private readonly commandService: ShareRequestCommandService,
     private readonly queryService: ShareRequestQueryService,
-  ) {}
+  ) { }
 
   /**
    * A-1: 상태별 카운트 조회
@@ -77,23 +77,14 @@ export class ShareRequestAdminController {
     @Param('userId', ParseUUIDPipe) userId: string,
     @Query() query: ShareRequestAdminQueryDto,
   ): Promise<SharesByTargetResponseDto> {
-    const pagination: PaginationParams = {
-      page: query.page,
-      pageSize: query.pageSize,
-      sortBy: query.sortBy,
-      sortOrder: query.sortOrder,
-    };
-    const result = await this.queryService.getSharesByTarget(userId, pagination);
-    
-    // 서비스에서 이미 페이지네이션된 결과를 반환하므로,
-    // 전체 아이템 수는 요약 정보의 활성 공유 수 + 대기 요청 수로 추정
-    // 정확한 수는 서비스 레이어에서 계산해야 하지만, 현재는 대략 추정
+    const result = await this.queryService.getSharesByTarget(userId, query);
+
     const estimatedTotal = result.summary.activeShareCount + result.summary.pendingRequestCount;
     const totalItems = Math.max(estimatedTotal, result.items.length);
-    
+
     return SharesByTargetResponseDto.fromResult(result, {
-      page: pagination.page,
-      pageSize: pagination.pageSize,
+      page: query.page,
+      pageSize: query.pageSize,
       totalItems,
     });
   }
@@ -107,22 +98,14 @@ export class ShareRequestAdminController {
     @Param('fileId', ParseUUIDPipe) fileId: string,
     @Query() query: ShareRequestAdminQueryDto,
   ): Promise<SharesByFileResponseDto> {
-    const pagination: PaginationParams = {
-      page: query.page,
-      pageSize: query.pageSize,
-      sortBy: query.sortBy,
-      sortOrder: query.sortOrder,
-    };
-    const result = await this.queryService.getSharesByFile(fileId, pagination);
-    
-    // 서비스에서 이미 페이지네이션된 결과를 반환하므로,
-    // 전체 아이템 수는 요약 정보의 활성 공유 수 + 대기 요청 수로 추정
+    const result = await this.queryService.getSharesByFile(fileId, query);
+
     const estimatedTotal = result.summary.activeShareCount + result.summary.pendingRequestCount;
     const totalItems = Math.max(estimatedTotal, result.items.length);
-    
+
     return SharesByFileResponseDto.fromResult(result, {
-      page: pagination.page,
-      pageSize: pagination.pageSize,
+      page: query.page,
+      pageSize: query.pageSize,
       totalItems,
     });
   }
@@ -145,7 +128,7 @@ export class ShareRequestAdminController {
       user.id,
       body.comment,
     );
-    
+
     return {
       processedCount: approvedRequests.length,
       items: approvedRequests.map((req) => ({
@@ -173,7 +156,7 @@ export class ShareRequestAdminController {
       user.id,
       body.comment,
     );
-    
+
     return {
       processedCount: rejectedRequests.length,
       items: rejectedRequests.map((req) => ({
@@ -218,16 +201,10 @@ export class ShareRequestAdminController {
     };
 
     const result = await this.queryService.getShareRequests(filter, pagination);
-    
-    return {
-      items: result.items.map((item) => ShareRequestResponseDto.fromEntity(item)),
-      page: result.page,
-      pageSize: result.pageSize,
-      totalItems: result.totalItems,
-      totalPages: result.totalPages,
-      hasNext: result.hasNext,
-      hasPrev: result.hasPrev,
-    };
+
+    return PaginatedResponseDto.from(result, (item) =>
+      ShareRequestResponseDto.fromEntity(item),
+    );
   }
 
   /**

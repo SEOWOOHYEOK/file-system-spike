@@ -203,7 +203,7 @@ export class ShareRequestQueryService {
         if (!requester) continue;
 
         const approver = request.approverId
-          ? await this.getInternalUserDetail(request.approverId)
+          ? (await this.getInternalUserDetail(request.approverId)) ?? undefined
           : undefined;
 
         items.push({
@@ -339,7 +339,7 @@ export class ShareRequestQueryService {
       if (!requester) continue;
 
       const approver = request.approverId
-        ? await this.getInternalUserDetail(request.approverId)
+        ? (await this.getInternalUserDetail(request.approverId)) ?? undefined
         : undefined;
 
       // 각 대상에 대해 항목 생성
@@ -432,6 +432,7 @@ export class ShareRequestQueryService {
     if (!employee) {
       return null;
     }
+    
 
     // 부서 정보 조회 (EmployeeDepartmentPosition에서)
     // departmentPositions는 관계이므로 로드되지 않을 수 있음
@@ -439,11 +440,11 @@ export class ShareRequestQueryService {
     // 관계가 로드되지 않은 경우 빈 문자열 사용
     const department =
       employee.departmentPositions && employee.departmentPositions.length > 0
-        ? employee.departmentPositions[0].department?.name || ''
+        ? employee.departmentPositions[0].department?.departmentName || ''
         : '';
 
     // 직급 정보 조회 (rank는 ManyToOne 관계이므로 로드되지 않을 수 있음)
-    const position = employee.rank?.name;
+    const position = employee.rank?.rankTitle;
 
     return {
       type: 'INTERNAL_USER',

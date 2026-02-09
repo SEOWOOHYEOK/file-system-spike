@@ -63,5 +63,5 @@ export class ShareRequestOrmEntity {
   requestedAt: Date;
 
   @UpdateDateColumn({ name: 'updated_at', nullable: true })
-  updatedAt: Date;
+  updatedAt: Date | null;
 }

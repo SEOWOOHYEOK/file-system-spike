@@ -13,7 +13,6 @@ import { JwtAuthGuard } from '../../../common/guards';
 import { ShareRequestCommandService } from '../../../business/share-request/share-request-command.service';
 import { ShareRequestQueryService } from '../../../business/share-request/share-request-query.service';
 import { ShareRequestValidationService } from '../../../business/share-request/share-request-validation.service';
-import type { PaginationParams } from '../../../common/types/pagination';
 import { User } from '../../../common/decorators/user.decorator';
 import {
   ApiCheckAvailability,
@@ -95,28 +94,15 @@ export class ShareRequestController {
     @User() user: { id: string },
     @Query() query: MyShareRequestsQueryDto,
   ): Promise<PaginatedResponseDto<ShareRequestResponseDto>> {
-    const pagination: PaginationParams = {
-      page: query.page,
-      pageSize: query.pageSize,
-      sortBy: query.sortBy,
-      sortOrder: query.sortOrder,
-    };
-
     const filter: ShareRequestFilter = {
       requesterId: user.id,
       ...(query.status && { status: query.status }),
     };
 
-    const result = await this.queryService.getShareRequests(filter, pagination);
-    return {
-      items: result.items.map((item) => ShareRequestResponseDto.fromEntity(item)),
-      page: result.page,
-      pageSize: result.pageSize,
-      totalItems: result.totalItems,
-      totalPages: result.totalPages,
-      hasNext: result.hasNext,
-      hasPrev: result.hasPrev,
-    };
+    const result = await this.queryService.getShareRequests(filter, query);
+    return PaginatedResponseDto.from(result, (item) =>
+      ShareRequestResponseDto.fromEntity(item),
+    );
   }
 
   /**

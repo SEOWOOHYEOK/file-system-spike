@@ -14,7 +14,6 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { ExternalJwtAuthGuard } from '../../../common/guards';
 import type { Response } from 'express';
 import { ExternalShareAccessService } from '../../../business/external-share/external-share-access.service';
-import type { PaginationParams } from '../../../common/types/pagination';
 import { AccessAction } from '../../../domain/external-share/entities/share-access-log.entity';
 import { ExternalUser } from '../../../common/decorators/external-user.decorator';
 import {
@@ -58,14 +57,7 @@ export class ExternalShareController {
     @ExternalUser() user: { id: string },
     @Query() query: PaginationQueryDto,
   ): Promise<PaginatedResponseDto<MyShareListItemDto>> {
-    const pagination: PaginationParams = {
-      page: query.page,
-      pageSize: query.pageSize,
-      sortBy: query.sortBy,
-      sortOrder: query.sortOrder,
-    };
-    const result = await this.accessService.getMyShares(user.id, pagination);
-    return result;
+    return this.accessService.getMyShares(user.id, query);
   }
 
   /**

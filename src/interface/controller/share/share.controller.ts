@@ -13,7 +13,6 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../common/guards';
 import { PublicShareManagementService } from '../../../business/external-share/public-share-management.service';
 import { ExternalUserManagementService } from '../../../business/external-share/external-user-management.service';
-import type { PaginationParams } from '../../../common/types/pagination';
 import { User } from '../../../common/decorators/user.decorator';
 import {
   ApiCreatePublicShare,
@@ -73,14 +72,7 @@ export class PublicShareController {
     @User() user: { id: string },
     @Query() query: PaginationQueryDto,
   ): Promise<PaginatedResponseDto<PublicShareListItemDto>> {
-    const pagination: PaginationParams = {
-      page: query.page,
-      pageSize: query.pageSize,
-      sortBy: query.sortBy,
-      sortOrder: query.sortOrder,
-    };
-    const result = await this.shareService.getMyPublicShares(user.id, pagination);
-    return result;
+    return this.shareService.getMyPublicShares(user.id, query);
   }
 
   /**
@@ -134,12 +126,7 @@ export class ExternalUsersController {
   async getExternalUsers(
     @Query() query: PaginationQueryDto,
   ): Promise<PaginatedResponseDto<ExternalUserListItemDto>> {
-    const pagination: PaginationParams = {
-      page: query.page,
-      pageSize: query.pageSize,
-    };
     // 활성 사용자만 반환
-    const result = await this.userService.getExternalUsers(pagination);
-    return result;
+    return this.userService.getExternalUsers(query);
   }
 }

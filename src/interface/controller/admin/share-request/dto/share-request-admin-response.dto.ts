@@ -9,7 +9,8 @@ import type {
   SharesByTargetResult,
   SharesByFileResult,
 } from '../../../../../business/share-request/types/share-request-query.types';
-import { PaginatedResponseDto } from '../../../../common/dto/pagination.dto';
+import { PaginatedResponseDto } from '../../../../common/dto';
+import { createPaginationInfo } from '../../../../../common/types/pagination';
 
 /**
  * 상태별 요약 응답 DTO (A-1)
@@ -164,8 +165,14 @@ export class BulkDecisionResponseDto {
 
 /**
  * 대상자별 조회 응답 DTO (Q-1)
+ * 
+ * PaginatedResponseDto를 상속하여 공통 페이지네이션 필드를 재사용하고,
+ * items는 Swagger 타입 추론을 위해 @ApiProperty로 명시적 override
  */
 export class SharesByTargetResponseDto extends PaginatedResponseDto<ShareItemResult> {
+  @ApiProperty({ description: '공유 항목 목록', type: 'array' })
+  items: ShareItemResult[] = [];
+
   @ApiProperty({ description: '대상 사용자 정보' })
   target: UserDetail;
 
@@ -196,20 +203,22 @@ export class SharesByTargetResponseDto extends PaginatedResponseDto<ShareItemRes
     dto.items = result.items;
     dto.target = result.target;
     dto.summary = result.summary;
-    dto.page = pagination.page;
-    dto.pageSize = pagination.pageSize;
-    dto.totalItems = pagination.totalItems;
-    dto.totalPages = Math.ceil(pagination.totalItems / pagination.pageSize);
-    dto.hasNext = pagination.page < dto.totalPages;
-    dto.hasPrev = pagination.page > 1;
+    const info = createPaginationInfo(pagination.page, pagination.pageSize, pagination.totalItems);
+    Object.assign(dto, info);
     return dto;
   }
 }
 
 /**
  * 파일별 조회 응답 DTO (Q-2)
+ * 
+ * PaginatedResponseDto를 상속하여 공통 페이지네이션 필드를 재사용하고,
+ * items는 Swagger 타입 추론을 위해 @ApiProperty로 명시적 override
  */
 export class SharesByFileResponseDto extends PaginatedResponseDto<ShareItemResult> {
+  @ApiProperty({ description: '공유 항목 목록', type: 'array' })
+  items: ShareItemResult[] = [];
+
   @ApiProperty({
     description: '파일 정보',
     example: {
@@ -253,12 +262,8 @@ export class SharesByFileResponseDto extends PaginatedResponseDto<ShareItemResul
     dto.items = result.items;
     dto.file = result.file;
     dto.summary = result.summary;
-    dto.page = pagination.page;
-    dto.pageSize = pagination.pageSize;
-    dto.totalItems = pagination.totalItems;
-    dto.totalPages = Math.ceil(pagination.totalItems / pagination.pageSize);
-    dto.hasNext = pagination.page < dto.totalPages;
-    dto.hasPrev = pagination.page > 1;
+    const info = createPaginationInfo(pagination.page, pagination.pageSize, pagination.totalItems);
+    Object.assign(dto, info);
     return dto;
   }
 }

@@ -4,6 +4,7 @@ import { ShareRequestInfraModule } from '../../infra/database/share-request-infr
 import { ExternalShareDomainModule } from '../../domain/external-share/external-share.module';
 import { FileDomainModule } from '../../domain/file/file.module';
 import { OrganizationModule } from '../../integrations/migration/organization/organization.module';
+import { UserModule } from '../user/user.module';
 import { ShareRequestCommandService } from './share-request-command.service';
 import { ShareRequestQueryService } from './share-request-query.service';
 import { ShareRequestValidationService } from './share-request-validation.service';
@@ -26,6 +27,8 @@ import { ShareRequestValidationService } from './share-request-validation.servic
     ShareRequestInfraModule,
     // Organization module (for Employee service)
     OrganizationModule,
+    // User module (for UserService - 권한 확인)
+    UserModule,
   ],
   providers: [
     ShareRequestCommandService,

@@ -15,8 +15,13 @@ export class PublicShareMapper {
       id: ormEntity.id,
       fileId: ormEntity.fileId,
       ownerId: ormEntity.ownerId,
-      externalUserId: ormEntity.externalUserId,
+      externalUserId:
+        ormEntity.externalUserId !== null ? ormEntity.externalUserId : undefined,
+      internalUserId:
+        ormEntity.internalUserId !== null ? ormEntity.internalUserId : undefined,
       permissions: ormEntity.permissions,
+      startAt:
+        ormEntity.startAt !== null ? ormEntity.startAt : undefined,
       maxViewCount:
         ormEntity.maxViewCount !== null ? ormEntity.maxViewCount : undefined,
       currentViewCount: ormEntity.currentViewCount,
@@ -46,8 +51,10 @@ export class PublicShareMapper {
     ormEntity.id = domainEntity.id;
     ormEntity.fileId = domainEntity.fileId;
     ormEntity.ownerId = domainEntity.ownerId;
-    ormEntity.externalUserId = domainEntity.externalUserId;
+    ormEntity.externalUserId = domainEntity.externalUserId ?? null;
+    ormEntity.internalUserId = domainEntity.internalUserId ?? null;
     ormEntity.permissions = domainEntity.permissions;
+    ormEntity.startAt = domainEntity.startAt ?? null;
     ormEntity.maxViewCount = domainEntity.maxViewCount ?? null;
     ormEntity.currentViewCount = domainEntity.currentViewCount;
     ormEntity.maxDownloadCount = domainEntity.maxDownloadCount ?? null;

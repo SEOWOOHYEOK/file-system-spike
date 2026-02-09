@@ -12,7 +12,6 @@ import {
 import { ApiTags, ApiBearerAuth, ApiExtraModels } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../../common/guards';
 import { ExternalUserManagementService } from '../../../../business/external-share/external-user-management.service';
-import type { PaginationParams } from '../../../../common/types/pagination';
 import { User } from '../../../../common/decorators/user.decorator';
 import {
   ApiCreateExternalUser,
@@ -61,13 +60,7 @@ export class ExternalUserAdminController {
   @Get()
   @ApiGetExternalUsers()
   async getExternalUsers(@Query() query: PaginationQueryDto) {
-    const pagination: PaginationParams = {
-      page: query.page ,
-      pageSize: query.pageSize ,
-      sortBy: query.sortBy ,
-      sortOrder: query.sortOrder,
-    };
-    return this.userService.getExternalUsers(pagination);
+    return this.userService.getExternalUsers(query);
   }
 
   /**
