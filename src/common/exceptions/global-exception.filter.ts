@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import type { LoggerService } from '@nestjs/common';
-import { Response, Request } from 'express';
+import { Response } from 'express';
 import { BusinessException } from './business.exception';
 import { ErrorMessageService } from '../error-message/error-message.service';
 import { ErrorCodes } from './error-codes';
@@ -23,7 +23,6 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   async catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request>();
 
     if (exception instanceof BusinessException) {
       // --- New format: BusinessException ---
