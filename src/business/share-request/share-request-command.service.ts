@@ -1,10 +1,4 @@
-import {
-  Injectable,
-  ConflictException,
-  ForbiddenException,
-  NotFoundException,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { InjectDataSource } from '@nestjs/typeorm';
 import { DataSource } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
@@ -19,6 +13,7 @@ import { PublicShare } from '../../domain/external-share/entities/public-share.e
 import { SharePermission } from '../../domain/external-share/type/public-share.type';
 import { PermissionEnum } from '../../domain/role/permission.enum';
 import { UserService } from '../user/user.service';
+import { BusinessException, ErrorCodes } from '../../common/exceptions';
 
 /**
  * 공유 요청 생성 DTO
@@ -74,7 +69,10 @@ export class ShareRequestCommandService {
 
     // Step 3: 날짜 검증
     if (dto.startAt >= dto.endAt) {
-      throw new BadRequestException('시작일은 종료일보다 이전이어야 합니다.');
+      throw BusinessException.of(ErrorCodes.SHARE_INVALID_DATE_RANGE, {
+        startAt: dto.startAt,
+        endAt: dto.endAt,
+      });
     }
 
     // Step 4: 중복 확인
@@ -85,23 +83,25 @@ export class ShareRequestCommandService {
     if (conflicts.length > 0) {
       const conflict = conflicts[0];
       if (conflict.conflictType === 'ACTIVE_SHARE_EXISTS') {
-        throw new ConflictException(
-          `이미 활성 공유가 존재합니다: 파일 ${conflict.fileId}, 사용자 ${conflict.targetUserId}`,
-        );
+        throw BusinessException.of(ErrorCodes.SHARE_ACTIVE_EXISTS, {
+          fileId: conflict.fileId,
+          targetUserId: conflict.targetUserId,
+        });
       } else {
-        throw new ConflictException(
-          `대기 중인 요청이 존재합니다: 파일 ${conflict.fileId}, 사용자 ${conflict.targetUserId}`,
-        );
+        throw BusinessException.of(ErrorCodes.SHARE_PENDING_EXISTS, {
+          fileId: conflict.fileId,
+          targetUserId: conflict.targetUserId,
+        });
       }
     }
 
     // Step 5: 요청자 권한 확인
     const { user, role } = await this.userService.findByIdWithRole(requesterId);
     if (!user.isActive) {
-      throw new ForbiddenException('비활성 사용자는 요청을 생성할 수 없습니다.');
+      throw BusinessException.of(ErrorCodes.SHARE_INACTIVE_USER, { requesterId });
     }
     if (!role) {
-      throw new ForbiddenException('권한이 없습니다.');
+      throw BusinessException.of(ErrorCodes.SHARE_NO_ROLE, { requesterId });
     }
 
     const userPermissions = role.permissions.map((p) => p.code as PermissionEnum);
@@ -109,9 +109,10 @@ export class ShareRequestCommandService {
     const hasRequestPermission = userPermissions.includes(PermissionEnum.FILE_SHARE_REQUEST);
 
     if (!hasDirectPermission && !hasRequestPermission) {
-      throw new ForbiddenException(
-        '파일 공유 권한이 없습니다. (FILE_SHARE_DIRECT 또는 FILE_SHARE_REQUEST 필요)',
-      );
+      throw BusinessException.of(ErrorCodes.SHARE_PERMISSION_DENIED, {
+        requesterId,
+        requiredPermissions: ['FILE_SHARE_DIRECT', 'FILE_SHARE_REQUEST'],
+      });
     }
 
     // Step 6: ShareRequest 생성
@@ -193,13 +194,14 @@ export class ShareRequestCommandService {
     // Step 1: ShareRequest 조회 및 검증
     const shareRequest = await this.shareRequestDomainService.조회(requestId);
     if (!shareRequest) {
-      throw new NotFoundException(`공유 요청을 찾을 수 없습니다: ${requestId}`);
+      throw BusinessException.of(ErrorCodes.SHARE_REQUEST_NOT_FOUND, { requestId });
     }
 
     if (!shareRequest.isDecidable()) {
-      throw new BadRequestException(
-        `승인할 수 없는 상태입니다: ${shareRequest.status}`,
-      );
+      throw BusinessException.of(ErrorCodes.SHARE_NOT_APPROVABLE, {
+        requestId,
+        currentStatus: shareRequest.status,
+      });
     }
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -211,7 +213,10 @@ export class ShareRequestCommandService {
       try {
         shareRequest.approve(approverId, comment);
       } catch (error) {
-        throw new BadRequestException(error.message);
+        throw BusinessException.of(ErrorCodes.SHARE_APPROVE_FAILED, {
+          requestId,
+          reason: error.message,
+        });
       }
 
       // Step 3: PublicShare 생성
@@ -247,20 +252,24 @@ export class ShareRequestCommandService {
     // Step 1: ShareRequest 조회 및 검증
     const shareRequest = await this.shareRequestDomainService.조회(requestId);
     if (!shareRequest) {
-      throw new NotFoundException(`공유 요청을 찾을 수 없습니다: ${requestId}`);
+      throw BusinessException.of(ErrorCodes.SHARE_REQUEST_NOT_FOUND, { requestId });
     }
 
     if (!shareRequest.isDecidable()) {
-      throw new BadRequestException(
-        `반려할 수 없는 상태입니다: ${shareRequest.status}`,
-      );
+      throw BusinessException.of(ErrorCodes.SHARE_NOT_REJECTABLE, {
+        requestId,
+        currentStatus: shareRequest.status,
+      });
     }
 
     // Step 2: 엔티티 반려 메서드 호출
     try {
       shareRequest.reject(approverId, comment);
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw BusinessException.of(ErrorCodes.SHARE_REJECT_FAILED, {
+        requestId,
+        reason: error.message,
+      });
     }
 
     // Step 3: ShareRequest 저장
@@ -283,25 +292,33 @@ export class ShareRequestCommandService {
     // Step 1: ShareRequest 조회 및 검증
     const shareRequest = await this.shareRequestDomainService.조회(requestId);
     if (!shareRequest) {
-      throw new NotFoundException(`공유 요청을 찾을 수 없습니다: ${requestId}`);
+      throw BusinessException.of(ErrorCodes.SHARE_REQUEST_NOT_FOUND, { requestId });
     }
 
     if (!shareRequest.isDecidable()) {
-      throw new BadRequestException(
-        `취소할 수 없는 상태입니다: ${shareRequest.status}`,
-      );
+      throw BusinessException.of(ErrorCodes.SHARE_NOT_CANCELLABLE, {
+        requestId,
+        currentStatus: shareRequest.status,
+      });
     }
 
     // Step 2: 요청자 일치 확인
     if (shareRequest.requesterId !== requesterId) {
-      throw new ForbiddenException('본인이 요청한 공유만 취소할 수 있습니다.');
+      throw BusinessException.of(ErrorCodes.SHARE_CANCEL_NOT_OWNER, {
+        requestId,
+        requesterId,
+        actualOwnerId: shareRequest.requesterId,
+      });
     }
 
     // Step 3: 엔티티 취소 메서드 호출
     try {
       shareRequest.cancel();
     } catch (error) {
-      throw new BadRequestException(error.message);
+      throw BusinessException.of(ErrorCodes.SHARE_NOT_CANCELLABLE, {
+        requestId,
+        reason: error.message,
+      });
     }
 
     // Step 4: ShareRequest 저장
@@ -325,15 +342,18 @@ export class ShareRequestCommandService {
     // Step 1: 모든 요청 조회
     const requests = await this.shareRequestDomainService.다건조회(ids);
     if (requests.length !== ids.length) {
-      throw new NotFoundException('일부 요청을 찾을 수 없습니다.');
+      throw BusinessException.of(ErrorCodes.SHARE_SOME_NOT_FOUND, {
+        requestedIds: ids,
+        foundCount: requests.length,
+      });
     }
 
     // Step 2: 모든 요청이 PENDING 상태인지 확인
     const nonPendingRequests = requests.filter((r) => !r.isDecidable());
     if (nonPendingRequests.length > 0) {
-      throw new BadRequestException(
-        `승인할 수 없는 상태의 요청이 있습니다: ${nonPendingRequests.map((r) => r.id).join(', ')}`,
-      );
+      throw BusinessException.of(ErrorCodes.SHARE_BATCH_NOT_APPROVABLE, {
+        nonPendingIds: nonPendingRequests.map((r) => r.id),
+      });
     }
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -353,9 +373,10 @@ export class ShareRequestCommandService {
         if (conflicts.length > 0) {
           await queryRunner.rollbackTransaction();
           const conflict = conflicts[0];
-          throw new ConflictException(
-            `요청 ${request.id}에 대한 중복이 발견되었습니다: ${conflict.conflictType}`,
-          );
+          throw BusinessException.of(ErrorCodes.SHARE_BATCH_CONFLICT, {
+            requestId: request.id,
+            conflictType: conflict.conflictType,
+          });
         }
 
         // 승인 처리
@@ -363,7 +384,10 @@ export class ShareRequestCommandService {
           request.approve(approverId, comment);
         } catch (error) {
           await queryRunner.rollbackTransaction();
-          throw new BadRequestException(`요청 ${request.id} 승인 실패: ${error.message}`);
+          throw BusinessException.of(ErrorCodes.SHARE_APPROVE_FAILED, {
+            requestId: request.id,
+            reason: error.message,
+          });
         }
 
         // PublicShare 생성
@@ -401,15 +425,18 @@ export class ShareRequestCommandService {
     // Step 1: 모든 요청 조회
     const requests = await this.shareRequestDomainService.다건조회(ids);
     if (requests.length !== ids.length) {
-      throw new NotFoundException('일부 요청을 찾을 수 없습니다.');
+      throw BusinessException.of(ErrorCodes.SHARE_SOME_NOT_FOUND, {
+        requestedIds: ids,
+        foundCount: requests.length,
+      });
     }
 
     // Step 2: 모든 요청이 PENDING 상태인지 확인
     const nonPendingRequests = requests.filter((r) => !r.isDecidable());
     if (nonPendingRequests.length > 0) {
-      throw new BadRequestException(
-        `반려할 수 없는 상태의 요청이 있습니다: ${nonPendingRequests.map((r) => r.id).join(', ')}`,
-      );
+      throw BusinessException.of(ErrorCodes.SHARE_BATCH_NOT_REJECTABLE, {
+        nonPendingIds: nonPendingRequests.map((r) => r.id),
+      });
     }
 
     const queryRunner = this.dataSource.createQueryRunner();
@@ -425,7 +452,10 @@ export class ShareRequestCommandService {
           request.reject(approverId, comment);
         } catch (error) {
           await queryRunner.rollbackTransaction();
-          throw new BadRequestException(`요청 ${request.id} 반려 실패: ${error.message}`);
+          throw BusinessException.of(ErrorCodes.SHARE_REJECT_FAILED, {
+            requestId: request.id,
+            reason: error.message,
+          });
         }
 
         const saved = await this.shareRequestDomainService.저장(request);
