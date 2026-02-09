@@ -71,7 +71,7 @@ export class ShareRequestController {
   @Post()
   @ApiCreateShareRequest()
   @AuditAction({
-    action: AuditActionEnum.SHARE_CREATE,
+    action: AuditActionEnum.SHARE_REQUEST_CREATE,
     targetType: TargetType.SHARE,
     targetIdParam: 'id',
   })
@@ -138,7 +138,7 @@ export class ShareRequestController {
   @Post('my/:id/cancel')
   @ApiCancelMyShareRequest()
   @AuditAction({
-    action: AuditActionEnum.SHARE_REVOKE,
+    action: AuditActionEnum.SHARE_REQUEST_CANCEL,
     targetType: TargetType.SHARE,
     targetIdParam: 'id',
   })

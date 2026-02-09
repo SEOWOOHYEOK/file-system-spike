@@ -40,6 +40,9 @@ import {
   ApiGetSharesByFile,
 } from './share-request-admin.swagger';
 import { ShareRequestResponseDto } from '../../share-request/dto/share-request-response.dto';
+import { AuditAction } from '../../../../common/decorators';
+import { AuditAction as AuditActionEnum } from '../../../../domain/audit/enums/audit-action.enum';
+import { TargetType } from '../../../../domain/audit/enums/common.enum';
 
 /**
  * 공유 요청 관리 컨트롤러 (관리자용)
@@ -129,6 +132,10 @@ export class ShareRequestAdminController {
    */
   @Post('bulk-approve')
   @ApiBulkApproveShareRequests()
+  @AuditAction({
+    action: AuditActionEnum.SHARE_REQUEST_BULK_APPROVE,
+    targetType: TargetType.SHARE,
+  })
   async bulkApprove(
     @User() user: { id: string },
     @Body() body: BulkApproveRequestDto,
@@ -153,6 +160,10 @@ export class ShareRequestAdminController {
    */
   @Post('bulk-reject')
   @ApiBulkRejectShareRequests()
+  @AuditAction({
+    action: AuditActionEnum.SHARE_REQUEST_BULK_REJECT,
+    targetType: TargetType.SHARE,
+  })
   async bulkReject(
     @User() user: { id: string },
     @Body() body: BulkRejectRequestDto,
@@ -236,6 +247,11 @@ export class ShareRequestAdminController {
    */
   @Post(':id/approve')
   @ApiApproveShareRequest()
+  @AuditAction({
+    action: AuditActionEnum.SHARE_REQUEST_APPROVE,
+    targetType: TargetType.SHARE,
+    targetIdParam: 'id',
+  })
   async approveShareRequest(
     @User() user: { id: string },
     @Param('id', ParseUUIDPipe) id: string,
@@ -254,6 +270,11 @@ export class ShareRequestAdminController {
    */
   @Post(':id/reject')
   @ApiRejectShareRequest()
+  @AuditAction({
+    action: AuditActionEnum.SHARE_REQUEST_REJECT,
+    targetType: TargetType.SHARE,
+    targetIdParam: 'id',
+  })
   async rejectShareRequest(
     @User() user: { id: string },
     @Param('id', ParseUUIDPipe) id: string,

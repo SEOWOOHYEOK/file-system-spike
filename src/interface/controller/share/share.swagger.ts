@@ -40,7 +40,10 @@ export const ApiCreatePublicShare = () =>
 ### 주의사항
 - 동일한 파일을 같은 외부 사용자에게 중복 공유할 수 없습니다.
 - 외부 사용자가 비활성화 상태이면 공유가 불가능합니다.
+
+**Deprecated**: POST /v1/share-requests를 사용하세요.
       `,
+      deprecated: true,
     }),
     ApiBody({
       description: '외부 공유 생성 정보',

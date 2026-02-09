@@ -27,6 +27,14 @@ export enum AuditAction {
   SHARE_ACCESS = 'SHARE_ACCESS', // 공유 링크 접근
   SHARE_BLOCK = 'SHARE_BLOCK', // 공유 링크 차단
 
+  // 공유 요청 관련
+  SHARE_REQUEST_CREATE = 'SHARE_REQUEST_CREATE', // 공유 요청 생성
+  SHARE_REQUEST_APPROVE = 'SHARE_REQUEST_APPROVE', // 공유 요청 승인
+  SHARE_REQUEST_REJECT = 'SHARE_REQUEST_REJECT', // 공유 요청 거부
+  SHARE_REQUEST_CANCEL = 'SHARE_REQUEST_CANCEL', // 공유 요청 취소
+  SHARE_REQUEST_BULK_APPROVE = 'SHARE_REQUEST_BULK_APPROVE', // 공유 요청 일괄 승인
+  SHARE_REQUEST_BULK_REJECT = 'SHARE_REQUEST_BULK_REJECT', // 공유 요청 일괄 거부
+
   // 권한 관련
   PERMISSION_GRANT = 'PERMISSION_GRANT', // 권한 부여
   PERMISSION_REVOKE = 'PERMISSION_REVOKE', // 권한 회수
@@ -66,6 +74,12 @@ export const AuditActionDescription: Record<AuditAction, string> = {
   [AuditAction.SHARE_REVOKE]: '공유 링크 해제',
   [AuditAction.SHARE_ACCESS]: '공유 링크 접근',
   [AuditAction.SHARE_BLOCK]: '공유 링크 차단',
+  [AuditAction.SHARE_REQUEST_CREATE]: '공유 요청 생성',
+  [AuditAction.SHARE_REQUEST_APPROVE]: '공유 요청 승인',
+  [AuditAction.SHARE_REQUEST_REJECT]: '공유 요청 거부',
+  [AuditAction.SHARE_REQUEST_CANCEL]: '공유 요청 취소',
+  [AuditAction.SHARE_REQUEST_BULK_APPROVE]: '공유 요청 일괄 승인',
+  [AuditAction.SHARE_REQUEST_BULK_REJECT]: '공유 요청 일괄 거부',
   [AuditAction.PERMISSION_GRANT]: '권한 부여',
   [AuditAction.PERMISSION_REVOKE]: '권한 회수',
   [AuditAction.PERMISSION_CHANGE]: '권한 변경',
@@ -110,6 +124,12 @@ export const AuditActionCategory: Record<AuditAction, ActionCategory> = {
   [AuditAction.SHARE_REVOKE]: ActionCategory.SHARE,
   [AuditAction.SHARE_ACCESS]: ActionCategory.SHARE,
   [AuditAction.SHARE_BLOCK]: ActionCategory.SHARE,
+  [AuditAction.SHARE_REQUEST_CREATE]: ActionCategory.SHARE,
+  [AuditAction.SHARE_REQUEST_APPROVE]: ActionCategory.SHARE,
+  [AuditAction.SHARE_REQUEST_REJECT]: ActionCategory.SHARE,
+  [AuditAction.SHARE_REQUEST_CANCEL]: ActionCategory.SHARE,
+  [AuditAction.SHARE_REQUEST_BULK_APPROVE]: ActionCategory.SHARE,
+  [AuditAction.SHARE_REQUEST_BULK_REJECT]: ActionCategory.SHARE,
   [AuditAction.PERMISSION_GRANT]: ActionCategory.ADMIN,
   [AuditAction.PERMISSION_REVOKE]: ActionCategory.ADMIN,
   [AuditAction.PERMISSION_CHANGE]: ActionCategory.ADMIN,

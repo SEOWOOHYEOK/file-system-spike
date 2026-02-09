@@ -41,6 +41,9 @@ import { SystemConfigOrmEntity } from './entities/system-config.orm-entity';
 // NAS Health History Entity
 import { NasHealthHistoryOrmEntity } from './entities/nas-health-history.orm-entity';
 
+// ShareRequest Entity
+import { ShareRequestOrmEntity } from './entities/share-request.orm-entity';
+
 // Organization Entities (조직 관련 엔티티)
 import {
   Rank,
@@ -77,6 +80,8 @@ const entities = [
   SystemConfigOrmEntity,
   // NAS Health History 엔티티
   NasHealthHistoryOrmEntity,
+  // ShareRequest 엔티티
+  ShareRequestOrmEntity,
   // Organization 관련 엔티티
   Rank,
   Position,

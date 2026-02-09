@@ -36,6 +36,9 @@ import { DomainModule } from '../domain/domain.module';
 import { UserAuditLogController } from './controller/user/audit.controller';
 import { UserFavoriteController } from './controller/user/userFavorite.controller';
 
+// 공유 요청 컨트롤러
+import { ShareRequestController } from './controller/share-request/share-request.controller';
+
 
 /**
  * 인터페이스 레이어 통합 모듈
@@ -79,6 +82,8 @@ import { UserFavoriteController } from './controller/user/userFavorite.controlle
     // 내 정보 컨트롤러
     UserFavoriteController,
     UserAuditLogController,
+    // 공유 요청 컨트롤러
+    ShareRequestController,
   ],
   providers: [
     // 글로벌 인터셉터: 감사 로그 자동 기록
