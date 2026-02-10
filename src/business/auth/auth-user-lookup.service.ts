@@ -81,7 +81,7 @@ export class AuthUserLookupService {
     const externalDepartmentId = this.configService.get<string>('EXTERNAL_DEPARTMENT_ID');
     if (!externalDepartmentId) {
       this.logger.error('EXTERNAL_DEPARTMENT_ID 환경변수가 설정되지 않았습니다.');
-      throw BusinessException.of(ErrorCodes.AUTH_USER_NOT_FOUND, { userId });
+      throw BusinessException.of(ErrorCodes.AUTH_CONFIG_ERROR);
     }
 
     const employee = await this.employeeService.findOne(userId);
@@ -97,7 +97,7 @@ export class AuthUserLookupService {
 
     if (!position || !position.department) {
       this.logger.warn(`외부 부서(EXTERNAL_DEPARTMENT_ID) 소속 아님 - 부서 이동됨: userId=${userId}`);
-      throw BusinessException.of(ErrorCodes.AUTH_ACCOUNT_DISABLED, { userId });
+      throw BusinessException.of(ErrorCodes.AUTH_DEPARTMENT_MISMATCH, { userId });
     }
 
     return {
