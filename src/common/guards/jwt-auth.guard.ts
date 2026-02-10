@@ -26,11 +26,14 @@ export class JwtAuthGuard extends BaseJwtAuthGuard {
     super(jwtService, configService);
   }
 
-  protected getSecret(): string {
+  protected getSecret(_token?: string): string {
     return this.configService.get<string>('INNER_SECRET') ?? '';
   }
 
-  protected async lookupUser(userId: string): Promise<AuthenticatedUser> {
+  protected async lookupUser(
+    userId: string,
+    _payload?: any,
+  ): Promise<AuthenticatedUser> {
     return this.authUserLookupService.lookupInternal(userId);
   }
 }

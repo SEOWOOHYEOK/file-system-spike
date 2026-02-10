@@ -50,7 +50,7 @@ export abstract class BaseJwtAuthGuard implements CanActivate {
       await this.preVerifyChecks(token);
 
       // 2. JWT 시크릿 확인
-      const secret = this.getSecret();
+      const secret = this.getSecret(token);
       if (!secret) {
         throw new UnauthorizedException('JWT 시크릿이 설정되지 않았습니다.');
       }
@@ -68,7 +68,7 @@ export abstract class BaseJwtAuthGuard implements CanActivate {
       }
 
       // 6. DB에서 사용자 조회 (isActive 검증 포함)
-      const user = await this.lookupUser(userId);
+      const user = await this.lookupUser(userId, payload);
 
       // 7. request.user에 통합 AuthenticatedUser 설정
       request['user'] = user;
@@ -104,14 +104,20 @@ export abstract class BaseJwtAuthGuard implements CanActivate {
 
   /**
    * JWT 시크릿 반환 (하위 클래스에서 구현)
+   * @param token - 검증 대상 토큰 (UnifiedJwtAuthGuard 등에서 타입별 시크릿 선택에 사용)
    */
-  protected abstract getSecret(): string;
+  protected abstract getSecret(token?: string): string;
 
   /**
    * DB에서 사용자 조회 (하위 클래스에서 구현)
    * isActive 검증을 포함해야 합니다.
+   * @param userId - 사용자 ID (payload.sub 또는 payload.id)
+   * @param payload - 검증된 JWT payload (UnifiedJwtAuthGuard 등에서 타입별 조회에 사용)
    */
-  protected abstract lookupUser(userId: string): Promise<AuthenticatedUser>;
+  protected abstract lookupUser(
+    userId: string,
+    payload?: any,
+  ): Promise<AuthenticatedUser>;
 
   /**
    * 토큰 검증 전 추가 체크 (선택적 오버라이드)

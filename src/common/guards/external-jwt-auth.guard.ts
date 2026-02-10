@@ -30,7 +30,7 @@ export class ExternalJwtAuthGuard extends BaseJwtAuthGuard {
     super(jwtService, configService);
   }
 
-  protected getSecret(): string {
+  protected getSecret(_token?: string): string {
     return this.configService.get<string>('EXTERNAL_JWT_SECRET') ?? '';
   }
 
@@ -58,7 +58,10 @@ export class ExternalJwtAuthGuard extends BaseJwtAuthGuard {
     }
   }
 
-  protected async lookupUser(userId: string): Promise<AuthenticatedUser> {
+  protected async lookupUser(
+    userId: string,
+    _payload?: any,
+  ): Promise<AuthenticatedUser> {
     return this.authUserLookupService.lookupExternal(userId);
   }
 }
