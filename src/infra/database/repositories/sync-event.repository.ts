@@ -130,7 +130,15 @@ export class SyncEventRepository implements ISyncEventRepository {
       .groupBy('se.status')
       .getRawMany<{ status: string; count: string }>();
 
-    const result: Record<string, number> = {};
+    // 모든 상태를 0으로 초기화하여 호출자에게 예측 가능한 결과 제공
+    const result: Record<string, number> = {
+      [SyncEventStatus.PENDING]: 0,
+      [SyncEventStatus.QUEUED]: 0,
+      [SyncEventStatus.PROCESSING]: 0,
+      [SyncEventStatus.RETRYING]: 0,
+      [SyncEventStatus.DONE]: 0,
+      [SyncEventStatus.FAILED]: 0,
+    };
     for (const row of raw) {
       result[row.status] = parseInt(row.count, 10);
     }
@@ -172,7 +180,8 @@ export class SyncEventRepository implements ISyncEventRepository {
       eventType: 'se.eventType',
     };
     const sortColumn = ALLOWED_SORT[params.sortBy ?? 'createdAt'] ?? 'se.createdAt';
-    const sortOrder = (params.sortOrder ?? 'desc').toUpperCase() as 'ASC' | 'DESC';
+    const rawOrder = (params.sortOrder ?? 'desc').toLowerCase();
+    const sortOrder: 'ASC' | 'DESC' = rawOrder === 'asc' ? 'ASC' : 'DESC';
 
     const offset = (params.page - 1) * params.pageSize;
     const entities = await qb

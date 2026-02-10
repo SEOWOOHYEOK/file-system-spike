@@ -28,7 +28,7 @@ import {
 import { PaginatedResponseDto } from '../../interface/common/dto/pagination.dto';
 import { FILE_REPOSITORY, type IFileRepository } from '../../domain/file/repositories/file.repository.interface';
 import type { SyncEventFilterParams } from '../../domain/sync-event/repositories/sync-event.repository.interface';
-import { SyncEventEntity } from '../../domain/sync-event/entities/sync-event.entity';
+import { SyncEventEntity, SyncEventStatus } from '../../domain/sync-event/entities/sync-event.entity';
 import { Employee } from '../../integrations/migration/organization/entities/employee.entity';
 import { EmployeeDepartmentPosition } from '../../integrations/migration/organization/entities/employee-department-position.entity';
 
@@ -259,11 +259,11 @@ export class AdminService {
   }
 
   private isStuckEvent(event: SyncEventEntity, now: Date): boolean {
-    if (event.status === 'PENDING') {
+    if (event.status === SyncEventStatus.PENDING) {
       const ageHours = (now.getTime() - event.createdAt.getTime()) / (1000 * 60 * 60);
       return ageHours >= STUCK_PENDING_HOURS;
     }
-    if (event.status === 'PROCESSING') {
+    if (event.status === SyncEventStatus.PROCESSING) {
       const ageMs = now.getTime() - event.createdAt.getTime();
       return ageMs >= STUCK_PROCESSING_MS;
     }
