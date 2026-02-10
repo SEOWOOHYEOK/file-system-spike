@@ -49,6 +49,12 @@ export interface CompleteMultipartResponse {
   /** MIME 타입 */
   mimeType: string;
 
+  /** 파일 생성자 (업로더) ID - 감사 로그 ownerId 매핑용 */
+  createdBy: string;
+
+  /** 파일 체크섬 (composite SHA-256) - 무결성 검증용 */
+  checksum: string;
+
   /** 스토리지 상태 */
   storageStatus: {
     cache: 'AVAILABLE' | 'PENDING';

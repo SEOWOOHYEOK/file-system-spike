@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { BusinessException, ErrorCodes } from '../../common/exceptions';
 import { FileDomainService } from '../../domain/file';
 import {
   FileCacheStorageDomainService,
@@ -46,10 +47,7 @@ export class SyncEventQueryService {
     const syncEvent = await this.syncEventDomainService.조회(_syncEventId);
 
     if (!syncEvent) {
-      throw new NotFoundException({
-        code: 'SYNC_EVENT_NOT_FOUND',
-        message: '동기화 이벤트를 찾을 수 없습니다.',
-      });
+      throw BusinessException.of(ErrorCodes.SYNC_EVENT_NOT_FOUND, { syncEventId: _syncEventId });
     }
 
     return {
@@ -68,10 +66,7 @@ export class SyncEventQueryService {
   async getFileSyncStatus(_fileId: string): Promise<FileSyncStatusResponse> {
     const file = await this.fileDomainService.조회(_fileId);
     if (!file) {
-      throw new NotFoundException({
-        code: 'FILE_NOT_FOUND',
-        message: '파일을 찾을 수 없습니다.',
-      });
+      throw BusinessException.of(ErrorCodes.SYNC_EVENT_FILE_NOT_FOUND, { fileId: _fileId });
     }
 
     const cacheObject = await this.fileCacheStorageDomainService.조회(_fileId);

@@ -135,6 +135,8 @@ describe('FileController', () => {
         size: 1024,
         mimeType: 'text/plain',
         storageStatus: { cache: 'AVAILABLE' as const, nas: 'SYNCING' as const },
+        createdBy: 'user-uuid-001',
+        checksum: 'abc123sha256',
         createdAt: new Date().toISOString(),
         syncEventId: 'sync-event-uuid-789', // 문서 요구사항
       };
@@ -175,6 +177,8 @@ describe('FileController', () => {
         size: 2048,
         mimeType: 'application/pdf',
         storageStatus: { cache: 'AVAILABLE' as const, nas: 'SYNCING' as const },
+        createdBy: 'user-uuid-001',
+        checksum: 'abc123sha256',
         createdAt: new Date().toISOString(),
         syncEventId: 'sync-event-uuid-789',
       };
@@ -310,6 +314,9 @@ describe('FileController', () => {
         id: 'file-uuid-123',
         name: 'renamed.txt',
         path: '/test/renamed.txt',
+        size: 1024,
+        mimeType: 'text/plain',
+        createdBy: 'user-uuid-001',
         storageStatus: { nas: 'SYNCING' as const },
         updatedAt: new Date().toISOString(),
         syncEventId: 'sync-event-uuid-rename-001', // 문서 요구사항
@@ -340,6 +347,9 @@ describe('FileController', () => {
         id: 'file-uuid-123',
         name: 'newname.txt',
         path: '/folder/newname.txt',
+        size: 1024,
+        mimeType: 'text/plain',
+        createdBy: 'user-uuid-001',
         storageStatus: { nas: 'SYNCING' as const },
         updatedAt: new Date().toISOString(),
         syncEventId: 'sync-event-uuid-rename-001',
@@ -392,6 +402,9 @@ describe('FileController', () => {
         name: 'test.txt',
         folderId: 'target-folder-uuid',
         path: '/target/test.txt',
+        size: 1024,
+        mimeType: 'text/plain',
+        createdBy: 'user-uuid-001',
         storageStatus: { nas: 'SYNCING' as const },
         updatedAt: new Date().toISOString(),
         syncEventId: 'sync-event-uuid-move-001', // 문서 요구사항
@@ -423,6 +436,9 @@ describe('FileController', () => {
         name: 'test.txt',
         folderId: 'new-folder-uuid',
         path: '/newfolder/test.txt',
+        size: 1024,
+        mimeType: 'text/plain',
+        createdBy: 'user-uuid-001',
         storageStatus: { nas: 'SYNCING' as const },
         updatedAt: new Date().toISOString(),
         syncEventId: 'sync-event-uuid-move-001',
@@ -536,6 +552,10 @@ describe('FileController', () => {
       const mockResponse = {
         id: 'file-uuid-123',
         name: 'deleted.txt',
+        size: 1024,
+        mimeType: 'text/plain',
+        createdBy: 'user-uuid-001',
+        path: '/documents/deleted.txt',
         state: FileState.TRASHED,
         trashedAt: new Date().toISOString(),
         syncEventId: 'sync-event-uuid-trash-001', // 문서 요구사항
@@ -565,6 +585,10 @@ describe('FileController', () => {
       const mockResponse = {
         id: 'file-uuid-123',
         name: 'deleted.txt',
+        size: 1024,
+        mimeType: 'text/plain',
+        createdBy: 'user-uuid-001',
+        path: '/documents/deleted.txt',
         state: FileState.TRASHED,
         trashedAt: new Date().toISOString(),
         syncEventId: 'sync-event-uuid-trash-001',

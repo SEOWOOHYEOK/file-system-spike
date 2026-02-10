@@ -155,6 +155,10 @@ export interface CreateAuditLogParams {
   // ========== 인간 친화적 설명 (신규) ==========
   /** 풍부한 컨텍스트의 한국어 설명 (기본값: 빈 문자열) */
   description?: string;
+
+  // ========== 동기화 추적 (신규) ==========
+  /** NAS 동기화 이벤트 ID - 파일/폴더 동기화 상태 추적용 */
+  syncEventId?: string;
 }
 
 /**
@@ -452,6 +456,15 @@ export class AuditLog {
    */
   description: string;
 
+  // ========== 동기화 추적 (신규) ==========
+  /**
+   * NAS 동기화 이벤트 ID
+   * - 파일/폴더 변경 시 생성되는 sync_events 테이블의 ID
+   * - 감사 로그에서 동기화 상태 조회 가능
+   * - "이 작업의 NAS 동기화가 완료되었나?" 질의에 활용
+   */
+  syncEventId?: string;
+
   // ========== 시간 필드 (Time) ==========
   /**
    * 이벤트 발생 시각
@@ -509,6 +522,7 @@ export class AuditLog {
       followUpAt: params.followUpAt,
       retryCount: params.retryCount,
       description: params.description || '',
+      syncEventId: params.syncEventId,
       createdAt: new Date(),
     });
   }

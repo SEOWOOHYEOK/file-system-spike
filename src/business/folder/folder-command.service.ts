@@ -1,4 +1,5 @@
-import { Injectable, Inject, NotFoundException, ConflictException, BadRequestException, OnModuleInit, Logger } from '@nestjs/common';
+import { Injectable, Inject, OnModuleInit, Logger } from '@nestjs/common';
+import { BusinessException, ErrorCodes } from '../../common/exceptions';
 import { DataSource } from 'typeorm';
 import { v4 as uuidv4 } from 'uuid';
 import { buildPath } from '../../common/utils';
@@ -115,10 +116,7 @@ export class FolderCommandService implements OnModuleInit {
     if (parentId) {
       const parent = await this.folderDomainService.조회(parentId);
       if (!parent || !parent.isActive()) {
-        throw new NotFoundException({
-          code: 'PARENT_FOLDER_NOT_FOUND',
-          message: '상위 폴더를 찾을 수 없습니다.',
-        });
+        throw BusinessException.of(ErrorCodes.FOLDER_PARENT_NOT_FOUND, { parentId });
       }
       parentPath = parent.path;
     }
@@ -203,15 +201,12 @@ export class FolderCommandService implements OnModuleInit {
       // 2. 폴더 조회 (락)
       const folder = await this.folderDomainService.잠금조회(folderId, txOptions);
       if (!folder) {
-        throw new NotFoundException({
-          code: 'FOLDER_NOT_FOUND',
-          message: '폴더를 찾을 수 없습니다.',
-        });
+        throw BusinessException.of(ErrorCodes.FOLDER_NOT_FOUND, { folderId });
       }
 
       if (!folder.isActive()) {
-        throw new BadRequestException({
-          code: 'FOLDER_NOT_ACTIVE',
+        throw BusinessException.of(ErrorCodes.FOLDER_NOT_ACTIVE, {
+          folderId,
           message: '활성 상태의 폴더만 이름을 변경할 수 있습니다.',
         });
       }
@@ -311,10 +306,7 @@ export class FolderCommandService implements OnModuleInit {
     // 1. 대상 상위 폴더 존재 확인
     const targetParent = await this.folderDomainService.조회(targetParentId);
     if (!targetParent || !targetParent.isActive()) {
-      throw new NotFoundException({
-        code: 'TARGET_FOLDER_NOT_FOUND',
-        message: '대상 폴더를 찾을 수 없습니다.',
-      });
+      throw BusinessException.of(ErrorCodes.FOLDER_TARGET_NOT_FOUND, { targetParentId });
     }
 
     // QueryRunner 트랜잭션 시작
@@ -328,15 +320,12 @@ export class FolderCommandService implements OnModuleInit {
       // 2. 폴더 조회 (락)
       const folder = await this.folderDomainService.잠금조회(folderId, txOptions);
       if (!folder) {
-        throw new NotFoundException({
-          code: 'FOLDER_NOT_FOUND',
-          message: '폴더를 찾을 수 없습니다.',
-        });
+        throw BusinessException.of(ErrorCodes.FOLDER_NOT_FOUND, { folderId });
       }
 
       if (!folder.isActive()) {
-        throw new BadRequestException({
-          code: 'FOLDER_NOT_ACTIVE',
+        throw BusinessException.of(ErrorCodes.FOLDER_NOT_ACTIVE, {
+          folderId,
           message: '활성 상태의 폴더만 이동할 수 있습니다.',
         });
       }
@@ -346,10 +335,7 @@ export class FolderCommandService implements OnModuleInit {
 
       // 3. 순환 이동 방지 체크
       if (targetParent.path.startsWith(folder.path + '/') || targetParent.id === folder.id) {
-        throw new ConflictException({
-          code: 'CIRCULAR_MOVE',
-          message: '자기 자신 또는 하위 폴더로 이동할 수 없습니다.',
-        });
+        throw BusinessException.of(ErrorCodes.FOLDER_CIRCULAR_MOVE, { folderId, targetParentId });
       }
 
       // 4. NAS 동기화 상태 체크
@@ -468,22 +454,16 @@ export class FolderCommandService implements OnModuleInit {
       // 1. 폴더 조회 (락)
       const folder = await this.folderDomainService.잠금조회(folderId, txOptions);
       if (!folder) {
-        throw new NotFoundException({
-          code: 'FOLDER_NOT_FOUND',
-          message: '폴더를 찾을 수 없습니다.',
-        });
+        throw BusinessException.of(ErrorCodes.FOLDER_NOT_FOUND, { folderId });
       }
 
       if (folder.isTrashed()) {
-        throw new BadRequestException({
-          code: 'FOLDER_ALREADY_TRASHED',
-          message: '이미 휴지통에 있는 폴더입니다.',
-        });
+        throw BusinessException.of(ErrorCodes.FOLDER_ALREADY_TRASHED, { folderId });
       }
 
       if (!folder.isActive()) {
-        throw new BadRequestException({
-          code: 'FOLDER_NOT_ACTIVE',
+        throw BusinessException.of(ErrorCodes.FOLDER_NOT_ACTIVE, {
+          folderId,
           message: '활성 상태의 폴더만 삭제할 수 있습니다.',
         });
       }
@@ -495,12 +475,11 @@ export class FolderCommandService implements OnModuleInit {
       const childFileCount = statistics.fileCount;
 
       if (childFolderCount > 0 || childFileCount > 0) {
-        throw new ConflictException({
-          code: 'FOLDER_NOT_EMPTY',
-          message: `폴더가 비어있지 않아 삭제할 수 없습니다. (하위 폴더: ${childFolderCount}개, 파일: ${childFileCount}개)`,
-          childFolderCount,
-          childFileCount,
-        });
+        throw BusinessException.of(
+          ErrorCodes.FOLDER_NOT_EMPTY,
+          { folderId, childFolderCount, childFileCount },
+          `폴더가 비어있지 않아 삭제할 수 없습니다. (하위 폴더: ${childFolderCount}개, 파일: ${childFileCount}개)`,
+        );
       }
 
       // 3. NAS 동기화 상태 체크
@@ -580,27 +559,30 @@ export class FolderCommandService implements OnModuleInit {
    */
   private validateFolderName(name: string): void {
     if (!name || name.trim().length === 0) {
-      throw new BadRequestException({
-        code: 'INVALID_FOLDER_NAME',
-        message: '폴더명은 비워둘 수 없습니다.',
-      });
+      throw BusinessException.of(
+        ErrorCodes.FOLDER_INVALID_NAME,
+        { name },
+        '폴더명은 비워둘 수 없습니다.',
+      );
     }
 
     // 특수문자 검사
     const invalidChars = /[<>:"/\\|?*]/;
     if (invalidChars.test(name)) {
-      throw new BadRequestException({
-        code: 'INVALID_FOLDER_NAME',
-        message: '폴더명에 사용할 수 없는 문자가 포함되어 있습니다.',
-      });
+      throw BusinessException.of(
+        ErrorCodes.FOLDER_INVALID_NAME,
+        { name },
+        '폴더명에 사용할 수 없는 문자가 포함되어 있습니다.',
+      );
     }
 
     // 길이 검사
     if (name.length > 255) {
-      throw new BadRequestException({
-        code: 'INVALID_FOLDER_NAME',
-        message: '폴더명은 255자를 초과할 수 없습니다.',
-      });
+      throw BusinessException.of(
+        ErrorCodes.FOLDER_INVALID_NAME,
+        { name, length: name.length },
+        '폴더명은 255자를 초과할 수 없습니다.',
+      );
     }
   }
 
@@ -612,10 +594,7 @@ export class FolderCommandService implements OnModuleInit {
     const storageObject = await this.folderStorageService.조회(folderId, options);
 
     if (storageObject && storageObject.isSyncing()) {
-      throw new ConflictException({
-        code: 'FOLDER_SYNCING',
-        message: '폴더가 동기화 중입니다. 잠시 후 다시 시도해주세요.',
-      });
+      throw BusinessException.of(ErrorCodes.FOLDER_SYNCING, { folderId });
     }
   }
 
@@ -634,10 +613,7 @@ export class FolderCommandService implements OnModuleInit {
     }
 
     if (conflictStrategy === FolderConflictStrategy.ERROR) {
-      throw new ConflictException({
-        code: 'DUPLICATE_FOLDER_EXISTS',
-        message: '동일한 이름의 폴더가 이미 존재합니다.',
-      });
+      throw BusinessException.of(ErrorCodes.FOLDER_DUPLICATE_EXISTS, { parentId, name });
     }
 
     return this.generateUniqueFolderName(parentId, name);
@@ -659,10 +635,7 @@ export class FolderCommandService implements OnModuleInit {
     }
 
     if (conflictStrategy === FolderConflictStrategy.ERROR) {
-      throw new ConflictException({
-        code: 'DUPLICATE_FOLDER_EXISTS',
-        message: '동일한 이름의 폴더가 이미 존재합니다.',
-      });
+      throw BusinessException.of(ErrorCodes.FOLDER_DUPLICATE_EXISTS, { parentId, name });
     }
 
     return this.generateUniqueFolderName(parentId, name, excludeFolderId);
@@ -684,9 +657,9 @@ export class FolderCommandService implements OnModuleInit {
 
     switch (conflictStrategy) {
       case MoveFolderConflictStrategy.ERROR:
-        throw new ConflictException({
-          code: 'DUPLICATE_FOLDER_EXISTS',
-          message: '동일한 이름의 폴더가 이미 존재합니다.',
+        throw BusinessException.of(ErrorCodes.FOLDER_DUPLICATE_EXISTS, {
+          targetParentId,
+          folderName,
         });
 
       case MoveFolderConflictStrategy.SKIP:

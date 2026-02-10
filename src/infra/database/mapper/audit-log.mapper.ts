@@ -62,6 +62,7 @@ export class AuditLogMapper {
       followUpAt: orm.followUpAt || undefined,
       retryCount: orm.retryCount || undefined,
       description: orm.description || '',
+      syncEventId: orm.syncEventId || undefined,
       createdAt: orm.createdAt,
     });
   }
@@ -108,6 +109,7 @@ export class AuditLogMapper {
       followUpAt: domain.followUpAt || null,
       retryCount: domain.retryCount || null,
       description: domain.description || '',
+      syncEventId: domain.syncEventId || null,
       createdAt: domain.createdAt,
     };
   }

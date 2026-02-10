@@ -4,6 +4,7 @@ import {
   ExecutionContext,
   CallHandler,
   Logger,
+  HttpException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Observable, tap, catchError } from 'rxjs';
@@ -13,9 +14,12 @@ import {
   AuditActionOptions,
 } from '../decorators/audit-action.decorator';
 import { AuditLogService } from '../../business/audit/audit-log.service';
-import { RequestContext } from '../context/request-context';
-import { detectClientType } from '../utils/device-fingerprint.util';
-import { ClientType, UserType, LogResult } from '../../domain/audit/enums/common.enum';
+import {
+  RequestContext,
+  AuditContextSnapshot,
+} from '../context/request-context';
+import { UserType, LogResult } from '../../domain/audit/enums/common.enum';
+import { AuditAction } from '../../domain/audit/enums/audit-action.enum';
 import { EventDescriptionBuilder } from '../../domain/audit/service/description-builder';
 import { resolveSystemAction } from '../../domain/audit/service/system-action-resolver';
 
@@ -32,7 +36,7 @@ export class AuditLogInterceptor implements NestInterceptor {
   constructor(
     private readonly reflector: Reflector,
     private readonly auditLogService: AuditLogService,
-  ) { }
+  ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
     const auditOptions = this.reflector.get<AuditActionOptions>(
@@ -58,13 +62,13 @@ export class AuditLogInterceptor implements NestInterceptor {
           }
 
           const durationMs = Date.now() - startTime;
-          await this.logSuccess(
-            request,
-            response,
-            responseData,
-            auditOptions,
-            durationMs,
-          );
+
+          // perItem 모드: 배열 응답의 각 항목에 대해 개별 감사 로그 생성
+          if (auditOptions.perItem && Array.isArray(responseData)) {
+            await this.logSuccessPerItem(request, response, responseData, auditOptions, durationMs);
+          } else {
+            await this.logSuccess(request, response, responseData, auditOptions, durationMs);
+          }
         } catch (error) {
           this.logger.error('Failed to log audit success', error);
         }
@@ -81,6 +85,10 @@ export class AuditLogInterceptor implements NestInterceptor {
     );
   }
 
+  // ──────────────────────────────────────────────
+  //  감사 로그 기록
+  // ──────────────────────────────────────────────
+
   /**
    * 성공 로그 기록
    */
@@ -91,86 +99,118 @@ export class AuditLogInterceptor implements NestInterceptor {
     options: AuditActionOptions,
     durationMs: number,
   ): Promise<void> {
-    const { action, targetType, targetIdParam, targetNameParam, extractMetadata } =
-      options;
+    const snapshot = RequestContext.getAuditSnapshot();
 
-    const ctx = RequestContext.get();
-    const userId = ctx?.userId;
-    const userType = ctx?.userType as UserType ?? UserType.INTERNAL;
-    const userName = ctx?.userName || 'unknown';
-    const userEmail = ctx?.userEmail || 'unknown';
-
-    // 인증되지 않은 사용자는 감사 로그 스킵 (userId가 UUID 타입이므로)
-    if (!userId) {
-      this.logger.debug('Skipping audit log for unauthenticated request');
+    if (!this.isLoggable(snapshot, options.action)) {
       return;
     }
 
-    const targetId = this.extractTargetId(request, responseData, targetIdParam);
-
-    // targetId가 없거나 유효한 UUID가 아니면 감사 로그 스킵
+    const targetId = this.extractTargetId(request, responseData, options.targetIdParam);
     if (!this.isValidUuid(targetId)) {
-      this.logger.warn(`Skipping audit log: invalid targetId "${targetId}" for action ${action}`);
+      this.logger.warn(`Skipping audit log: invalid targetId "${targetId}" for action ${options.action}`);
       return;
     }
 
-    const targetName = this.extractTargetName(
-      request,
-      responseData,
-      targetNameParam,
-    );
+    const metadata = options.extractMetadata?.(request, responseData);
+    const targetName =
+      this.extractTargetName(request, responseData, options.targetNameParam)
+      ?? (metadata?.targetName as string | undefined);
 
-    // Extract new observability fields
-    const httpMethod = request.method;
-    const apiEndpoint = this.extractApiEndpoint(request);
-    const responseStatusCode = response.statusCode;
+    // metadata에서 audit 1급 필드 추출
+    const ownerId = (metadata?.createdBy as string) || undefined;
+    const targetPath = (metadata?.path as string) || (metadata?.newPath as string) || undefined;
+    const syncEventId = (metadata?.syncEventId as string) || undefined;
 
-    // Generate description using EventDescriptionBuilder
-    let description: string;
-    try {
-      description = EventDescriptionBuilder.forAuditLog({
-        action,
-        actorName: userName,
-        actorDepartment: undefined, // Department not available in current context
-        actorType: userType,
-        targetName: targetName,
-        result: LogResult.SUCCESS,
-        metadata: extractMetadata
-          ? extractMetadata(request, responseData)
-          : undefined,
-      });
-    } catch (error) {
-      this.logger.warn(
-        `Failed to generate description for action ${action}: ${error instanceof Error ? error.message : String(error)}`,
-      );
-      // Fallback description
-      description = `${userName}가 ${action} 수행`;
-    }
+    const description = this.buildDescription({
+      action: options.action,
+      actorName: snapshot.userName,
+      actorType: snapshot.userType,
+      targetName,
+      result: LogResult.SUCCESS,
+      metadata,
+    });
 
     await this.auditLogService.logSuccess({
-      requestId: ctx?.requestId || 'unknown',
-      sessionId: ctx?.sessionId || 'unknown',
-      traceId: ctx?.traceId || 'unknown',
-      userId,
-      userType,
-      userName,
-      userEmail,
-      action,
-      targetType,
+      ...this.buildBaseLogParams(snapshot, options, request, response.statusCode),
       targetId,
       targetName,
-      ipAddress: ctx?.ipAddress || 'unknown',
-      userAgent: ctx?.userAgent || 'unknown',
-      clientType: this.mapClientType(ctx?.userAgent),
+      targetPath,
+      ownerId,
+      syncEventId,
       durationMs,
-      metadata: extractMetadata
-        ? extractMetadata(request, responseData)
-        : undefined,
-      httpMethod,
-      apiEndpoint,
-      responseStatusCode,
+      metadata,
       description,
     });
+  }
+
+  /**
+   * 배열 응답의 각 항목에 대해 개별 성공 로그 기록
+   *
+   * perItem: true일 때 호출. 각 항목마다 독립된 audit log row를 생성한다.
+   * 예: uploadMany([file1, file2]) → audit_log 2건 (file1, file2 각각)
+   */
+  private async logSuccessPerItem(
+    request: Request,
+    response: Response,
+    items: any[],
+    options: AuditActionOptions,
+    totalDurationMs: number,
+  ): Promise<void> {
+    const snapshot = RequestContext.getAuditSnapshot();
+
+    if (!this.isLoggable(snapshot, options.action)) {
+      return;
+    }
+
+    const baseParams = this.buildBaseLogParams(snapshot, options, request, response.statusCode);
+    const perItemDurationMs = items.length > 0 ? Math.round(totalDurationMs / items.length) : totalDurationMs;
+
+    for (const item of items) {
+      try {
+        const targetId = this.extractTargetId(request, item, options.targetIdParam);
+        if (!this.isValidUuid(targetId)) {
+          this.logger.warn(`Skipping per-item audit log: invalid targetId "${targetId}" for action ${options.action}`);
+          continue;
+        }
+
+        // 항목별 메타데이터 추출 (extractItemMetadata 우선, fallback으로 extractMetadata)
+        const metadata = options.extractItemMetadata
+          ? options.extractItemMetadata(request, item)
+          : options.extractMetadata?.(request, item);
+
+        const targetName =
+          this.extractTargetName(request, item, options.targetNameParam)
+          ?? (metadata?.targetName as string | undefined);
+
+        // metadata에서 audit 1급 필드 추출
+        const ownerId = (metadata?.createdBy as string) || undefined;
+        const targetPath = (metadata?.path as string) || (metadata?.newPath as string) || undefined;
+        const syncEventId = (metadata?.syncEventId as string) || undefined;
+
+        const description = this.buildDescription({
+          action: options.action,
+          actorName: snapshot.userName,
+          actorType: snapshot.userType,
+          targetName,
+          result: LogResult.SUCCESS,
+          metadata,
+        });
+
+        await this.auditLogService.logSuccess({
+          ...baseParams,
+          targetId,
+          targetName,
+          targetPath,
+          ownerId,
+          syncEventId,
+          durationMs: perItemDurationMs,
+          metadata,
+          description,
+        });
+      } catch (itemError) {
+        this.logger.error(`Failed to log per-item audit for item`, itemError);
+      }
+    }
   }
 
   /**
@@ -183,91 +223,151 @@ export class AuditLogInterceptor implements NestInterceptor {
     options: AuditActionOptions,
     durationMs: number,
   ): Promise<void> {
-    const { action, targetType, targetIdParam } = options;
+    const snapshot = RequestContext.getAuditSnapshot();
 
-    const ctx = RequestContext.get();
-    const userId = ctx?.userId;
-    const userType = ctx?.userType as UserType ?? UserType.INTERNAL;
-    const userName = ctx?.userName || 'unknown';
-    const userEmail = ctx?.userEmail;
-
-    // 인증되지 않은 사용자는 감사 로그 스킵 (userId가 UUID 타입이므로)
-    if (!userId) {
-      this.logger.debug('Skipping audit log for unauthenticated request');
+    if (!this.isLoggable(snapshot, options.action)) {
       return;
     }
 
-    const targetId = this.extractTargetId(request, null, targetIdParam);
-
-    // targetId가 없거나 유효한 UUID가 아니면 감사 로그 스킵
+    const targetId = this.extractTargetId(request, null, options.targetIdParam);
     if (!this.isValidUuid(targetId)) {
-      this.logger.warn(`Skipping audit log: invalid targetId "${targetId}" for action ${action}`);
+      this.logger.warn(`Skipping audit log: invalid targetId "${targetId}" for action ${options.action}`);
       return;
     }
 
-    // Extract new observability fields
-    const httpMethod = request.method;
-    const apiEndpoint = this.extractApiEndpoint(request);
-    // Get status code from error if it's an HttpException, otherwise from response
-    const responseStatusCode =
-      (error as any).status || response.statusCode || 500;
-    // Extract error code - check multiple possible properties
-    const errorCode = 
-      (error as any).code || 
-      (error as any).errorCode || 
-      (error as any).status?.toString() || 
-      'ERROR';
-    const failReason = error.message || 'Unknown error';
-    
-    // Resolve systemAction from errorCode
+    const { statusCode, errorCode, failReason } = this.extractErrorInfo(error, response);
     const systemAction = resolveSystemAction(errorCode);
 
-    // Generate description using EventDescriptionBuilder
-    let description: string;
-    try {
-      description = EventDescriptionBuilder.forAuditLog({
-        action,
-        actorName: userName,
-        actorDepartment: undefined, // Department not available in current context
-        actorType: userType,
-        targetName: undefined, // Target name may not be available in failure case
-        result: LogResult.FAIL,
-        failReason,
-        errorCode,
-      });
-    } catch (descError) {
-      this.logger.warn(
-        `Failed to generate description for action ${action}: ${descError instanceof Error ? descError.message : String(descError)}`,
-      );
-      // Fallback description
-      description = `${userName}가 ${action} 수행 실패: ${failReason}`;
-    }
+    const description = this.buildDescription({
+      action: options.action,
+      actorName: snapshot.userName,
+      actorType: snapshot.userType,
+      result: LogResult.FAIL,
+      failReason,
+      errorCode,
+    });
 
     await this.auditLogService.logFailure({
-      requestId: ctx?.requestId || 'unknown',
-      sessionId: ctx?.sessionId,
-      traceId: ctx?.traceId,
-      userId,
-      userType,
-      userName,
-      userEmail,
-      action,
-      targetType,
+      ...this.buildBaseLogParams(snapshot, options, request, statusCode),
       targetId,
-      ipAddress: ctx?.ipAddress || 'unknown',
-      userAgent: ctx?.userAgent || 'unknown',
-      clientType: this.mapClientType(ctx?.userAgent),
       durationMs,
       failReason,
       resultCode: errorCode,
       errorCode,
-      httpMethod,
-      apiEndpoint,
-      responseStatusCode,
       systemAction,
       description,
     });
   }
+
+  // ──────────────────────────────────────────────
+  //  공통 헬퍼
+  // ──────────────────────────────────────────────
+
+  /**
+   * 감사 로그 기록 가능 여부 확인
+   *
+   * userId가 없으면 (비인증 요청) 스킵한다.
+   */
+  private isLoggable(
+    snapshot: AuditContextSnapshot,
+    action: string,
+  ): boolean {
+    if (!snapshot.userId) {
+      this.logger.debug(`Skipping audit log for unauthenticated request (action: ${action})`);
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * 성공/실패 공통 로그 파라미터 조립
+   */
+  private buildBaseLogParams(
+    snapshot: AuditContextSnapshot,
+    options: AuditActionOptions,
+    request: Request,
+    responseStatusCode: number,
+  ) {
+    return {
+      requestId: snapshot.requestId,
+      sessionId: snapshot.sessionId,
+      traceId: snapshot.traceId,
+      userId: snapshot.userId!,
+      userType: snapshot.userType,
+      userName: snapshot.userName,
+      userEmail: snapshot.userEmail,
+      action: options.action,
+      targetType: options.targetType,
+      ipAddress: snapshot.ipAddress,
+      userAgent: snapshot.userAgent,
+      clientType: snapshot.clientType,
+      httpMethod: request.method,
+      apiEndpoint: this.extractApiEndpoint(request),
+      responseStatusCode,
+    };
+  }
+
+  /**
+   * 에러에서 상태코드·에러코드·사유를 추출
+   */
+  private extractErrorInfo(
+    error: Error,
+    response: Response,
+  ): { statusCode: number; errorCode: string; failReason: string } {
+    const isHttpException = error instanceof HttpException;
+
+    const statusCode = isHttpException
+      ? (error as HttpException).getStatus()
+      : response.statusCode || 500;
+
+    const err = error as unknown as Record<string, unknown>;
+    const errorCode =
+      (err.code as string)
+      ?? (err.errorCode as string)
+      ?? String(statusCode);
+
+    const failReason = error.message || 'Unknown error';
+
+    return { statusCode, errorCode, failReason };
+  }
+
+  /**
+   * EventDescriptionBuilder를 사용한 설명 생성 (fallback 포함)
+   */
+  private buildDescription(params: {
+    action: AuditAction;
+    actorName: string;
+    actorType?: UserType;
+    targetName?: string;
+    result: LogResult;
+    metadata?: Record<string, unknown>;
+    failReason?: string;
+    errorCode?: string;
+  }): string {
+    try {
+      return EventDescriptionBuilder.forAuditLog({
+        action: params.action,
+        actorName: params.actorName,
+        actorDepartment: undefined,
+        actorType: params.actorType,
+        targetName: params.targetName,
+        result: params.result,
+        metadata: params.metadata,
+        failReason: params.failReason,
+        errorCode: params.errorCode,
+      });
+    } catch (error) {
+      this.logger.warn(
+        `Failed to generate description for action ${params.action}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      const suffix = params.failReason ? ` 실패: ${params.failReason}` : '';
+      return `${params.actorName}가 ${params.action} 수행${suffix}`;
+    }
+  }
+
+  // ──────────────────────────────────────────────
+  //  추출 유틸리티
+  // ──────────────────────────────────────────────
 
   /**
    * 대상 ID 추출
@@ -294,17 +394,17 @@ export class AuditLogInterceptor implements NestInterceptor {
     }
 
     // 요청 본문에서 찾기
-    if (request.body && request.body[paramName]) {
+    if (request.body?.[paramName]) {
       return String(request.body[paramName]);
     }
 
     // 응답 데이터에서 찾기
-    if (responseData && responseData[paramName]) {
+    if (responseData?.[paramName]) {
       return String(responseData[paramName]);
     }
 
     // 응답 데이터의 id 필드 확인
-    if (responseData && responseData.id) {
+    if (responseData?.id) {
       return String(responseData.id);
     }
 
@@ -320,48 +420,21 @@ export class AuditLogInterceptor implements NestInterceptor {
     paramName?: string,
   ): string | undefined {
     if (!paramName) {
-      // 기본 필드 확인
-      if (responseData?.name) {
-        return String(responseData.name);
-      }
-      if (responseData?.fileName) {
-        return String(responseData.fileName);
-      }
-      if (responseData?.folderName) {
-        return String(responseData.folderName);
-      }
-      return undefined;
+      return (
+        responseData?.name ??
+        responseData?.fileName ??
+        responseData?.folderName ??
+        undefined
+      );
     }
 
-    if (request.body && request.body[paramName]) {
-      return String(request.body[paramName]);
-    }
-
-    if (responseData && responseData[paramName]) {
-      return String(responseData[paramName]);
-    }
-
-    return undefined;
-  }
-
-  /**
-   * 클라이언트 타입 매핑
-   */
-  private mapClientType(userAgent?: string): ClientType {
-    if (!userAgent) {
-      return ClientType.UNKNOWN;
-    }
-    const detected = detectClientType(userAgent);
-    switch (detected) {
-      case 'web':
-        return ClientType.WEB;
-      case 'mobile':
-        return ClientType.MOBILE;
-      case 'api':
-        return ClientType.API;
-      default:
-        return ClientType.UNKNOWN;
-    }
+    return (
+      request.body?.[paramName]
+        ? String(request.body[paramName])
+        : responseData?.[paramName]
+          ? String(responseData[paramName])
+          : undefined
+    );
   }
 
   /**
@@ -389,8 +462,7 @@ export class AuditLogInterceptor implements NestInterceptor {
 
     // Fallback: request.url에서 쿼리 스트링 제거
     if (request.url) {
-      const urlWithoutQuery = request.url.split('?')[0];
-      return urlWithoutQuery;
+      return request.url.split('?')[0];
     }
 
     return undefined;

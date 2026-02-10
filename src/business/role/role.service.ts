@@ -1,4 +1,5 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { BusinessException, ErrorCodes } from '../../common/exceptions';
 import { CreateRoleDto } from '../../domain/role/dto/create-role.dto';
 import { Role } from '../../domain/role/entities/role.entity';
 import { PermissionEnum } from '../../domain/role/permission.enum';
@@ -16,7 +17,7 @@ export class RoleService {
   async createRole(dto: CreateRoleDto): Promise<Role> {
     const existing = await this.roleDomainService.이름조회(dto.name);
     if (existing) {
-      throw new ConflictException(`Role with name ${dto.name} already exists`);
+      throw BusinessException.of(ErrorCodes.ROLE_DUPLICATE_NAME, { name: dto.name });
     }
 
     const permissions = await this.permissionDomainService.코드목록조회(dto.permissionCodes);
@@ -38,7 +39,7 @@ export class RoleService {
   async findById(id: string): Promise<Role> {
     const role = await this.roleDomainService.조회(id);
     if (!role) {
-      throw new NotFoundException(`Role with ID ${id} not found`);
+      throw BusinessException.of(ErrorCodes.ROLE_NOT_FOUND, { roleId: id });
     }
     return role;
   }

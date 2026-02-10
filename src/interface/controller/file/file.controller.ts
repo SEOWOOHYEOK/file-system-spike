@@ -12,6 +12,7 @@ import {
   UploadedFiles,
   UseInterceptors,
   UseGuards,
+  Req,
   Res,
   HttpCode,
   HttpStatus,
@@ -20,7 +21,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import { FileQueryService, FileUploadService, FileDownloadService, FileManageService, SyncProgressService } from '../../../business/file';
 import { SyncProgressResponseDto } from './dto/sync-progress-response.dto';
 import {
@@ -49,6 +50,13 @@ import { RequestContext } from '../../../common/context/request-context';
 import { AuditAction } from '../../../common/decorators';
 import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
 import { TargetType } from '../../../domain/audit/enums/common.enum';
+import {
+  extractUploadMetadata,
+  extractDownloadMetadata,
+  extractRenameMetadata,
+  extractMoveMetadata,
+  extractDeleteMetadata,
+} from '../../../common/interceptors/audit-metadata-extractors';
 // createByteCountingStream, formatContentRange → FileDownloadService.prepareDownload()로 이동
 
 /**
@@ -84,6 +92,7 @@ export class FileController {
     targetType: TargetType.FILE,
     targetIdParam: 'id',
     targetNameParam: 'name',
+    extractMetadata: extractUploadMetadata,
   })
   async upload(
     @UploadedFile() file: Express.Multer.File,
@@ -110,7 +119,10 @@ export class FileController {
   @AuditAction({
     action: AuditActionEnum.FILE_UPLOAD,
     targetType: TargetType.FILE,
-    targetIdParam: 'folderId',
+    targetIdParam: 'id',
+    targetNameParam: 'name',
+    perItem: true,
+    extractItemMetadata: extractUploadMetadata,
   })
   async uploadMany(
     @UploadedFiles() files: Express.Multer.File[],
@@ -155,11 +167,13 @@ export class FileController {
     action: AuditActionEnum.FILE_DOWNLOAD,
     targetType: TargetType.FILE,
     targetIdParam: 'fileId',
+    extractMetadata: extractDownloadMetadata,
   })
   async download(
     @Param('fileId') fileId: string,
     @Headers('range') rangeHeader: string,
     @Headers('if-range') ifRangeHeader: string,
+    @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
     this.logger.log(
@@ -167,11 +181,14 @@ export class FileController {
     );
 
     // 1. 서비스에서 상태코드·헤더·스트림 조합 (헤더 조합, 바이트 카운팅 래핑 포함)
-    const { statusCode, headers, stream } =
+    const { statusCode, headers, stream, fileInfo } =
       await this.fileDownloadService.prepareDownload(fileId, {
         rangeHeader,
         ifRangeHeader,
       });
+
+    // 감사 로그용 파일 메타데이터를 request에 저장
+    (req as any).__auditFileInfo = fileInfo;
 
     // 2. HTTP 응답 전송
     res.status(statusCode);
@@ -212,25 +229,30 @@ export class FileController {
   @Get(':fileId/preview')
   @ApiFilePreview()
   @AuditAction({
-    action: AuditActionEnum.FILE_DOWNLOAD,
+    action: AuditActionEnum.FILE_VIEW,
     targetType: TargetType.FILE,
     targetIdParam: 'fileId',
+    extractMetadata: extractDownloadMetadata,
   })
   async preview(
     @Param('fileId') fileId: string,
     @Headers('range') rangeHeader: string,
     @Headers('if-range') ifRangeHeader: string,
+    @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
     this.logger.log(
       `파일 미리보기 요청: fileId=${fileId}, hasRange=${!!rangeHeader}, userId=${RequestContext.getUserId()}`,
     );
 
-    const { statusCode, headers, stream } =
+    const { statusCode, headers, stream, fileInfo } =
       await this.fileDownloadService.preparePreview(fileId, {
         rangeHeader,
         ifRangeHeader,
       });
+
+    // 감사 로그용 파일 메타데이터를 request에 저장
+    (req as any).__auditFileInfo = fileInfo;
 
     res.status(statusCode);
     res.set(headers);
@@ -263,6 +285,7 @@ export class FileController {
     targetType: TargetType.FILE,
     targetIdParam: 'fileId',
     targetNameParam: 'newName',
+    extractMetadata: extractRenameMetadata,
   })
   async rename(
     @Param('fileId') fileId: string,
@@ -285,6 +308,7 @@ export class FileController {
     action: AuditActionEnum.FILE_MOVE,
     targetType: TargetType.FILE,
     targetIdParam: 'fileId',
+    extractMetadata: extractMoveMetadata,
   })
   async move(
     @Param('fileId') fileId: string,
@@ -308,6 +332,7 @@ export class FileController {
     action: AuditActionEnum.FILE_DELETE,
     targetType: TargetType.FILE,
     targetIdParam: 'fileId',
+    extractMetadata: extractDeleteMetadata,
   })
   async delete(@Param('fileId') fileId: string): Promise<DeleteFileResponse> {
     const userId = RequestContext.getUserId() || 'unknown';

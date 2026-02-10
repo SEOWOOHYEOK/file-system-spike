@@ -1,9 +1,8 @@
 import {
   Injectable,
-  NotFoundException,
-  BadRequestException,
   Logger,
 } from '@nestjs/common';
+import { BusinessException, ErrorCodes } from '../../common/exceptions';
 import { User } from '../../domain/user/entities/user.entity';
 import { Role } from '../../domain/role/entities/role.entity';
 import { RoleNameEnum } from '../../domain/role/role-name.enum';
@@ -38,7 +37,7 @@ export class UserService {
   async findById(id: string): Promise<User> {
     const user = await this.userDomainService.조회(id);
     if (!user) {
-      throw new NotFoundException(`User with ID ${id} not found`);
+      throw BusinessException.of(ErrorCodes.USER_NOT_FOUND, { userId: id });
     }
     return user;
   }
@@ -51,16 +50,16 @@ export class UserService {
   async assignRole(userId: string, roleId: string): Promise<User> {
     const user = await this.userDomainService.조회(userId);
     if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
+      throw BusinessException.of(ErrorCodes.USER_NOT_FOUND, { userId });
     }
 
     if (!user.isActive) {
-      throw new BadRequestException('Cannot assign role to inactive user');
+      throw BusinessException.of(ErrorCodes.USER_INACTIVE_ROLE_ASSIGN, { userId, roleId });
     }
 
     const role = await this.roleDomainService.조회(roleId);
     if (!role) {
-      throw new NotFoundException(`Role with ID ${roleId} not found`);
+      throw BusinessException.of(ErrorCodes.USER_ROLE_NOT_FOUND, { roleId });
     }
 
     user.assignRole(roleId);
@@ -74,7 +73,7 @@ export class UserService {
   async removeRole(userId: string): Promise<User> {
     const user = await this.userDomainService.조회(userId);
     if (!user) {
-      throw new NotFoundException(`User with ID ${userId} not found`);
+      throw BusinessException.of(ErrorCodes.USER_NOT_FOUND, { userId });
     }
 
     user.removeRole();
@@ -94,7 +93,7 @@ export class UserService {
     const user = await this.userDomainService.조회(userId);
     if (!user) {
       this.logger.warn(`[findByIdWithRole] User를 찾을 수 없음 - userId: ${userId}`);
-      throw new NotFoundException(`User with ID ${userId} not found`);
+      throw BusinessException.of(ErrorCodes.USER_NOT_FOUND, { userId });
     }
 
     this.logger.debug(

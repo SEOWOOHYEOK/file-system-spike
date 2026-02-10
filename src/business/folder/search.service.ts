@@ -5,7 +5,8 @@
  * DDD 규칙: Business Layer는 Repository를 직접 주입받지 않고
  * Domain Service를 통해 도메인 로직을 실행합니다.
  */
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
+import { BusinessException, ErrorCodes } from '../../common/exceptions';
 import {
   SearchQuery,
   SearchResponse,
@@ -168,7 +169,7 @@ export class SearchService {
   async deleteSearchHistory(id: string, userId: string): Promise<void> {
     const deleted = await this.searchHistoryDomainService.검색내역삭제(id, userId);
     if (!deleted) {
-      throw new NotFoundException(`검색 내역을 찾을 수 없습니다. (id: ${id})`);
+      throw BusinessException.of(ErrorCodes.SEARCH_HISTORY_NOT_FOUND, { id, userId });
     }
   }
 

@@ -1,4 +1,5 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { BusinessException, ErrorCodes } from '../../common/exceptions';
 import {
   FolderEntity,
   FolderState,
@@ -42,10 +43,7 @@ export class FolderQueryService {
   async getRootFolderInfo(): Promise<FolderInfoResponse> {
     const folder = await this.folderDomainService.루트폴더조회();
     if (!folder) {
-      throw new NotFoundException({
-        code: 'ROOT_FOLDER_NOT_FOUND',
-        message: '루트 폴더를 찾을 수 없습니다.',
-      });
+      throw BusinessException.of(ErrorCodes.FOLDER_ROOT_NOT_FOUND);
     }
 
     const storageObject = await this.folderStorageService.조회(folder.id);
@@ -74,10 +72,7 @@ export class FolderQueryService {
   async getFolderInfo(folderId: string): Promise<FolderInfoResponse> {
     const folder = await this.folderDomainService.조회(folderId);
     if (!folder) {
-      throw new NotFoundException({
-        code: 'FOLDER_NOT_FOUND',
-        message: '폴더를 찾을 수 없습니다.',
-      });
+      throw BusinessException.of(ErrorCodes.FOLDER_NOT_FOUND, { folderId });
     }
 
     const storageObject = await this.folderStorageService.조회(folderId);
@@ -118,10 +113,7 @@ export class FolderQueryService {
     // 2. 폴더 존재 확인
     const folder = await this.folderDomainService.조회(folderId);
     if (!folder || folder.isTrashed()) {
-      throw new NotFoundException({
-        code: 'FOLDER_NOT_FOUND',
-        message: '폴더를 찾을 수 없습니다.',
-      });
+      throw BusinessException.of(ErrorCodes.FOLDER_NOT_FOUND, { folderId });
     }
 
     // 3. 브레드크럼 생성

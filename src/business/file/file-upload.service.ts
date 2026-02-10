@@ -191,6 +191,8 @@ export class FileUploadService {
         cache: 'AVAILABLE',
         nas: 'SYNCING',
       },
+      createdBy: fileEntity.createdBy,
+      checksum,
       createdAt: fileEntity.createdAt.toISOString(),
       syncEventId,
     };

@@ -22,16 +22,19 @@ export class BusinessException extends HttpException {
    *
    * @param errorDef - 에러 코드 정의
    * @param context - 선택적 컨텍스트 정보 (디버깅용)
+   * @param messageOverride - 기본 메시지를 대체할 동적 메시지 (선택)
    */
   constructor(
     errorDef: ErrorCodeDefinition,
     context?: Record<string, unknown>,
+    messageOverride?: string,
   ) {
+    const message = messageOverride || errorDef.defaultMessage;
     super(
       {
         errorCode: errorDef.code,
         internalCode: errorDef.internalCode,
-        message: errorDef.defaultMessage,
+        message,
       },
       errorDef.httpStatus,
     );
@@ -46,13 +49,15 @@ export class BusinessException extends HttpException {
    *
    * @param errorDef - 에러 코드 정의
    * @param context - 선택적 컨텍스트 정보 (디버깅용)
+   * @param messageOverride - 기본 메시지를 대체할 동적 메시지 (선택)
    * @returns BusinessException 인스턴스
    */
   static of(
     errorDef: ErrorCodeDefinition,
     context?: Record<string, unknown>,
+    messageOverride?: string,
   ): BusinessException {
-    return new BusinessException(errorDef, context);
+    return new BusinessException(errorDef, context, messageOverride);
   }
 
   /**
@@ -60,12 +65,14 @@ export class BusinessException extends HttpException {
    *
    * @param errorDef - 에러 코드 정의
    * @param context - 선택적 컨텍스트 정보 (디버깅용)
+   * @param messageOverride - 기본 메시지를 대체할 동적 메시지 (선택)
    * @throws BusinessException
    */
   static throw(
     errorDef: ErrorCodeDefinition,
     context?: Record<string, unknown>,
+    messageOverride?: string,
   ): never {
-    throw new BusinessException(errorDef, context);
+    throw new BusinessException(errorDef, context, messageOverride);
   }
 }

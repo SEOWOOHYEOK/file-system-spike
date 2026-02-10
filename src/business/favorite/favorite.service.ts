@@ -1,4 +1,5 @@
-import { Injectable, ConflictException, NotFoundException } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { BusinessException, ErrorCodes } from '../../common/exceptions';
 import {
   FavoriteEntity,
   FavoriteTargetType,
@@ -33,7 +34,7 @@ export class FavoriteService {
     );
 
     if (existing) {
-      throw new ConflictException('이미 즐겨찾기에 등록되어 있습니다.');
+      throw BusinessException.of(ErrorCodes.FAVORITE_ALREADY_EXISTS, { userId, targetType, targetId });
     }
 
     return this.favoriteDomainService.생성(userId, targetType, targetId);
@@ -54,7 +55,7 @@ export class FavoriteService {
     );
 
     if (!existing) {
-      throw new NotFoundException('즐겨찾기에 등록되어 있지 않습니다.');
+      throw BusinessException.of(ErrorCodes.FAVORITE_NOT_FOUND, { userId, targetType, targetId });
     }
 
     await this.favoriteDomainService.대상삭제(userId, targetType, targetId);

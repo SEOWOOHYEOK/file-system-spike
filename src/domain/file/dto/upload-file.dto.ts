@@ -51,6 +51,10 @@ export interface UploadFileResponse {
     cache: 'AVAILABLE';
     nas: 'SYNCING';
   };
+  /** 파일 생성자 (업로더) ID - 감사 로그 ownerId 매핑용 */
+  createdBy: string;
+  /** 파일 체크섬 (SHA-256) - 업로드 후 무결성 검증용 */
+  checksum: string;
   createdAt: string;
   /** sync_events 테이블 INSERT 후 반환된 ID */
   syncEventId: string;

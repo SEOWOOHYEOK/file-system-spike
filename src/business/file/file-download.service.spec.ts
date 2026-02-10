@@ -58,8 +58,10 @@ describe('FileDownloadService', () => {
       세션목록조회: jest.fn().mockResolvedValue([]),
       완료파트목록조회: jest.fn().mockResolvedValue([]),
     };
+    const mockFileQueryService = { getFileInfo: jest.fn() };
     service = new FileDownloadService(
       mockFileDomainService as any,
+      mockFileQueryService as any,
       mockFolderDomainService as any,
       mockFileCacheStorageDomainService as any,
       mockFileNasStorageDomainService as any,

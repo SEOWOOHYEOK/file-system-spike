@@ -1,13 +1,9 @@
 import {
   Injectable,
-  ForbiddenException,
-  NotFoundException,
-  UnauthorizedException,
-  GoneException,
   HttpException,
-  HttpStatus,
   Inject
 } from '@nestjs/common';
+import { BusinessException, ErrorCodes } from '../../common/exceptions';
 import { v4 as uuidv4 } from 'uuid';
 import type { PaginationParams, PaginatedResult } from '../../common/types/pagination';
 import type { RangeInfo } from '../../common/utils';
@@ -135,12 +131,12 @@ export class ExternalShareAccessService {
   ): Promise<ShareDetailResult> {
     const share = await this.shareDomainService.findByIdWithFile(shareId);
     if (!share) {
-      throw new NotFoundException('Share not found');
+      throw BusinessException.of(ErrorCodes.EXT_SHARE_NOT_FOUND, { shareId });
     }
 
     // 본인 공유인지 확인
     if (share.externalUserId !== externalUserId) {
-      throw new ForbiddenException('Access denied');
+      throw BusinessException.of(ErrorCodes.EXT_SHARE_ACCESS_DENIED, { shareId, externalUserId });
     }
 
     // 일회성 토큰 생성 및 Redis 저장
@@ -175,17 +171,13 @@ export class ExternalShareAccessService {
     const data = await this.tokenStore.get(key);
 
     if (!data) {
-      throw new UnauthorizedException(
-        '콘텐츠 토큰이 유효하지 않거나 만료되었습니다. 상세 조회를 다시 수행하세요.',
-      );
+      throw BusinessException.of(ErrorCodes.EXT_SHARE_TOKEN_INVALID, { token });
     }
 
     const tokenData: ContentTokenData = JSON.parse(data);
 
     if (tokenData.used) {
-      throw new UnauthorizedException(
-        '이미 사용된 토큰입니다. 상세 조회를 다시 수행하세요.',
-      );
+      throw BusinessException.of(ErrorCodes.EXT_SHARE_TOKEN_USED, { token });
     }
 
     // 토큰 삭제 (일회용)
@@ -226,7 +218,7 @@ export class ExternalShareAccessService {
       
       if (blockedByAdmin?.isBlocked) {
         failReason = 'SHARE_BLOCKED_BY_ADMIN';
-        throw new ForbiddenException('관리자에 의해 차단된 공유입니다.');
+        throw BusinessException.of(ErrorCodes.EXT_SHARE_BLOCKED, { shareId });
       }
 
 
@@ -234,55 +226,47 @@ export class ExternalShareAccessService {
       const tokenData = await this.validateAndConsumeToken(token);
       if (tokenData.shareId !== shareId) {
         failReason = 'TOKEN_SHARE_MISMATCH';
-        throw new UnauthorizedException(
-          '토큰과 요청한 공유가 일치하지 않습니다.',
-        );
+        throw BusinessException.of(ErrorCodes.EXT_SHARE_TOKEN_MISMATCH, { shareId, token });
       }
 
       // 공유 조회
       share = await this.shareRepositoryService.조회(shareId);
       if (!share) {
         failReason = 'SHARE_NOT_FOUND';
-        throw new NotFoundException('공유를 찾을 수 없습니다.');
+        throw BusinessException.of(ErrorCodes.EXT_SHARE_NOT_FOUND, { shareId });
       }
 
       // 2. 공유 상태 검증
       if (share.isBlocked) {
         failReason = 'SHARE_BLOCKED';
-        throw new ForbiddenException('관리자에 의해 차단된 공유입니다.');
+        throw BusinessException.of(ErrorCodes.EXT_SHARE_BLOCKED, { shareId });
       }
       if (share.isRevoked) {
         failReason = 'SHARE_REVOKED';
-        throw new ForbiddenException('공유가 취소되었습니다.');
+        throw BusinessException.of(ErrorCodes.EXT_SHARE_REVOKED, { shareId });
       }
 
       // 3. 사용자 상태 검증
       const user = await this.externalUserDomainService.조회(externalUserId);
       if (!user || !user.isActive) {
         failReason = 'USER_BLOCKED';
-        throw new ForbiddenException('계정이 비활성화되었습니다.');
+        throw BusinessException.of(ErrorCodes.EXT_USER_ACCOUNT_DISABLED, { externalUserId });
       }
 
       // 4. 만료일 검증
       if (share.isExpired()) {
         failReason = 'SHARE_EXPIRED';
-        throw new GoneException('공유 기간이 만료되었습니다.');
+        throw BusinessException.of(ErrorCodes.EXT_SHARE_EXPIRED, { shareId });
       }
 
       // 5. 횟수 제한 검증
       if (action === AccessAction.VIEW && share.isViewLimitExceeded()) {
         failReason = 'VIEW_LIMIT_EXCEEDED';
-        throw new HttpException(
-          '조회 횟수 제한을 초과했습니다.',
-          HttpStatus.TOO_MANY_REQUESTS,
-        );
+        throw BusinessException.of(ErrorCodes.EXT_SHARE_VIEW_LIMIT, { shareId });
       }
       if (action === AccessAction.DOWNLOAD && share.isDownloadLimitExceeded()) {
         failReason = 'DOWNLOAD_LIMIT_EXCEEDED';
-        throw new HttpException(
-          '다운로드 횟수 제한을 초과했습니다.',
-          HttpStatus.TOO_MANY_REQUESTS,
-        );
+        throw BusinessException.of(ErrorCodes.EXT_SHARE_DOWNLOAD_LIMIT, { shareId });
       }
 
       // 6. 권한 검증
@@ -290,10 +274,11 @@ export class ExternalShareAccessService {
         action === AccessAction.VIEW ? SharePermission.VIEW : SharePermission.DOWNLOAD;
       if (!share.hasPermission(requiredPermission)) {
         failReason = 'PERMISSION_DENIED';
-        throw new ForbiddenException(
+        throw BusinessException.of(
           action === AccessAction.VIEW
-            ? '조회 권한이 없습니다.'
-            : '다운로드 권한이 없습니다.',
+            ? ErrorCodes.EXT_SHARE_VIEW_DENIED
+            : ErrorCodes.EXT_SHARE_DOWNLOAD_DENIED,
+          { shareId, action },
         );
       }
 

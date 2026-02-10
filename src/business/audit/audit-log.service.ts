@@ -11,6 +11,8 @@ import type {
 } from '../../domain/audit/repositories/audit-log.repository.interface';
 import { AuditAction } from '../../domain/audit/enums/audit-action.enum';
 import { TargetType } from '../../domain/audit/enums/common.enum';
+import type { PaginationParams, PaginatedResult as CommonPaginatedResult } from '../../common/types/pagination';
+import { createPaginatedResult } from '../../common/types/pagination';
 
 /**
  * 로그 버퍼 설정
@@ -210,5 +212,42 @@ export class AuditLogService implements OnModuleDestroy {
     since: Date,
   ): Promise<number> {
     return this.auditLogDomainService.사용자액션들카운트(userId, actions, since);
+  }
+
+  /**
+   * 사용자 파일/폴더 활동 내역 조회 (페이지네이션)
+   *
+   * @param userId 사용자 ID
+   * @param allowedActions 허용된 파일/폴더 액션 목록 (기본값 전체)
+   * @param filterActions 사용자가 선택한 필터 액션 (allowedActions의 부분집합)
+   * @param pagination 페이지네이션 파라미터
+   */
+  async findUserFileActivities(
+    userId: string,
+    allowedActions: AuditAction[],
+    filterActions: AuditAction[] | undefined,
+    pagination: PaginationParams,
+  ): Promise<CommonPaginatedResult<AuditLog>> {
+    // 필터 액션이 있으면 허용 목록과 교집합, 없으면 전체 허용 목록 사용
+    const actions = filterActions
+      ? filterActions.filter((a) => allowedActions.includes(a))
+      : allowedActions;
+
+    const filter: AuditLogFilterOptions = {
+      userId,
+      actions,
+    };
+
+    const result = await this.auditLogDomainService.필터조회(filter, {
+      page: pagination.page,
+      limit: pagination.pageSize,
+    });
+
+    return createPaginatedResult(
+      result.data,
+      result.page,
+      result.limit,
+      result.total,
+    );
   }
 }

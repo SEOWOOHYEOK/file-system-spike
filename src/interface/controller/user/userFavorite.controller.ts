@@ -24,10 +24,6 @@ import {
   FavoriteTargetTypeDto,
 } from './dto/favorite.dto';
 import {
-  RecentActivitiesQueryDto,
-  RecentActivitiesResponseDto,
-} from './dto/recent-activity.dto';
-import {
   AddFavoriteSwagger,
   RemoveFavoriteSwagger,
   GetFavoritesSwagger

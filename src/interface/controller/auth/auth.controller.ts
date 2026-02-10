@@ -38,7 +38,7 @@ export class AuthController {
         private readonly tokenBlacklistService: TokenBlacklistService,
         @InjectRepository(EmployeeDepartmentPosition)
         private readonly edpRepository: Repository<EmployeeDepartmentPosition>,
-    ) {}
+    ) { }
 
     /**
      * 직원이 외부 부서(EXTERNAL_DEPARTMENT_ID) 소속인지 확인

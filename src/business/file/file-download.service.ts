@@ -51,6 +51,8 @@ export interface PreparedDownloadResponse {
   stream: NodeJS.ReadableStream | null;
   /** 파일 ID (lease 해제용) */
   fileId: string;
+  /** 감사 로그용 파일 메타데이터 */
+  fileInfo: { name: string; path: string };
 }
 
 import { PassThrough } from 'stream';
@@ -68,6 +70,8 @@ import type { INasStoragePort } from '../../domain/storage/ports/nas-storage.por
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 import { v4 as uuidv4 } from 'uuid';
 import { FileQueryService } from './file-query.service';
+import { FolderDomainService } from '../../domain/folder/service/folder-domain.service';
+import { buildPath } from '../../common/utils';
 
 /**
  * 파일 다운로드 비즈니스 서비스
@@ -82,6 +86,7 @@ export class FileDownloadService {
   constructor(
     private readonly fileDomainService: FileDomainService,
     private readonly fileQueryService: FileQueryService,
+    private readonly folderDomainService: FolderDomainService,
     private readonly fileCacheStorageDomainService: FileCacheStorageDomainService,
     private readonly fileNasStorageDomainService: FileNasStorageDomainService,
     private readonly uploadSessionDomainService: UploadSessionDomainService,
@@ -497,6 +502,13 @@ export class FileDownloadService {
     const { file, storageObject, stream, isPartial, range, isRangeInvalid } =
       await this.downloadWithRange(fileId, options);
 
+    // ── 감사 로그용 파일 메타데이터 ──
+    const folder = await this.folderDomainService.조회(file.folderId);
+    const fileInfo = {
+      name: file.name,
+      path: buildPath(folder?.path || '/', file.name),
+    };
+
     // ── 416 Range Not Satisfiable ──
     if (isRangeInvalid) {
       this.logger.warn(
@@ -507,6 +519,7 @@ export class FileDownloadService {
         headers: { 'Content-Range': `bytes */${file.sizeBytes}` },
         stream: null,
         fileId,
+        fileInfo,
       };
     }
 
@@ -555,7 +568,7 @@ export class FileDownloadService {
       outStream = countingStream;
     }
 
-    return { statusCode, headers, stream: outStream, fileId };
+    return { statusCode, headers, stream: outStream, fileId, fileInfo };
   }
 
   /**

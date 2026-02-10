@@ -1,4 +1,5 @@
-import { Injectable, Inject, NotFoundException, BadRequestException, Logger } from '@nestjs/common';
+import { Injectable, Inject, Logger } from '@nestjs/common';
+import { BusinessException, ErrorCodes } from '../../common/exceptions';
 import { v4 as uuidv4 } from 'uuid';
 import { createPaginationInfo } from '../../common/types/pagination';
 import { RequestContext } from '../../common/context/request-context';
@@ -619,19 +620,16 @@ export class TrashService {
     // 1. 휴지통 메타데이터 조회
     const trashMetadata = await this.trashDomainService.조회(trashMetadataId);
     if (!trashMetadata) {
-      throw new NotFoundException({
-        code: 'TRASH_ITEM_NOT_FOUND',
-        message: '휴지통 항목을 찾을 수 없습니다.',
-      });
+      throw BusinessException.of(ErrorCodes.TRASH_ITEM_NOT_FOUND, { trashMetadataId });
     }
 
     // 파일 영구삭제
     if (trashMetadata.isFile()) {
       const file = await this.fileDomainService.조회(trashMetadata.fileId!);
       if (!file || !file.isTrashed()) {
-        throw new BadRequestException({
-          code: 'FILE_NOT_IN_TRASH',
-          message: '휴지통에 있는 파일만 영구 삭제할 수 있습니다.',
+        throw BusinessException.of(ErrorCodes.TRASH_FILE_NOT_IN_TRASH, {
+          trashMetadataId,
+          fileId: trashMetadata.fileId,
         });
       }
 
@@ -678,9 +676,9 @@ export class TrashService {
     if (trashMetadata.isFolder()) {
       const folder = await this.folderDomainService.조회(trashMetadata.folderId!);
       if (!folder || !folder.isTrashed()) {
-        throw new BadRequestException({
-          code: 'FOLDER_NOT_IN_TRASH',
-          message: '휴지통에 있는 폴더만 영구 삭제할 수 있습니다.',
+        throw BusinessException.of(ErrorCodes.TRASH_FOLDER_NOT_IN_TRASH, {
+          trashMetadataId,
+          folderId: trashMetadata.folderId,
         });
       }
 
@@ -717,10 +715,7 @@ export class TrashService {
       };
     }
 
-    throw new BadRequestException({
-      code: 'INVALID_TRASH_ITEM',
-      message: '유효하지 않은 휴지통 항목입니다.',
-    });
+    throw BusinessException.of(ErrorCodes.TRASH_INVALID_ITEM, { trashMetadataId });
   }
 
   /**

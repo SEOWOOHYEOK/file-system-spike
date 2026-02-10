@@ -18,13 +18,13 @@ export const UserTypeDescription: Record<UserType, string> = {
  * 대상 타입
  */
 export enum TargetType {
-  FILE = 'file',
-  FOLDER = 'folder',
-  SHARE = 'share',
-  USER = 'user',
-  FAVORITE = 'favorite',
-  ACTIVITY = 'activity',
-  SYSTEM = 'system',
+  FILE = 'FILE',
+  FOLDER = 'FOLDER',
+  SHARE = 'SHARE',
+  USER = 'USER',
+  FAVORITE = 'FAVORITE',
+  ACTIVITY = 'ACTIVITY',
+  SYSTEM = 'SYSTEM',
 }
 
 /**
@@ -60,10 +60,10 @@ export const LogResultDescription: Record<LogResult, string> = {
  * 클라이언트 타입
  */
 export enum ClientType {
-  WEB = 'web',
-  MOBILE = 'mobile',
-  API = 'api',
-  UNKNOWN = 'unknown',
+  WEB = 'WEB',
+  MOBILE = 'MOBILE',
+  API = 'API',
+  UNKNOWN = 'UNKNOWN',
 }
 
 /**

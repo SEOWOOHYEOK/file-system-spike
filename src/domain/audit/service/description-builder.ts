@@ -46,7 +46,7 @@ export class EventDescriptionBuilder {
 
     let description = template({
       actor,
-      targetName: params.targetName || '',
+      targetName: params.targetName || '알 수 없는 파일',
       metadata: params.metadata || {},
     });
 
@@ -219,161 +219,161 @@ type AuditLogTemplate = (params: AuditLogTemplateParams) => string;
  */
 const auditLogTemplates: Record<AuditAction, AuditLogTemplate> = {
   [AuditAction.FILE_VIEW]: ({ actor, targetName }) =>
-    `${actor}가 '${targetName}'를 조회함`,
+    `${actor}이 '${targetName}'를 조회함`,
 
   [AuditAction.FILE_DOWNLOAD]: ({ actor, targetName }) =>
-    `${actor}가 '${targetName}'를 다운로드함`,
+    `${actor}이 '${targetName}'를 다운로드함`,
 
   [AuditAction.FILE_UPLOAD]: ({ actor, targetName, metadata }) => {
     const fileSize = metadata.size as number | undefined;
     const sizeStr = fileSize ? ` (${EventDescriptionBuilder.formatBytes(fileSize)})` : '';
-    return `${actor}가 '${targetName}'를 업로드함${sizeStr}`;
+    return `${actor}이 '${targetName}'를 업로드함${sizeStr}`;
   },
 
   [AuditAction.FILE_RENAME]: ({ actor, targetName }) =>
-    `${actor}가 '${targetName}' 이름을 변경함`,
+    `${actor}이 '${targetName}' 이름을 변경함`,
 
   [AuditAction.FILE_MOVE]: ({ actor, targetName }) =>
-    `${actor}가 '${targetName}'를 이동함`,
+    `${actor}이 '${targetName}'를 이동함`,
 
   [AuditAction.FILE_DELETE]: ({ actor, targetName }) =>
-    `${actor}가 '${targetName}'를 삭제함`,
+    `${actor}이 '${targetName}'를 삭제함`,
 
   [AuditAction.FILE_RESTORE]: ({ actor, targetName }) =>
-    `${actor}가 '${targetName}'를 복원함`,
+    `${actor}이 '${targetName}'를 복원함`,
 
   [AuditAction.FILE_PURGE]: ({ actor, targetName }) =>
-    `${actor}가 '${targetName}'를 영구 삭제함`,
+    `${actor}이 '${targetName}'를 영구 삭제함`,
 
   [AuditAction.FOLDER_CREATE]: ({ actor, targetName }) =>
-    `${actor}가 폴더 '${targetName}'를 생성함`,
+    `${actor}이 폴더 '${targetName}'를 생성함`,
 
   [AuditAction.FOLDER_VIEW]: ({ actor, targetName }) =>
-    `${actor}가 폴더 '${targetName}'를 조회함`,
+    `${actor}이 폴더 '${targetName}'를 조회함`,
 
   [AuditAction.FOLDER_RENAME]: ({ actor, targetName }) =>
-    `${actor}가 폴더 '${targetName}' 이름을 변경함`,
+    `${actor}이 폴더 '${targetName}' 이름을 변경함`,
 
   [AuditAction.FOLDER_MOVE]: ({ actor, targetName }) =>
-    `${actor}가 폴더 '${targetName}'를 이동함`,
+    `${actor}이 폴더 '${targetName}'를 이동함`,
 
   [AuditAction.FOLDER_DELETE]: ({ actor, targetName }) =>
-    `${actor}가 폴더 '${targetName}'를 삭제함`,
+    `${actor}이 폴더 '${targetName}'를 삭제함`,
 
   [AuditAction.SHARE_CREATE]: ({ actor, targetName }) =>
-    `${actor}가 '${targetName}' 공유 링크를 생성함`,
+    `${actor}이 '${targetName}' 공유 링크를 생성함`,
 
   [AuditAction.SHARE_REVOKE]: ({ actor, targetName }) =>
-    `${actor}가 '${targetName}' 공유를 해제함`,
+    `${actor}이 '${targetName}' 공유를 해제함`,
 
   [AuditAction.SHARE_ACCESS]: ({ actor, targetName }) =>
-    `${actor}가 공유 링크로 '${targetName}'에 접근함`,
+    `${actor}이 공유 링크로 '${targetName}'에 접근함`,
 
   [AuditAction.SHARE_DOWNLOAD]: ({ actor, targetName }) =>
-    `${actor}가 공유 파일 '${targetName}'를 다운로드함`,
+    `${actor}이 공유 파일 '${targetName}'를 다운로드함`,
 
   [AuditAction.SHARE_BLOCK]: ({ actor, targetName }) =>
-    `${actor}가 '${targetName}' 공유를 차단함`,
+    `${actor}이 '${targetName}' 공유를 차단함`,
 
   [AuditAction.SHARE_UNBLOCK]: ({ actor, targetName }) =>
-    `${actor}가 '${targetName}' 공유 차단을 해제함`,
+    `${actor}이 '${targetName}' 공유 차단을 해제함`,
 
   [AuditAction.SHARE_BULK_BLOCK]: ({ actor }) =>
-    `${actor}가 공유를 일괄 차단함`,
+    `${actor}이 공유를 일괄 차단함`,
 
   [AuditAction.SHARE_BULK_UNBLOCK]: ({ actor }) =>
-    `${actor}가 공유 일괄 차단을 해제함`,
+    `${actor}이 공유 일괄 차단을 해제함`,
 
   [AuditAction.SHARE_REQUEST_CREATE]: ({ actor }) =>
-    `${actor}가 공유 요청을 생성함`,
+    `${actor}이 공유 요청을 생성함`,
 
   [AuditAction.SHARE_REQUEST_APPROVE]: ({ actor }) =>
-    `${actor}가 공유 요청을 승인함`,
+    `${actor}이 공유 요청을 승인함`,
 
   [AuditAction.SHARE_REQUEST_REJECT]: ({ actor }) =>
-    `${actor}가 공유 요청을 반려함`,
+    `${actor}이 공유 요청을 반려함`,
 
   [AuditAction.SHARE_REQUEST_CANCEL]: ({ actor }) =>
-    `${actor}가 공유 요청을 취소함`,
+    `${actor}이 공유 요청을 취소함`,
 
   [AuditAction.SHARE_REQUEST_BULK_APPROVE]: ({ actor }) =>
-    `${actor}가 공유 요청을 일괄 승인함`,
+    `${actor}이 공유 요청을 일괄 승인함`,
 
   [AuditAction.SHARE_REQUEST_BULK_REJECT]: ({ actor }) =>
-    `${actor}가 공유 요청을 일괄 반려함`,
+    `${actor}이 공유 요청을 일괄 반려함`,
 
   [AuditAction.PERMISSION_GRANT]: ({ actor }) =>
-    `${actor}가 권한을 부여함`,
+    `${actor}이 권한을 부여함`,
 
   [AuditAction.PERMISSION_REVOKE]: ({ actor }) =>
-    `${actor}가 권한을 회수함`,
+    `${actor}이 권한을 회수함`,
 
   [AuditAction.PERMISSION_CHANGE]: ({ actor }) =>
-    `${actor}가 권한을 변경함`,
+    `${actor}이 권한을 변경함`,
 
   [AuditAction.TRASH_EMPTY]: ({ actor }) =>
-    `${actor}가 휴지통을 비움`,
+    `${actor}이 휴지통을 비움`,
 
   [AuditAction.TRASH_VIEW]: ({ actor }) =>
-    `${actor}가 휴지통을 조회함`,
+    `${actor}이 휴지통을 조회함`,
 
   [AuditAction.FAVORITE_ADD]: ({ actor, targetName }) =>
-    `${actor}가 '${targetName}'를 즐겨찾기에 추가함`,
+    `${actor}이 '${targetName}'를 즐겨찾기에 추가함`,
 
   [AuditAction.FAVORITE_REMOVE]: ({ actor, targetName }) =>
-    `${actor}가 '${targetName}'를 즐겨찾기에서 제거함`,
+    `${actor}이 '${targetName}'를 즐겨찾기에서 제거함`,
 
   [AuditAction.FAVORITE_VIEW]: ({ actor }) =>
-    `${actor}가 즐겨찾기를 조회함`,
+    `${actor}이 즐겨찾기를 조회함`,
 
   [AuditAction.ACTIVITY_VIEW]: ({ actor }) =>
-    `${actor}가 활동 내역을 조회함`,
+    `${actor}이 활동 내역을 조회함`,
 
   // === 외부 사용자 관리 ===
   [AuditAction.EXTERNAL_USER_CREATE]: ({ actor, targetName }) =>
-    `${actor}가 외부 사용자 '${targetName || ''}'를 생성함`,
+    `${actor}이 외부 사용자 '${targetName || ''}'를 생성함`,
 
   [AuditAction.EXTERNAL_USER_UPDATE]: ({ actor, targetName }) =>
-    `${actor}가 외부 사용자 '${targetName || ''}' 정보를 수정함`,
+    `${actor}이 외부 사용자 '${targetName || ''}' 정보를 수정함`,
 
   [AuditAction.EXTERNAL_USER_DEACTIVATE]: ({ actor, targetName }) =>
-    `${actor}가 외부 사용자 '${targetName || ''}' 계정을 비활성화함`,
+    `${actor}이 외부 사용자 '${targetName || ''}' 계정을 비활성화함`,
 
   [AuditAction.EXTERNAL_USER_ACTIVATE]: ({ actor, targetName }) =>
-    `${actor}가 외부 사용자 '${targetName || ''}' 계정을 활성화함`,
+    `${actor}이 외부 사용자 '${targetName || ''}' 계정을 활성화함`,
 
   [AuditAction.EXTERNAL_USER_PASSWORD_RESET]: ({ actor, targetName }) =>
-    `${actor}가 외부 사용자 '${targetName || ''}' 비밀번호를 초기화함`,
+    `${actor}이 외부 사용자 '${targetName || ''}' 비밀번호를 초기화함`,
 
   // === 비밀번호 변경 ===
   [AuditAction.PASSWORD_CHANGE]: ({ actor }) =>
-    `${actor}가 비밀번호를 변경함`,
+    `${actor}이 비밀번호를 변경함`,
 
   // === 관리자 작업 ===
   [AuditAction.USER_ROLE_ASSIGN]: ({ actor, targetName }) =>
-    `${actor}가 사용자 '${targetName || ''}'에게 Role을 부여함`,
+    `${actor}이 사용자 '${targetName || ''}'에게 Role을 부여함`,
 
   [AuditAction.USER_ROLE_REMOVE]: ({ actor, targetName }) =>
-    `${actor}가 사용자 '${targetName || ''}'의 Role을 제거함`,
+    `${actor}이 사용자 '${targetName || ''}'의 Role을 제거함`,
 
   [AuditAction.USER_SYNC]: ({ actor }) =>
-    `${actor}가 Employee → User 동기화를 실행함`,
+    `${actor}이 Employee → User 동기화를 실행함`,
 
   [AuditAction.TOKEN_GENERATE]: ({ actor, metadata }) =>
-    `${actor}가 JWT 토큰을 수동 생성함${metadata?.employeeNumber ? ` (${metadata.employeeNumber})` : ''}`,
+    `${actor}이 JWT 토큰을 수동 생성함${metadata?.employeeNumber ? ` (${metadata.employeeNumber})` : ''}`,
 
   [AuditAction.ORG_MIGRATION]: ({ actor }) =>
-    `${actor}가 SSO 조직 데이터 마이그레이션을 실행함`,
+    `${actor}이 SSO 조직 데이터 마이그레이션을 실행함`,
 
   // === 보안 이벤트 (SecurityEvent 흡수) ===
   [AuditAction.LOGIN_SUCCESS]: ({ actor }) =>
-    `${actor}가 로그인함`,
+    `${actor}이 로그인함`,
 
   [AuditAction.LOGIN_FAILURE]: ({ metadata }) =>
     `로그인 실패: ${metadata?.email || '알 수 없는 계정'}`,
 
   [AuditAction.LOGOUT]: ({ actor }) =>
-    `${actor}가 로그아웃함`,
+    `${actor}이 로그아웃함`,
 
   [AuditAction.TOKEN_EXPIRED]: ({ actor }) =>
     `${actor}의 토큰이 만료됨`,
@@ -382,16 +382,16 @@ const auditLogTemplates: Record<AuditAction, AuditLogTemplate> = {
     `${actor}의 '${targetName}' 접근이 거부됨`,
 
   [AuditAction.EXPIRED_LINK_ACCESS]: ({ actor }) =>
-    `${actor}가 만료된 공유 링크로 접근 시도함`,
+    `${actor}이 만료된 공유 링크로 접근 시도함`,
 
   [AuditAction.BLOCKED_SHARE_ACCESS]: ({ actor }) =>
-    `${actor}가 차단된 공유에 접근 시도함`,
+    `${actor}이 차단된 공유에 접근 시도함`,
 
   [AuditAction.ACCESS_PATTERN_DEVIATION]: ({ actor }) =>
     `${actor}의 접근 패턴이 기존 분포에서 이탈함`,
 
   [AuditAction.NEW_DEVICE_ACCESS]: ({ actor }) =>
-    `${actor}가 신규 기기에서 접근함`,
+    `${actor}이 신규 기기에서 접근함`,
 };
 
 // ========== 파일 이력 템플릿 ==========
@@ -416,39 +416,39 @@ const fileHistoryTemplates: Record<FileChangeType, FileHistoryTemplate> = {
   [FileChangeType.CREATED]: ({ actor, fileName, newState }) => {
     const size = newState?.size;
     const sizeStr = size ? ` (${EventDescriptionBuilder.formatBytes(size)})` : '';
-    return `${actor}가 '${fileName}'를 생성함${sizeStr}`;
+    return `${actor}이 '${fileName}'를 생성함${sizeStr}`;
   },
 
   [FileChangeType.CONTENT_REPLACED]: ({ actor, fileName, version }) => {
     const versionStr = version ? ` (버전 ${version})` : '';
-    return `${actor}가 '${fileName}' 내용을 교체함${versionStr}`;
+    return `${actor}이 '${fileName}' 내용을 교체함${versionStr}`;
   },
 
   [FileChangeType.RENAMED]: ({ actor, fileName, previousState, newState }) => {
     const newName = newState?.name;
     if (newName) {
-      return `${actor}가 '${fileName}' 이름을 '${newName}'로 변경함`;
+      return `${actor}이 '${fileName}' 이름을 '${newName}'로 변경함`;
     }
-    return `${actor}가 '${fileName}' 이름을 변경함`;
+    return `${actor}이 '${fileName}' 이름을 변경함`;
   },
 
   [FileChangeType.MOVED]: ({ actor, fileName, previousState, newState }) => {
     const previousPath = previousState?.path || '알 수 없는 경로';
     const newPath = newState?.path || '알 수 없는 경로';
-    return `${actor}가 '${fileName}'를 ${previousPath}에서 ${newPath}로 이동함`;
+    return `${actor}이 '${fileName}'를 ${previousPath}에서 ${newPath}로 이동함`;
   },
 
   [FileChangeType.METADATA_CHANGED]: ({ actor, fileName }) =>
-    `${actor}가 '${fileName}' 메타데이터를 변경함`,
+    `${actor}이 '${fileName}' 메타데이터를 변경함`,
 
   [FileChangeType.TRASHED]: ({ actor, fileName }) =>
-    `${actor}가 '${fileName}'를 휴지통으로 이동함`,
+    `${actor}이 '${fileName}'를 휴지통으로 이동함`,
 
   [FileChangeType.RESTORED]: ({ actor, fileName }) =>
-    `${actor}가 '${fileName}'를 복원함`,
+    `${actor}이 '${fileName}'를 복원함`,
 
   [FileChangeType.DELETED]: ({ actor, fileName }) =>
-    `${actor}가 '${fileName}'를 영구 삭제함`,
+    `${actor}이 '${fileName}'를 영구 삭제함`,
 };
 
 // ========== 시스템 이벤트 템플릿 ==========

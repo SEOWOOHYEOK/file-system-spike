@@ -201,6 +201,11 @@ export class AuditLogOrmEntity {
   @Column({ type: 'text', default: '' })
   description: string;
 
+  // 동기화 추적 (신규)
+  @Column({ name: 'sync_event_id', type: 'uuid', nullable: true })
+  @Index()
+  syncEventId: string | null;
+
   // 시간 필드 (Time)
   @CreateDateColumn({ name: 'created_at', type: 'timestamptz' })
   @Index()

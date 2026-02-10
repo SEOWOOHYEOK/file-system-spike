@@ -1,25 +1,42 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsInt, Min, Max, IsString } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString } from 'class-validator';
+import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
+import { AuditAction } from '../../../../domain/audit/enums/audit-action.enum';
 
 /**
- * 최근 활동 조회 쿼리 DTO
+ * 파일/폴더 관련 액션 상수
+ * - 사용자 최근 활동 조회에서 허용되는 액션 목록
  */
-export class RecentActivitiesQueryDto {
-  @ApiPropertyOptional({
-    description: '조회 개수 (기본 20, 최대 100)',
-    default: 20,
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(100)
-  limit?: number = 20;
+export const FILE_FOLDER_ACTIONS: AuditAction[] = [
+  // 파일 관련
+  AuditAction.FILE_VIEW,
+  AuditAction.FILE_DOWNLOAD,
+  AuditAction.FILE_UPLOAD,
+  AuditAction.FILE_RENAME,
+  AuditAction.FILE_MOVE,
+  AuditAction.FILE_DELETE,
+  AuditAction.FILE_RESTORE,
+  AuditAction.FILE_PURGE,
+  // 폴더 관련
+  AuditAction.FOLDER_CREATE,
+  AuditAction.FOLDER_VIEW,
+  AuditAction.FOLDER_RENAME,
+  AuditAction.FOLDER_MOVE,
+  AuditAction.FOLDER_DELETE,
+];
 
+/**
+ * 사용자 최근 활동 조회 쿼리 DTO
+ * - PaginationQueryDto 확장 (page, pageSize, sortBy, sortOrder)
+ * - actions: 콤마 구분 액션 필터 (파일/폴더 액션만 허용)
+ */
+export class RecentActivitiesQueryDto extends PaginationQueryDto {
   @ApiPropertyOptional({
-    description: '필터할 액션 (쉼표 구분)',
-    example: 'FILE_VIEW,FILE_DOWNLOAD,FILE_UPLOAD //export enum AuditAction 참고',
+    description:
+      '필터할 액션 (쉼표 구분). 미지정 시 파일/폴더 전체 액션 조회. ' +
+      '허용 값: FILE_VIEW, FILE_DOWNLOAD, FILE_UPLOAD, FILE_RENAME, FILE_MOVE, FILE_DELETE, FILE_RESTORE, FILE_PURGE, ' +
+      'FOLDER_CREATE, FOLDER_VIEW, FOLDER_RENAME, FOLDER_MOVE, FOLDER_DELETE',
+    example: 'FILE_VIEW,FILE_DOWNLOAD',
   })
   @IsOptional()
   @IsString()
@@ -33,10 +50,10 @@ export class RecentActivityItemDto {
   @ApiProperty({ description: '액션 타입', example: 'FILE_DOWNLOAD' })
   action: string;
 
-  @ApiProperty({ description: '액션 카테고리', example: 'file' })
+  @ApiProperty({ description: '액션 카테고리', example: 'FILE' })
   actionCategory: string;
 
-  @ApiProperty({ description: '대상 타입', example: 'file' })
+  @ApiProperty({ description: '대상 타입', example: 'FILE' })
   targetType: string;
 
   @ApiProperty({ description: '대상 ID' })
@@ -45,7 +62,10 @@ export class RecentActivityItemDto {
   @ApiProperty({ description: '대상 이름', example: '계약서.pdf' })
   targetName: string;
 
-  @ApiPropertyOptional({ description: '대상 경로', example: '/documents/contracts/' })
+  @ApiPropertyOptional({
+    description: '대상 경로',
+    example: '/documents/contracts/',
+  })
   targetPath?: string;
 
   @ApiProperty({ description: '결과', example: 'SUCCESS' })
@@ -53,18 +73,4 @@ export class RecentActivityItemDto {
 
   @ApiProperty({ description: '활동 시각' })
   createdAt: Date;
-}
-
-/**
- * 최근 활동 응답 DTO
- */
-export class RecentActivitiesResponseDto {
-  @ApiProperty({ description: '사용자 ID' })
-  userId: string;
-
-  @ApiProperty({ description: '활동 목록', type: [RecentActivityItemDto] })
-  activities: RecentActivityItemDto[];
-
-  @ApiProperty({ description: '총 개수' })
-  total: number;
 }

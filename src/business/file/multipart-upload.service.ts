@@ -528,6 +528,8 @@ export class MultipartUploadService {
       path: filePath,
       size: fileEntity.sizeBytes,
       mimeType: fileEntity.mimeType,
+      createdBy: fileEntity.createdBy,
+      checksum,
       storageStatus: {
         cache: 'PENDING' as const,
         nas: 'SYNCING' as const,

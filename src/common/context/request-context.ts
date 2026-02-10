@@ -1,5 +1,7 @@
 import { AsyncLocalStorage } from 'async_hooks';
 import { v4 as uuidv4 } from 'uuid';
+import { UserType, ClientType } from '../../domain/audit/enums/common.enum';
+import { detectClientType } from '../utils/device-fingerprint.util';
 
 /**
  * 요청 컨텍스트 데이터
@@ -9,12 +11,28 @@ export interface RequestContextData {
   sessionId?: string;
   traceId?: string;
   userId?: string;
-  userType?: 'INTERNAL' | 'EXTERNAL';
+  userType?: UserType;
   userName?: string;
   userEmail?: string;
   ipAddress?: string;
   userAgent?: string;
   startTime: number;
+}
+
+/**
+ * 감사 로그에 필요한 공통 컨텍스트 정보
+ */
+export interface AuditContextSnapshot {
+  requestId: string;
+  sessionId?: string;
+  traceId?: string;
+  userId?: string;
+  userType: UserType;
+  userName: string;
+  userEmail?: string;
+  ipAddress: string;
+  userAgent: string;
+  clientType: ClientType;
 }
 
 /**
@@ -84,15 +102,22 @@ export class RequestContext {
   /**
    * 현재 사용자 타입 조회
    */
-  static getUserType(): 'INTERNAL' | 'EXTERNAL' | undefined {
-    return this.get()?.userType;
+  static getUserType(): UserType {
+    return this.get()?.userType ?? UserType.INTERNAL;
   }
 
   /**
-   * 현재 IP 주소 조회
+   * 현재 사용자 이메일 조회
    */
-  static getIpAddress(): string | undefined {
-    return this.get()?.ipAddress;
+  static getUserEmail(): string | undefined {
+    return this.get()?.userEmail;
+  }
+
+  /**
+   * 현재 사용자 이름 조회
+   */
+  static getUserName(): string {
+    return this.get()?.userName || 'unknown';
   }
 
   /**
@@ -101,8 +126,6 @@ export class RequestContext {
   static getUserAgent(): string | undefined {
     return this.get()?.userAgent;
   }
-
- 
 
   /**
    * 요청 시작 시간 조회
@@ -119,12 +142,46 @@ export class RequestContext {
   }
 
   /**
+   * 현재 IP 주소 조회
+   */
+  static getIpAddress(): string | undefined {
+    return this.get()?.ipAddress;
+  }
+
+  /**
+   * 감사 로그용 컨텍스트 스냅샷 생성
+   *
+   * AuditLogInterceptor에서 반복 호출하던 개별 getter를
+   * 한 번에 묶어서 반환한다.
+   */
+  static getAuditSnapshot(): AuditContextSnapshot {
+    const ctx = this.get();
+    const userAgent = ctx?.userAgent || 'unknown';
+
+    return {
+      requestId: ctx?.requestId || 'unknown',
+      sessionId: ctx?.sessionId,
+      traceId: ctx?.traceId,
+      userId: ctx?.userId,
+      userType: (ctx?.userType as UserType) ?? UserType.INTERNAL,
+      userName: ctx?.userName || 'unknown',
+      userEmail: ctx?.userEmail,
+      ipAddress: ctx?.ipAddress || 'unknown',
+      userAgent,
+      clientType: detectClientType(userAgent) as ClientType,
+    };
+  }
+
+  /**
    * 컨텍스트 값 설정
    */
-  static set(key: keyof RequestContextData, value: any): void {
+  static set<K extends keyof RequestContextData>(
+    key: K,
+    value: RequestContextData[K],
+  ): void {
     const current = this.get();
     if (current) {
-      (current as any)[key] = value;
+      current[key] = value;
     }
   }
 
@@ -133,7 +190,7 @@ export class RequestContext {
    */
   static setUser(user: {
     userId: string;
-    userType: 'INTERNAL' | 'EXTERNAL';
+    userType: UserType;
     userName?: string;
     userEmail?: string;
   }): void {

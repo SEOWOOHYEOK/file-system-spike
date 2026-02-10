@@ -29,6 +29,12 @@ export interface RenameFileResponse {
   id: string;
   name: string;
   path: string;
+  /** 파일 크기 (bytes) */
+  size: number;
+  /** MIME 타입 */
+  mimeType: string;
+  /** 파일 생성자 (업로더) ID - 감사 로그 ownerId 매핑용 */
+  createdBy: string;
   storageStatus: {
     nas: 'SYNCING';
   };
