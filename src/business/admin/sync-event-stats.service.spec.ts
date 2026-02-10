@@ -45,10 +45,14 @@ describe('SyncEventStatsService', () => {
       findById: jest.fn(),
       findByIds: jest.fn(),
       findByFileId: jest.fn(),
+      findByFolderId: jest.fn(),
       findByStatus: jest.fn(),
       save: jest.fn(),
       delete: jest.fn(),
       updateStatus: jest.fn(),
+      findStalePending: jest.fn(),
+      countByStatus: jest.fn(),
+      findWithFilters: jest.fn(),
     } as jest.Mocked<ISyncEventRepository>;
 
     const module: TestingModule = await Test.createTestingModule({

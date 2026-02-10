@@ -9,7 +9,10 @@ import {
   SyncEventType,
   SyncEventTargetType,
 } from '../../../domain/sync-event';
-import type { TransactionOptions } from '../../../domain/sync-event/repositories/sync-event.repository.interface';
+import type {
+  TransactionOptions,
+  SyncEventFilterParams,
+} from '../../../domain/sync-event/repositories/sync-event.repository.interface';
 
 /**
  * 동기화 이벤트 Repository 구현체
@@ -116,6 +119,72 @@ export class SyncEventRepository implements ISyncEventRepository {
       order: { createdAt: 'ASC' },
     });
     return entities.map((e) => this.toDomain(e));
+  }
+
+  async countByStatus(options?: TransactionOptions): Promise<Record<string, number>> {
+    const repo = this.getRepository(options);
+    const raw = await repo
+      .createQueryBuilder('se')
+      .select('se.status', 'status')
+      .addSelect('COUNT(*)', 'count')
+      .groupBy('se.status')
+      .getRawMany<{ status: string; count: string }>();
+
+    const result: Record<string, number> = {};
+    for (const row of raw) {
+      result[row.status] = parseInt(row.count, 10);
+    }
+    return result;
+  }
+
+  async findWithFilters(
+    params: SyncEventFilterParams,
+    options?: TransactionOptions,
+  ): Promise<{ events: SyncEventEntity[]; total: number }> {
+    const repo = this.getRepository(options);
+    const qb = repo.createQueryBuilder('se');
+
+    if (params.status !== undefined) {
+      qb.andWhere('se.status = :status', { status: params.status });
+    }
+    if (params.eventType !== undefined) {
+      qb.andWhere('se.eventType = :eventType', { eventType: params.eventType });
+    }
+    if (params.targetType !== undefined) {
+      qb.andWhere('se.targetType = :targetType', { targetType: params.targetType });
+    }
+    if (params.userId !== undefined) {
+      qb.andWhere('se.userId = :userId', { userId: params.userId });
+    }
+    if (params.fromDate !== undefined) {
+      qb.andWhere('se.createdAt >= :fromDate', { fromDate: params.fromDate });
+    }
+    if (params.toDate !== undefined) {
+      qb.andWhere('se.createdAt <= :toDate', { toDate: params.toDate });
+    }
+
+    const total = await qb.getCount();
+
+    const ALLOWED_SORT: Record<string, string> = {
+      createdAt: 'se.createdAt',
+      updatedAt: 'se.updatedAt',
+      status: 'se.status',
+      eventType: 'se.eventType',
+    };
+    const sortColumn = ALLOWED_SORT[params.sortBy ?? 'createdAt'] ?? 'se.createdAt';
+    const sortOrder = (params.sortOrder ?? 'desc').toUpperCase() as 'ASC' | 'DESC';
+
+    const offset = (params.page - 1) * params.pageSize;
+    const entities = await qb
+      .orderBy(sortColumn, sortOrder)
+      .skip(offset)
+      .take(params.pageSize)
+      .getMany();
+
+    return {
+      events: entities.map((e) => this.toDomain(e)),
+      total,
+    };
   }
 
   /**

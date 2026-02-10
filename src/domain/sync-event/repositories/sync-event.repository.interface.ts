@@ -3,12 +3,33 @@
  */
 
 import type { QueryRunner } from 'typeorm';
-import { SyncEventEntity, SyncEventStatus } from '../entities/sync-event.entity';
+import {
+  SyncEventEntity,
+  SyncEventStatus,
+  SyncEventType,
+  SyncEventTargetType,
+} from '../entities/sync-event.entity';
 
 /**
  * Repository DI 토큰
  */
 export const SYNC_EVENT_REPOSITORY = Symbol('SYNC_EVENT_REPOSITORY');
+
+/**
+ * SyncEvent 필터 파라미터 (findWithFilters용)
+ */
+export interface SyncEventFilterParams {
+  status?: SyncEventStatus;
+  eventType?: SyncEventType;
+  targetType?: SyncEventTargetType;
+  userId?: string;
+  fromDate?: Date;
+  toDate?: Date;
+  page: number;
+  pageSize: number;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+}
 
 /**
  * 트랜잭션 옵션
@@ -66,4 +87,17 @@ export interface ISyncEventRepository {
    * @param olderThanMs 지정된 밀리초보다 오래된 이벤트만 조회
    */
   findStalePending(olderThanMs: number, options?: TransactionOptions): Promise<SyncEventEntity[]>;
+
+  /**
+   * 상태별 건수 조회 (GROUP BY status)
+   */
+  countByStatus(options?: TransactionOptions): Promise<Record<string, number>>;
+
+  /**
+   * 필터 + 페이지네이션으로 조회
+   */
+  findWithFilters(
+    params: SyncEventFilterParams,
+    options?: TransactionOptions,
+  ): Promise<{ events: SyncEventEntity[]; total: number }>;
 }
