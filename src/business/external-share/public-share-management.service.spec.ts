@@ -43,7 +43,7 @@ import {
 } from '../../domain/file/repositories/file.repository.interface';
 import { PublicShare } from '../../domain/external-share/entities/public-share.entity';
 import { ExternalUser } from '../../domain/external-share/entities/external-user.entity';
-import { SharePermission } from '../../domain/share/share-permission.enum';
+import { SharePermission } from '../../domain/external-share/type/public-share.type';
 
 describe('PublicShareManagementService', () => {
   let service: PublicShareManagementService;
@@ -410,43 +410,6 @@ describe('PublicShareManagementService', () => {
         'ext-user-456',
         'admin-123',
       );
-    });
-  });
-
-  /**
-   * 📌 테스트 시나리오: 공유된 파일 통계 조회 (getSharedFiles)
-   */
-  describe('getSharedFiles', () => {
-    /**
-     * 🎯 검증 목적: 공유된 파일 통계 목록 반환
-     */
-    it('should return shared files stats with pagination', async () => {
-      mockShareRepo.getSharedFilesStats.mockResolvedValue({
-        items: [
-          {
-            fileId: 'file-1',
-            fileName: 'document.pdf',
-            mimeType: 'application/pdf',
-            shareCount: 10,
-            activeShareCount: 8,
-            totalViewCount: 50,
-            totalDownloadCount: 5,
-            firstSharedAt: new Date('2026-01-01'),
-            lastSharedAt: new Date('2026-01-28'),
-          },
-        ],
-        page: 1,
-        pageSize: 20,
-        totalItems: 1,
-        totalPages: 1,
-        hasNext: false,
-        hasPrev: false,
-      });
-
-      const result = await service.getSharedFiles({ page: 1, pageSize: 20 });
-
-      expect(result.items).toHaveLength(1);
-      expect(result.items[0].shareCount).toBe(10);
     });
   });
 

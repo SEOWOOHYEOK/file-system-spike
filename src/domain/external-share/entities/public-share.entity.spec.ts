@@ -19,7 +19,7 @@
  * ============================================================
  */
 import { PublicShare } from './public-share.entity';
-import { SharePermission } from '../../share/share-permission.enum';
+import { SharePermission } from '../type/public-share.type';
 
 describe('PublicShare Entity', () => {
   /**
