@@ -1,6 +1,7 @@
 import {
   CanActivate,
   ExecutionContext,
+  HttpException,
   UnauthorizedException,
   ForbiddenException,
 } from '@nestjs/common';
@@ -82,11 +83,9 @@ export abstract class BaseJwtAuthGuard implements CanActivate {
         userEmail: user.email,
       });
     } catch (error: any) {
-      // 이미 NestJS 예외인 경우 그대로 전파
-      if (
-        error instanceof UnauthorizedException ||
-        error instanceof ForbiddenException
-      ) {
+      // 이미 NestJS HTTP 예외인 경우 그대로 전파
+      // (BusinessException 등 HttpException 하위 클래스 포함)
+      if (error instanceof HttpException) {
         throw error;
       }
       // JWT 관련 에러 처리
