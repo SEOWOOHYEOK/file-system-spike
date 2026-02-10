@@ -17,17 +17,22 @@
  * ============================================================
  */
 import { Test, TestingModule } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
 import { AdminService } from '../../business/admin/admin.service';
 import { CacheHealthCheckService } from '../../infra/storage/cache/cache-health-check.service';
 import { NasHealthCheckService } from '../../infra/storage/nas/nas-health-check.service';
 import { StorageConsistencyService } from './storage-consistency.service';
 import { SyncEventStatsService } from './sync-event-stats.service';
+import { CacheManagementService } from './cache-management.service';
 import { StorageType } from '../../domain/storage/file/entity/file-storage-object.entity';
 import {
   SyncEventStatus,
   SyncEventType,
   SyncEventTargetType,
 } from '../../domain/sync-event/entities/sync-event.entity';
+import { FILE_REPOSITORY } from '../../domain/file/repositories/file.repository.interface';
+import { Employee } from '../../integrations/migration/organization/entities/employee.entity';
+import { EmployeeDepartmentPosition } from '../../integrations/migration/organization/entities/employee-department-position.entity';
 
 describe('AdminService', () => {
   let service: AdminService;
@@ -35,6 +40,9 @@ describe('AdminService', () => {
   let nasHealthCheckService: jest.Mocked<NasHealthCheckService>;
   let storageConsistencyService: jest.Mocked<StorageConsistencyService>;
   let syncEventStatsService: jest.Mocked<SyncEventStatsService>;
+  let mockFileRepository: { findByIds: jest.Mock };
+  let mockEmployeeRepository: { find: jest.Mock };
+  let mockEdpRepository: { find: jest.Mock };
 
   /**
    * 🎭 Mock 설정
@@ -69,7 +77,22 @@ describe('AdminService', () => {
 
     syncEventStatsService = {
       findSyncEvents: jest.fn(),
+      countByStatus: jest.fn(),
+      getStuckCount: jest.fn(),
+      findDashboardEvents: jest.fn(),
     } as any;
+
+    mockFileRepository = {
+      findByIds: jest.fn().mockResolvedValue([]),
+    };
+
+    mockEmployeeRepository = {
+      find: jest.fn().mockResolvedValue([]),
+    };
+
+    mockEdpRepository = {
+      find: jest.fn().mockResolvedValue([]),
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -89,6 +112,22 @@ describe('AdminService', () => {
         {
           provide: SyncEventStatsService,
           useValue: syncEventStatsService,
+        },
+        {
+          provide: CacheManagementService,
+          useValue: { getCacheStatus: jest.fn(), runEviction: jest.fn() },
+        },
+        {
+          provide: FILE_REPOSITORY,
+          useValue: mockFileRepository,
+        },
+        {
+          provide: getRepositoryToken(Employee),
+          useValue: mockEmployeeRepository,
+        },
+        {
+          provide: getRepositoryToken(EmployeeDepartmentPosition),
+          useValue: mockEdpRepository,
         },
       ],
     }).compile();
@@ -294,6 +333,7 @@ describe('AdminService', () => {
             sourcePath: '/cache/file1.pdf',
             targetPath: '/nas/file1.pdf',
             status: SyncEventStatus.PENDING,
+            processBy: 'user-1',
             retryCount: 0,
             maxRetries: 3,
             createdAt: oneHourAgo,
@@ -312,7 +352,7 @@ describe('AdminService', () => {
         },
       };
 
-      syncEventStatsService.findSyncEvents.mockResolvedValue(mockDomainResult);
+      syncEventStatsService.findSyncEvents.mockResolvedValue(mockDomainResult as any);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
@@ -363,7 +403,7 @@ describe('AdminService', () => {
         },
       };
 
-      syncEventStatsService.findSyncEvents.mockResolvedValue(mockDomainResult);
+      syncEventStatsService.findSyncEvents.mockResolvedValue(mockDomainResult as any);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
@@ -411,6 +451,7 @@ describe('AdminService', () => {
           sourcePath: `/cache/file${i}.pdf`,
           targetPath: `/nas/file${i}.pdf`,
           status: SyncEventStatus.PENDING,
+          processBy: 'user-1',
           retryCount: 0,
           maxRetries: 3,
           createdAt: new Date(),
@@ -429,7 +470,7 @@ describe('AdminService', () => {
         },
       };
 
-      syncEventStatsService.findSyncEvents.mockResolvedValue(mockDomainResult);
+      syncEventStatsService.findSyncEvents.mockResolvedValue(mockDomainResult as any);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
@@ -444,6 +485,82 @@ describe('AdminService', () => {
       // ✅ THEN (결과 검증)
       // ═══════════════════════════════════════════════════════
       expect(result.pagination.hasMore).toBe(true);
+    });
+  });
+
+  describe('getSyncDashboardSummary', () => {
+    it('should return status counts and stuck count from syncEventStatsService', async () => {
+      const statusCounts = {
+        PENDING: 5,
+        QUEUED: 2,
+        PROCESSING: 1,
+        RETRYING: 0,
+        DONE: 100,
+        FAILED: 3,
+      };
+      syncEventStatsService.countByStatus.mockResolvedValue(statusCounts);
+      syncEventStatsService.getStuckCount.mockResolvedValue(2);
+
+      const result = await service.getSyncDashboardSummary();
+
+      expect(result.pending).toBe(5);
+      expect(result.queued).toBe(2);
+      expect(result.processing).toBe(1);
+      expect(result.done).toBe(100);
+      expect(result.failed).toBe(3);
+      expect(result.stuckCount).toBe(2);
+      expect(result.checkedAt).toBeInstanceOf(Date);
+      expect(syncEventStatsService.countByStatus).toHaveBeenCalledTimes(1);
+      expect(syncEventStatsService.getStuckCount).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('getSyncDashboardEvents', () => {
+    it('should return paginated events with file and employee info', async () => {
+      const userId = 'user-1';
+      const createdAt = new Date();
+      const mockEvents = [
+        {
+          id: 'event-1',
+          status: SyncEventStatus.PENDING,
+          eventType: SyncEventType.CREATE,
+          targetType: SyncEventTargetType.FILE,
+          fileId: 'file-1',
+          folderId: undefined,
+          sourcePath: '/cache/file1.pdf',
+          targetPath: '/nas/file1.pdf',
+          processedAt: undefined,
+          createdAt,
+          updatedAt: createdAt,
+          retryCount: 0,
+          maxRetries: 3,
+          errorMessage: undefined,
+          processBy: userId,
+          metadata: {},
+        },
+      ];
+      syncEventStatsService.findDashboardEvents.mockResolvedValue({
+        events: mockEvents as any,
+        total: 1,
+      });
+      mockFileRepository.findByIds.mockResolvedValue([
+        { id: 'file-1', name: 'file1.pdf', sizeBytes: 1024 },
+      ]);
+      mockEmployeeRepository.find.mockResolvedValue([
+        { id: userId, name: 'Test User' },
+      ]);
+      mockEdpRepository.find.mockResolvedValue([]);
+
+      const result = await service.getSyncDashboardEvents({
+        page: 1,
+        pageSize: 20,
+      });
+
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].fileName).toBe('file1.pdf');
+      expect(result.items[0].requester.name).toBe('Test User');
+      expect(result.totalItems).toBe(1);
+      expect(syncEventStatsService.findDashboardEvents).toHaveBeenCalledTimes(1);
     });
   });
 });

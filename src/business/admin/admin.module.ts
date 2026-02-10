@@ -1,8 +1,14 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { StorageInfraModule } from '../../infra/storage/storage-infra.module';
 import { QueueInfraModule } from '../../infra/queue/queue-infra.module';
 import { RepositoryModule } from '../../infra/database/repository.module';
+import {
+  Employee,
+  EmployeeDepartmentPosition,
+  Department,
+} from '../../integrations/migration/organization/entities';
 import { AdminService } from './admin.service';
 import { CacheManagementService } from './cache-management.service';
 import { CacheHealthCheckService } from '../../infra/storage/cache/cache-health-check.service';
@@ -29,6 +35,7 @@ import { NasHealthHistoryDomainModule } from '../../domain/nas-health-history/na
     StorageInfraModule,
     QueueInfraModule,
     RepositoryModule,
+    TypeOrmModule.forFeature([Employee, EmployeeDepartmentPosition, Department]),
     ConfigModule,
     FileDomainModule,
     StorageDomainModule,

@@ -2,7 +2,9 @@
  * Admin 비즈니스 서비스
  * Admin API의 비즈니스 로직을 조율합니다.
  */
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { In, Repository } from 'typeorm';
 import { CacheHealthCheckService, CacheHealthResult } from '../../infra/storage/cache/cache-health-check.service';
 import { NasHealthCheckService, NasHealthResult } from '../../infra/storage/nas/nas-health-check.service';
 import {
@@ -19,7 +21,19 @@ import {
   SyncEventsResponseDto,
   CacheUsageResponseDto,
   CacheEvictionResponseDto,
+  SyncDashboardSummaryResponseDto,
+  SyncDashboardEventsQueryDto,
+  SyncDashboardEventItemDto,
 } from '../../interface/controller/admin/dto';
+import { PaginatedResponseDto } from '../../interface/common/dto/pagination.dto';
+import { FILE_REPOSITORY, type IFileRepository } from '../../domain/file/repositories/file.repository.interface';
+import type { SyncEventFilterParams } from '../../domain/sync-event/repositories/sync-event.repository.interface';
+import { SyncEventEntity } from '../../domain/sync-event/entities/sync-event.entity';
+import { Employee } from '../../integrations/migration/organization/entities/employee.entity';
+import { EmployeeDepartmentPosition } from '../../integrations/migration/organization/entities/employee-department-position.entity';
+
+const STUCK_PENDING_HOURS = 1;
+const STUCK_PROCESSING_MS = 30 * 60 * 1000;
 
 @Injectable()
 export class AdminService {
@@ -29,6 +43,12 @@ export class AdminService {
     private readonly storageConsistencyService: StorageConsistencyService,
     private readonly syncEventStatsService: SyncEventStatsService,
     private readonly cacheManagementService: CacheManagementService,
+    @Inject(FILE_REPOSITORY)
+    private readonly fileRepository: IFileRepository,
+    @InjectRepository(Employee)
+    private readonly employeeRepository: Repository<Employee>,
+    @InjectRepository(EmployeeDepartmentPosition)
+    private readonly edpRepository: Repository<EmployeeDepartmentPosition>,
   ) {}
 
   /**
@@ -150,117 +170,104 @@ export class AdminService {
   }
 
   /**
-   * 동기화 대시보드 조회
-   * 현재 진행 중인 동기화 작업 현황을 한눈에 볼 수 있습니다.
+   * 동기화 대시보드 요약 조회
+   * 전체 상태별 카운트와 stuck 수를 반환합니다.
    */
-  async getSyncDashboard(): Promise<SyncDashboardResponseDto> {
-    // SyncEvent 상태별 요약
-    const syncEventsResult = await this.syncEventStatsService.findSyncEvents({
-      hours: 24,
-      limit: 1000,
-      offset: 0,
-    });
+  async getSyncDashboardSummary(): Promise<SyncDashboardSummaryResponseDto> {
+    const [statusCounts, stuckCount] = await Promise.all([
+      this.syncEventStatsService.countByStatus(),
+      this.syncEventStatsService.getStuckCount(),
+    ]);
+    const now = new Date();
+    return SyncDashboardSummaryResponseDto.from(statusCounts, stuckCount, now);
+  }
 
-    // 현재 진행 중인 작업 (PENDING, QUEUED, PROCESSING, RETRYING)
-    const activeEvents = syncEventsResult.events.filter(
-      (e) => ['PENDING', 'QUEUED', 'PROCESSING', 'RETRYING'].includes(e.status),
-    );
+  /**
+   * 동기화 대시보드 이벤트 목록 조회 (필터 + 페이지네이션)
+   */
+  async getSyncDashboardEvents(
+    params: SyncDashboardEventsQueryDto,
+  ): Promise<PaginatedResponseDto<SyncDashboardEventItemDto>> {
+    const filterParams = this.buildSyncEventFilterParams(params);
+    const { events, total } = await this.syncEventStatsService.findDashboardEvents(filterParams);
 
-    // 사용자별 대기 현황 집계
-    const userStatsMap = new Map<string, {
-      pendingCount: number;
-      queuedCount: number;
-      processingCount: number;
-      retryingCount: number;
-      stuckCount: number;
-      oldestJobAt?: Date;
-    }>();
+    const fileIds = [...new Set(events.map((e) => e.fileId).filter((id): id is string => !!id))];
+    const userIds = [...new Set(events.map((e) => e.processBy).filter(Boolean))];
 
-    for (const event of activeEvents) {
-      const userId = event.processBy || 'unknown';
-      const existing = userStatsMap.get(userId) || {
-        pendingCount: 0,
-        queuedCount: 0,
-        processingCount: 0,
-        retryingCount: 0,
-        stuckCount: 0,
-        oldestJobAt: undefined,
-      };
+    const [files, employees, edps] = await Promise.all([
+      fileIds.length > 0 ? this.fileRepository.findByIds(fileIds) : Promise.resolve([]),
+      userIds.length > 0
+        ? this.employeeRepository.find({ where: { id: In(userIds) } })
+        : Promise.resolve([]),
+      userIds.length > 0
+        ? this.edpRepository.find({
+            where: { employeeId: In(userIds) },
+            relations: ['department'],
+          })
+        : Promise.resolve([]),
+    ]);
 
-      // 상태별 카운트
-      if (event.status === 'PENDING') existing.pendingCount++;
-      if (event.status === 'QUEUED') existing.queuedCount++;
-      if (event.status === 'PROCESSING') existing.processingCount++;
-      if (event.status === 'RETRYING') existing.retryingCount++;
-
-      // stuck 카운트
-      if (event.isStuck) existing.stuckCount++;
-
-      // 가장 오래된 작업 시간
-      if (!existing.oldestJobAt || event.createdAt < existing.oldestJobAt) {
-        existing.oldestJobAt = event.createdAt;
+    const fileMap = new Map(files.map((f) => [f.id, f]));
+    const employeeMap = new Map(employees.map((e) => [e.id, e]));
+    const deptMap = new Map<string, string>();
+    for (const edp of edps) {
+      if (!deptMap.has(edp.employeeId) && edp.department) {
+        deptMap.set(edp.employeeId, edp.department.departmentName);
       }
-
-      userStatsMap.set(userId, existing);
     }
 
-    // 사용자별 통계를 배열로 변환하고 정렬
-    const byUser: UserPendingStats[] = Array.from(userStatsMap.entries())
-      .map(([userId, stats]) => ({
-        userId,
-        pendingCount: stats.pendingCount,
-        queuedCount: stats.queuedCount,
-        processingCount: stats.processingCount,
-        retryingCount: stats.retryingCount,
-        totalActiveCount: stats.pendingCount + stats.queuedCount + stats.processingCount + stats.retryingCount,
-        stuckCount: stats.stuckCount,
-        oldestJobAt: stats.oldestJobAt,
-      }))
-      .sort((a, b) => b.totalActiveCount - a.totalActiveCount);
+    const now = new Date();
+    const items = events.map((event) => {
+      const file = event.fileId ? fileMap.get(event.fileId) : null;
+      const emp = event.processBy ? employeeMap.get(event.processBy) : null;
+      const employee = emp
+        ? { id: emp.id, name: emp.name, departmentName: deptMap.get(emp.id) ?? null }
+        : null;
+      const isStuck = this.isStuckEvent(event, now);
+      return SyncDashboardEventItemDto.from(event, file ?? null, employee, isStuck);
+    });
 
-    // 최근 실패한 작업
-    const recentFailed = syncEventsResult.events
-      .filter((e) => e.status === 'FAILED')
+    return PaginatedResponseDto.of(
+      items,
+      params.page,
+      params.pageSize,
+      total,
+    );
+  }
 
+  private buildSyncEventFilterParams(
+    params: SyncDashboardEventsQueryDto,
+  ): SyncEventFilterParams {
+    const fromDate = params.fromDate
+      ? new Date(params.fromDate + 'T00:00:00.000Z')
+      : undefined;
+    const toDate = params.toDate
+      ? new Date(params.toDate + 'T23:59:59.999Z')
+      : undefined;
     return {
-      summary: {
-        pending: syncEventsResult.summary.pending,
-        queued: syncEventsResult.events.filter((e) => e.status === 'QUEUED').length,
-        processing: syncEventsResult.summary.processing,
-        retrying: syncEventsResult.events.filter((e) => e.status === 'RETRYING').length,
-        done: syncEventsResult.summary.done,
-        failed: syncEventsResult.summary.failed,
-        stuckCount: syncEventsResult.summary.stuckPending + syncEventsResult.summary.stuckProcessing,
-      },
-      byUser,
-      activeJobs: activeEvents.map((e) => ({
-        syncEventId: e.id,
-        eventType: e.eventType,
-        targetType: e.targetType,
-        fileId: e.fileId,
-        folderId: e.folderId,
-        status: e.status,
-        retryCount: e.retryCount,
-        maxRetries: e.maxRetries,
-        isStuck: e.isStuck,
-        ageHours: Math.round(e.ageHours * 100) / 100,
-        createdAt: e.createdAt,
-        errorMessage: e.errorMessage,
-        userId: e.processBy || 'unknown',
-      })),
-      recentFailed: recentFailed.map((e) => ({
-        syncEventId: e.id,
-        eventType: e.eventType,
-        targetType: e.targetType,
-        fileId: e.fileId,
-        folderId: e.folderId,
-        errorMessage: e.errorMessage,
-        retryCount: e.retryCount,
-        createdAt: e.createdAt,
-        userId: e.processBy || 'unknown',
-      })),
-      checkedAt: new Date(),
+      status: params.status,
+      eventType: params.eventType,
+      targetType: params.targetType,
+      userId: params.userId,
+      fromDate,
+      toDate,
+      page: params.page,
+      pageSize: params.pageSize,
+      sortBy: params.sortBy,
+      sortOrder: params.sortOrder,
     };
+  }
+
+  private isStuckEvent(event: SyncEventEntity, now: Date): boolean {
+    if (event.status === 'PENDING') {
+      const ageHours = (now.getTime() - event.createdAt.getTime()) / (1000 * 60 * 60);
+      return ageHours >= STUCK_PENDING_HOURS;
+    }
+    if (event.status === 'PROCESSING') {
+      const ageMs = now.getTime() - event.createdAt.getTime();
+      return ageMs >= STUCK_PROCESSING_MS;
+    }
+    return false;
   }
 
   /**
@@ -275,62 +282,4 @@ export class AdminService {
 
     return `${(bytes / Math.pow(k, i)).toFixed(2)} ${units[i]}`;
   }
-}
-
-/**
- * 사용자별 대기 현황
- */
-export interface UserPendingStats {
-  userId: string;
-  pendingCount: number;
-  queuedCount: number;
-  processingCount: number;
-  retryingCount: number;
-  totalActiveCount: number;
-  stuckCount: number;
-  oldestJobAt?: Date;
-}
-
-/**
- * 동기화 대시보드 응답 DTO
- */
-export interface SyncDashboardResponseDto {
-  summary: {
-    pending: number;
-    queued: number;
-    processing: number;
-    retrying: number;
-    done: number;
-    failed: number;
-    stuckCount: number;
-  };
-  /** 사용자별 대기 현황 (활성 작업 수 내림차순 정렬) */
-  byUser: UserPendingStats[];
-  activeJobs: {
-    syncEventId: string;
-    eventType: string;
-    targetType: string;
-    fileId?: string;
-    folderId?: string;
-    status: string;
-    retryCount: number;
-    maxRetries: number;
-    isStuck: boolean;
-    ageHours: number;
-    createdAt: Date;
-    errorMessage?: string;
-    userId: string;
-  }[];
-  recentFailed: {
-    syncEventId: string;
-    eventType: string;
-    targetType: string;
-    fileId?: string;
-    folderId?: string;
-    errorMessage?: string;
-    retryCount: number;
-    createdAt: Date;
-    userId: string;
-  }[];
-  checkedAt: Date;
 }

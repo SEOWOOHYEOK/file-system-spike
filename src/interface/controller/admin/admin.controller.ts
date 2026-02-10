@@ -15,6 +15,8 @@ import {
   QueueStatusResponseDto,
   CacheUsageResponseDto,
   CacheEvictionResponseDto,
+  SyncDashboardSummaryResponseDto,
+  SyncDashboardEventsQueryDto,
 } from './dto';
 
 @ApiTags('500.관리자')
@@ -225,20 +227,40 @@ export class AdminController {
   }
 
   /**
-   * GET /v1/admin/sync/dashboard - 동기화 대시보드
+   * GET /v1/admin/sync/dashboard/summary - 동기화 대시보드 요약
    */
-  @Get('sync/dashboard')
+  @Get('sync/dashboard/summary')
   @ApiOperation({
-    summary: '동기화 대시보드',
+    summary: '동기화 대시보드 요약',
     description:
-      '현재 진행 중인 동기화 작업 현황을 한눈에 볼 수 있습니다.\n\n' +
-      '**상태 요약:** PENDING, QUEUED, PROCESSING, RETRYING, DONE, FAILED 각 개수\n' +
-      '**사용자별 현황:** 사용자별 대기/처리 중 작업 건수\n' +
-      '**진행 중 작업:** 현재 처리 중인 모든 작업 목록 (userId 포함)\n' +
-      '**최근 실패:** 최근 24시간 내 실패한 작업 목록',
+      '전체 동기화 이벤트 상태별 카운트와 stuck 수를 반환합니다.\n\n' +
+      '**상태별 카운트:** PENDING, QUEUED, PROCESSING, RETRYING, DONE, FAILED\n' +
+      '**stuck 수:** PENDING 1시간 이상 + PROCESSING 30분 이상',
   })
-  async getSyncDashboard() {
-    return this.adminService.getSyncDashboard();
+  @ApiOkResponse({
+    description: '동기화 대시보드 요약',
+    type: SyncDashboardSummaryResponseDto,
+  })
+  async getSyncDashboardSummary(): Promise<SyncDashboardSummaryResponseDto> {
+    return this.adminService.getSyncDashboardSummary();
+  }
+
+  /**
+   * GET /v1/admin/sync/dashboard/events - 동기화 대시보드 이벤트 목록
+   */
+  @Get('sync/dashboard/events')
+  @ApiOperation({
+    summary: '동기화 대시보드 이벤트 목록',
+    description:
+      '필터와 페이지네이션으로 동기화 이벤트 목록을 조회합니다.\n\n' +
+      '**지원 필터:** status, eventType, targetType, userId, fromDate, toDate\n' +
+      '**stuck 판단:** PENDING 1시간 이상, PROCESSING 30분 이상',
+  })
+  @ApiOkResponse({
+    description: '동기화 대시보드 이벤트 목록 (페이지네이션)',
+  })
+  async getSyncDashboardEvents(@Query() query: SyncDashboardEventsQueryDto) {
+    return this.adminService.getSyncDashboardEvents(query);
   }
 
   /**
