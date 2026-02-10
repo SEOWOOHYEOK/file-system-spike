@@ -1,7 +1,9 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { UserDomainModule } from '../../domain/user/user.module';
 import { ExternalShareDomainModule } from '../../domain/external-share';
 import { OrganizationModule } from '../../integrations/migration/organization/organization.module';
+import { EmployeeDepartmentPosition } from '../../integrations/migration/organization/entities/employee-department-position.entity';
 import { AuthUserLookupService } from './auth-user-lookup.service';
 
 /**
@@ -12,6 +14,7 @@ import { AuthUserLookupService } from './auth-user-lookup.service';
  */
 @Module({
   imports: [
+    TypeOrmModule.forFeature([EmployeeDepartmentPosition]),
     forwardRef(() => UserDomainModule),
     forwardRef(() => ExternalShareDomainModule),
     OrganizationModule,

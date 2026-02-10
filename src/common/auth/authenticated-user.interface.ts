@@ -36,4 +36,10 @@ export interface AuthenticatedUser {
 
   /** 소속 회사 (외부 사용자만 존재) */
   company?: string;
+
+  /** 부서 ID (외부 사용자 - Employee 기반 조회 시) */
+  departmentId?: string;
+
+  /** 부서명 (외부 사용자 - Employee 기반 조회 시) */
+  departmentName?: string;
 }
