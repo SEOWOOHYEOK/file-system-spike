@@ -40,6 +40,9 @@ export class LoginResponseDto {
         email?: string;
     };
 
+    @ApiProperty({ description: '사용자 타입 (내부/외부)', enum: ['internal', 'external'] })
+    userType: 'internal' | 'external';
+
     @ApiProperty({ description: 'SSO 토큰 정보' })
     ssoToken?: {
         accessToken: string;

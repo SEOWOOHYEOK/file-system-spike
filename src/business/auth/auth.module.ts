@@ -20,6 +20,6 @@ import { AuthUserLookupService } from './auth-user-lookup.service';
     OrganizationModule,
   ],
   providers: [AuthUserLookupService],
-  exports: [AuthUserLookupService],
+  exports: [AuthUserLookupService, TypeOrmModule.forFeature([EmployeeDepartmentPosition])],
 })
 export class AuthModule {}

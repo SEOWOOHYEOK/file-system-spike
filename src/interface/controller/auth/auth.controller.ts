@@ -1,16 +1,23 @@
-import { Controller, Post, Body, BadRequestException, UnauthorizedException, Logger } from '@nestjs/common';
-import { ApiTags, ApiOperation } from '@nestjs/swagger';
+import { Controller, Post, Body, BadRequestException, UnauthorizedException, UseGuards, Logger } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
 import { SSOService } from '../../../integrations/sso/sso.service';
+import { OrganizationMigrationService } from '../../../integrations/migration/migration.service';
+import { EmployeeDepartmentPosition } from '../../../integrations/migration/organization/entities/employee-department-position.entity';
 import { GenerateTokenRequestDto, GenerateTokenResponseDto } from './dto/generate-token.dto';
 import { VerifyTokenRequestDto, VerifyTokenResponseDto } from './dto/verify-token.dto';
 import { LoginRequestDto, LoginResponseDto } from './dto/login.dto';
+import { LogoutResponseDto } from './dto/logout.dto';
 import { RefreshTokenRequestDto, RefreshTokenResponseDto } from './dto/refresh-token.dto';
 import { MigrateOrganizationRequestDto, MigrateOrganizationResponseDto } from './dto/migrate-organization.dto';
 import { AuditAction } from '../../../common/decorators/audit-action.decorator';
+import { User } from '../../../common/decorators/user.decorator';
 import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
 import { TargetType } from '../../../domain/audit/enums/common.enum';
+import { UnifiedJwtAuthGuard } from '../../../common/guards';
 
 /**
  * 인증 컨트롤러
@@ -26,7 +33,61 @@ export class AuthController {
         private readonly jwtService: JwtService,
         private readonly configService: ConfigService,
         private readonly ssoService: SSOService,
+        private readonly organizationMigrationService: OrganizationMigrationService,
+        @InjectRepository(EmployeeDepartmentPosition)
+        private readonly edpRepository: Repository<EmployeeDepartmentPosition>,
     ) {}
+
+    /**
+     * 직원이 외부 부서(EXTERNAL_DEPARTMENT_ID) 소속인지 확인
+     */
+    private async isExternalDepartment(employeeId: string): Promise<boolean> {
+        const externalDepartmentId = this.configService.get<string>('EXTERNAL_DEPARTMENT_ID');
+        if (!externalDepartmentId) {
+            return false;
+        }
+        const position = await this.edpRepository.findOne({
+            where: { employeeId, departmentId: externalDepartmentId },
+        });
+        return !!position;
+    }
+
+    /**
+     * 부서 기반으로 JWT 토큰 및 userType 생성
+     */
+    private async createTokenAndUserType(employee: {
+        id: string;
+        employeeNumber: string;
+        name?: string;
+        email?: string;
+    }): Promise<{ token: string; userType: 'internal' | 'external' }> {
+        const isExternal = await this.isExternalDepartment(employee.id);
+        const userType = isExternal ? 'external' : 'internal';
+
+        const jwtPayload = {
+            sub: employee.id,
+            type: userType,
+        };
+
+        let token: string;
+        if (isExternal) {
+            const secret = this.configService.get<string>('EXTERNAL_JWT_SECRET');
+            const expiresIn = parseInt(
+                this.configService.get<string>('EXTERNAL_JWT_EXPIRES_IN') || '9000',
+                10,
+            );
+            token = this.jwtService.sign(jwtPayload, { secret, expiresIn });
+        } else {
+            const secret = this.configService.get<string>('INNER_SECRET');
+            const expiresIn = parseInt(
+                this.configService.get<string>('JWT_EXPIRES_IN') || '86400',
+                10,
+            );
+            token = this.jwtService.sign(jwtPayload, { secret, expiresIn });
+        }
+
+        return { token, userType };
+    }
 
     /**
      * SSO 로그인
@@ -58,13 +119,8 @@ export class AuthController {
                 withDetail: true,
             });
 
-            // JWT 토큰 생성 (보안: userId만 포함, 개인정보 제외)
-            const jwtPayload = {
-                sub: employee.id,
-                type: 'internal',
-            };
-
-            const token = this.jwtService.sign(jwtPayload);
+            // 부서 기반 JWT 토큰 생성 (external/internal)
+            const { token, userType } = await this.createTokenAndUserType(employee);
 
             return {
                 success: true,
@@ -75,10 +131,7 @@ export class AuthController {
                     name: employee.name,
                     email: employee.email,
                 },
-                ssoToken: {
-                    accessToken: ssoResponse.accessToken,
-                    refreshToken: ssoResponse.refreshToken,
-                },
+                userType,
             };
         } catch (error: any) {
             if (error instanceof UnauthorizedException) {
@@ -86,6 +139,32 @@ export class AuthController {
             }
             throw new UnauthorizedException(`로그인 실패: ${error.message || '알 수 없는 오류'}`);
         }
+    }
+
+    /**
+     * 로그아웃
+     *
+     * 현재 세션을 종료하고 로그아웃 이벤트를 기록합니다.
+     */
+    @Post('logout')
+    @UseGuards(UnifiedJwtAuthGuard)
+    @ApiBearerAuth()
+    @AuditAction({
+        action: AuditActionEnum.LOGOUT,
+        targetType: TargetType.USER,
+    })
+    @ApiOperation({
+        summary: '로그아웃',
+        description: '현재 세션을 종료하고 로그아웃 이벤트를 기록합니다.',
+    })
+    async logout(
+        @User() user: { id: string; name?: string },
+    ): Promise<LogoutResponseDto> {
+        this.logger.log(`로그아웃: userId=${user.id}`);
+        return {
+            success: true,
+            message: '로그아웃되었습니다.',
+        };
     }
 
     /**
@@ -114,13 +193,8 @@ export class AuthController {
                 withDetail: true,
             });
 
-            // 새로운 JWT 토큰 생성 (보안: userId만 포함, 개인정보 제외)
-            const jwtPayload = {
-                sub: employee.id,
-                type: 'internal',
-            };
-
-            const token = this.jwtService.sign(jwtPayload);
+            // 부서 기반 JWT 토큰 생성 (external/internal) - login과 동일
+            const { token, userType } = await this.createTokenAndUserType(employee);
 
             return {
                 success: true,
@@ -131,10 +205,7 @@ export class AuthController {
                     name: employee.name,
                     email: employee.email,
                 },
-                ssoToken: {
-                    accessToken: ssoResponse.accessToken,
-                    refreshToken: ssoResponse.refreshToken,
-                },
+                userType,
             };
         } catch (error: any) {
             if (error instanceof UnauthorizedException) {
@@ -259,7 +330,7 @@ export class AuthController {
     /**
      * 조직 데이터 마이그레이션
      *
-     * SSO에서 모든 조직 데이터를 가져옵니다.
+     * SSO에서 모든 조직 데이터를 가져와 로컬 DB에 저장합니다.
      */
     @Post('migrate-organization')
     @AuditAction({
@@ -268,40 +339,18 @@ export class AuthController {
     })
     @ApiOperation({
         summary: '조직 데이터 마이그레이션',
-        description: 'SSO에서 모든 조직 데이터를 가져옵니다. (부서, 직원, 직급, 직책 등)',
+        description: 'SSO에서 모든 조직 데이터를 가져와 로컬 DB에 저장합니다. (부서, 직원, 직급, 직책 등)',
     })
     async migrateOrganization(@Body() dto: MigrateOrganizationRequestDto): Promise<MigrateOrganizationResponseDto> {
         try {
-            this.logger.log('SSO 조직 데이터 마이그레이션 시작');
-
-            // SSO에서 모든 조직 데이터 조회
-            const ssoData = await this.ssoService.exportAllData({
+            const result = await this.organizationMigrationService.마이그레이션한다({
                 includeTerminated: dto.includeTerminated,
                 includeInactiveDepartments: dto.includeInactiveDepartments,
             });
 
-            this.logger.log(
-                `SSO 데이터 조회 완료: 부서 ${ssoData.totalCounts.departments}개, 직원 ${ssoData.totalCounts.employees}명, 직급 ${ssoData.totalCounts.ranks}개, 직책 ${ssoData.totalCounts.positions}개`,
-            );
-
             return {
-                success: true,
-                statistics: {
-                    ranks: ssoData.totalCounts.ranks,
-                    positions: ssoData.totalCounts.positions,
-                    departments: ssoData.totalCounts.departments,
-                    employees: ssoData.totalCounts.employees,
-                    employeeDepartmentPositions: ssoData.totalCounts.employeeDepartmentPositions,
-                    assignmentHistories: ssoData.totalCounts.assignmentHistories,
-                },
-                data: {
-                    ranks: ssoData.ranks,
-                    positions: ssoData.positions,
-                    departments: ssoData.departments,
-                    employees: ssoData.employees,
-                    employeeDepartmentPositions: ssoData.employeeDepartmentPositions,
-                    assignmentHistories: ssoData.assignmentHistories,
-                },
+                success: result.success,
+                statistics: result.statistics,
             };
         } catch (error: any) {
             this.logger.error('조직 데이터 마이그레이션 실패', error);
