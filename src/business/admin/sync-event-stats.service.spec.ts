@@ -19,6 +19,7 @@
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { SyncEventStatsService } from './sync-event-stats.service';
+import { SyncEventDomainService } from '../../domain/sync-event';
 import {
   SYNC_EVENT_REPOSITORY,
   ISyncEventRepository,
@@ -58,6 +59,7 @@ describe('SyncEventStatsService', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SyncEventStatsService,
+        SyncEventDomainService,
         {
           provide: SYNC_EVENT_REPOSITORY,
           useValue: syncEventRepo,

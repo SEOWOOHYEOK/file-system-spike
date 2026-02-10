@@ -14,13 +14,18 @@
  * ============================================================
  */
 
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import {
   SyncEventEntity,
   SyncEventStatus,
   SyncEventType,
 } from '../../domain/sync-event/entities/sync-event.entity';
 import { SyncEventDomainService } from '../../domain/sync-event';
+import {
+  SYNC_EVENT_REPOSITORY,
+  type ISyncEventRepository,
+  type SyncEventFilterParams,
+} from '../../domain/sync-event/repositories/sync-event.repository.interface';
 
 /**
  * 이벤트 조회 결과
@@ -63,6 +68,11 @@ export interface SyncEventSummary {
 }
 
 /**
+ * 대시보드 이벤트 조회 파라미터 (findWithFilters용)
+ */
+export type DashboardEventsParams = SyncEventFilterParams;
+
+/**
  * 이벤트 조회 파라미터
  */
 export interface FindSyncEventsParams {
@@ -88,6 +98,8 @@ const STUCK_PROCESSING_MS = 30 * 60 * 1000; // PROCESSING 상태에서 30분 이
 export class SyncEventStatsService {
   constructor(
     private readonly syncEventDomainService: SyncEventDomainService,
+    @Inject(SYNC_EVENT_REPOSITORY)
+    private readonly syncEventRepository: ISyncEventRepository,
   ) {}
 
   /**
@@ -164,6 +176,45 @@ export class SyncEventStatsService {
       events: paginatedEvents,
       summary,
     };
+  }
+
+  /**
+   * 상태별 이벤트 건수 조회 (DB 레벨 GROUP BY)
+   */
+  async countByStatus(): Promise<Record<string, number>> {
+    return this.syncEventRepository.countByStatus();
+  }
+
+  /**
+   * 필터 + 페이지네이션으로 대시보드 이벤트 조회 (raw, enrichment는 호출자에서 처리)
+   */
+  async findDashboardEvents(
+    params: DashboardEventsParams,
+  ): Promise<{ events: SyncEventEntity[]; total: number }> {
+    return this.syncEventRepository.findWithFilters(params);
+  }
+
+  /**
+   * stuck 상태 이벤트 수 조회
+   * PENDING > 1시간 + PROCESSING > 30분
+   */
+  async getStuckCount(): Promise<number> {
+    const [stuckPending, stuckProcessing] = await Promise.all([
+      this.syncEventDomainService.상태별조회(SyncEventStatus.PENDING),
+      this.syncEventDomainService.상태별조회(SyncEventStatus.PROCESSING),
+    ]);
+
+    const now = new Date();
+    const pendingStuck = stuckPending.filter((e) => {
+      const ageHours = (now.getTime() - e.createdAt.getTime()) / (1000 * 60 * 60);
+      return ageHours >= STUCK_PENDING_HOURS;
+    });
+    const processingStuck = stuckProcessing.filter((e) => {
+      const ageMs = now.getTime() - e.createdAt.getTime();
+      return ageMs >= STUCK_PROCESSING_MS;
+    });
+
+    return pendingStuck.length + processingStuck.length;
   }
 
   /**

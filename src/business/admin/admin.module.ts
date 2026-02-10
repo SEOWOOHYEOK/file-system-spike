@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { StorageInfraModule } from '../../infra/storage/storage-infra.module';
 import { QueueInfraModule } from '../../infra/queue/queue-infra.module';
+import { RepositoryModule } from '../../infra/database/repository.module';
 import { AdminService } from './admin.service';
 import { CacheManagementService } from './cache-management.service';
 import { CacheHealthCheckService } from '../../infra/storage/cache/cache-health-check.service';
@@ -27,6 +28,7 @@ import { NasHealthHistoryDomainModule } from '../../domain/nas-health-history/na
   imports: [
     StorageInfraModule,
     QueueInfraModule,
+    RepositoryModule,
     ConfigModule,
     FileDomainModule,
     StorageDomainModule,
