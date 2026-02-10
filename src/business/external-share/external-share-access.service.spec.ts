@@ -37,9 +37,10 @@ import {
   IPublicShareRepository,
 } from '../../domain/external-share/repositories/public-share.repository.interface';
 import {
-  EXTERNAL_USER_REPOSITORY,
-  IExternalUserRepository,
-} from '../../domain/external-share/repositories/external-user.repository.interface';
+  ExternalUserDomainService,
+  PublicShareDomainService as DomainPublicShareDomainService,
+  ShareAccessLogDomainService,
+} from '../../domain/external-share';
 import {
   SHARE_ACCESS_LOG_REPOSITORY,
   IShareAccessLogRepository,
@@ -65,6 +66,7 @@ const mockTokenStore: jest.Mocked<IContentTokenStore> = {
 // FileDownloadService mock
 const mockFileDownloadService = {
   download: jest.fn(),
+  downloadWithRange: jest.fn(),
   releaseLease: jest.fn(),
 };
 
@@ -79,13 +81,13 @@ const mockShareDomainService = {
 describe('ExternalShareAccessService (Unit Tests)', () => {
   let service: ExternalShareAccessService;
   let mockShareRepo: jest.Mocked<IPublicShareRepository>;
-  let mockUserRepo: { findById: jest.Mock };
+  let mockExternalUserService: { 조회: jest.Mock };
   let mockLogRepo: jest.Mocked<IShareAccessLogRepository>;
 
   /**
    * 🎭 Mock 설정
    * 📍 mockShareRepo: PublicShare 영속성 관리
-   * 📍 mockUserRepo: ExternalUser 상태 확인
+   * 📍 mockExternalUserService: ExternalUser 조회 (Employee 기반)
    * 📍 mockLogRepo: 접근 로그 저장
    * 📍 mockTokenStore: 일회성 토큰 관리
    */
@@ -105,8 +107,8 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
       delete: jest.fn(),
     } as jest.Mocked<IPublicShareRepository>;
 
-    mockUserRepo = {
-      findById: jest.fn(),
+    mockExternalUserService = {
+      조회: jest.fn(),
     };
 
     mockLogRepo = {
@@ -135,8 +137,10 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         ExternalShareAccessService,
+        DomainPublicShareDomainService,
         { provide: PUBLIC_SHARE_REPOSITORY, useValue: mockShareRepo },
-        { provide: EXTERNAL_USER_REPOSITORY, useValue: mockUserRepo },
+        { provide: ExternalUserDomainService, useValue: mockExternalUserService },
+        ShareAccessLogDomainService,
         { provide: SHARE_ACCESS_LOG_REPOSITORY, useValue: mockLogRepo },
         { provide: CONTENT_TOKEN_STORE, useValue: mockTokenStore },
         { provide: FileDownloadService, useValue: mockFileDownloadService },
@@ -474,7 +478,7 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
         isActive: true,
         createdBy: 'admin',
       });
-      mockUserRepo.findById.mockResolvedValue(user);
+      mockExternalUserService.조회.mockResolvedValue(user);
 
       // 4. 파일 다운로드 결과
       const mockFile = {
@@ -483,7 +487,7 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
         mimeType: 'application/pdf',
         sizeBytes: 1024000,
       };
-      mockFileDownloadService.download.mockResolvedValue({
+      mockFileDownloadService.downloadWithRange.mockResolvedValue({
         file: mockFile,
         storageObject: {},
         stream: null,
@@ -518,7 +522,10 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
       expect(result.share.mimeType).toBe('application/pdf');
 
       // 검증 6: FileDownloadService가 호출됨
-      expect(mockFileDownloadService.download).toHaveBeenCalledWith('file-uuid-001');
+      expect(mockFileDownloadService.downloadWithRange).toHaveBeenCalledWith(
+        'file-uuid-001',
+        expect.any(Object),
+      );
 
       // 검증 7: 접근 로그가 기록됨 (success: true, action: VIEW)
       expect(mockLogRepo.save).toHaveBeenCalled();
@@ -593,7 +600,7 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
         isActive: true,
         createdBy: 'admin',
       });
-      mockUserRepo.findById.mockResolvedValue(user);
+      mockExternalUserService.조회.mockResolvedValue(user);
 
       // 4. 파일 다운로드 결과
       const mockFile = {
@@ -602,7 +609,7 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
         mimeType: 'application/pdf',
         sizeBytes: 1024000,
       };
-      mockFileDownloadService.download.mockResolvedValue({
+      mockFileDownloadService.downloadWithRange.mockResolvedValue({
         file: mockFile,
         storageObject: {},
         stream: { pipe: jest.fn() }, // Mock stream
@@ -740,7 +747,7 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
         isActive: false, // 비활성화
         createdBy: 'admin',
       });
-      mockUserRepo.findById.mockResolvedValue(user);
+      mockExternalUserService.조회.mockResolvedValue(user);
       mockLogRepo.save.mockImplementation(async (log) => log);
 
       await expect(service.accessContent(accessParams)).rejects.toThrow('계정이 비활성화되었습니다.');
@@ -771,7 +778,7 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
         isActive: true,
         createdBy: 'admin',
       });
-      mockUserRepo.findById.mockResolvedValue(user);
+      mockExternalUserService.조회.mockResolvedValue(user);
       mockLogRepo.save.mockImplementation(async (log) => log);
 
       await expect(service.accessContent(accessParams)).rejects.toThrow(GoneException);
@@ -804,7 +811,7 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
         isActive: true,
         createdBy: 'admin',
       });
-      mockUserRepo.findById.mockResolvedValue(user);
+      mockExternalUserService.조회.mockResolvedValue(user);
       mockLogRepo.save.mockImplementation(async (log) => log);
 
       await expect(service.accessContent(accessParams)).rejects.toThrow(HttpException);
@@ -835,7 +842,7 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
         isActive: true,
         createdBy: 'admin',
       });
-      mockUserRepo.findById.mockResolvedValue(user);
+      mockExternalUserService.조회.mockResolvedValue(user);
       mockLogRepo.save.mockImplementation(async (log) => log);
 
       const downloadParams = { ...accessParams, action: AccessAction.DOWNLOAD };
@@ -892,10 +899,10 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
         isActive: true,
         createdBy: 'admin',
       });
-      mockUserRepo.findById.mockResolvedValue(user);
+      mockExternalUserService.조회.mockResolvedValue(user);
 
       // 4. 파일 다운로드 실패!
-      mockFileDownloadService.download.mockRejectedValue(
+      mockFileDownloadService.downloadWithRange.mockRejectedValue(
         new Error('파일 스토리지 접근 실패'),
       );
 
@@ -963,10 +970,10 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
         isActive: true,
         createdBy: 'admin',
       });
-      mockUserRepo.findById.mockResolvedValue(user);
+      mockExternalUserService.조회.mockResolvedValue(user);
 
       // 파일 다운로드 실패
-      mockFileDownloadService.download.mockRejectedValue(
+      mockFileDownloadService.downloadWithRange.mockRejectedValue(
         new Error('NAS 연결 실패'),
       );
 

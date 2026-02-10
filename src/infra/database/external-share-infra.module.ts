@@ -2,17 +2,14 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
 // ORM Entities
-import { ExternalUserOrmEntity } from './entities/external-user.orm-entity';
 import { PublicShareOrmEntity } from './entities/public-share.orm-entity';
 import { ShareAccessLogOrmEntity } from './entities/share-access-log.orm-entity';
 
 // Repositories
-import { ExternalUserRepository } from './repositories/external-user.repository';
 import { PublicShareRepository } from './repositories/public-share.repository';
 import { ShareAccessLogRepository } from './repositories/share-access-log.repository';
 
 // Repository Tokens
-import { EXTERNAL_USER_REPOSITORY } from '../../domain/external-share/repositories/external-user.repository.interface';
 import { PUBLIC_SHARE_REPOSITORY } from '../../domain/external-share/repositories/public-share.repository.interface';
 import { SHARE_ACCESS_LOG_REPOSITORY } from '../../domain/external-share/repositories/share-access-log.repository.interface';
 
@@ -20,22 +17,18 @@ import { SHARE_ACCESS_LOG_REPOSITORY } from '../../domain/external-share/reposit
  * ExternalShare Infrastructure 모듈
  *
  * 외부 파일 공유 시스템의 인프라 레이어
- * - TypeORM 엔티티 등록
+ * - TypeORM 엔티티 등록 (PublicShare, ShareAccessLog)
  * - Repository 구현체 제공
+ * - ExternalUser: Employee 기반으로 마이그레이션됨 (별도 테이블 없음)
  */
 @Module({
   imports: [
     TypeOrmModule.forFeature([
-      ExternalUserOrmEntity,
       PublicShareOrmEntity,
       ShareAccessLogOrmEntity,
     ]),
   ],
   providers: [
-    {
-      provide: EXTERNAL_USER_REPOSITORY,
-      useClass: ExternalUserRepository,
-    },
     {
       provide: PUBLIC_SHARE_REPOSITORY,
       useClass: PublicShareRepository,
@@ -46,7 +39,6 @@ import { SHARE_ACCESS_LOG_REPOSITORY } from '../../domain/external-share/reposit
     },
   ],
   exports: [
-    EXTERNAL_USER_REPOSITORY,
     PUBLIC_SHARE_REPOSITORY,
     SHARE_ACCESS_LOG_REPOSITORY,
   ],

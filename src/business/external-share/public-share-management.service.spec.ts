@@ -34,13 +34,16 @@ import {
   IPublicShareRepository,
 } from '../../domain/external-share/repositories/public-share.repository.interface';
 import {
-  EXTERNAL_USER_REPOSITORY,
-  IExternalUserRepository,
-} from '../../domain/external-share/repositories/external-user.repository.interface';
-import {
   FILE_REPOSITORY,
   IFileRepository,
 } from '../../domain/file/repositories/file.repository.interface';
+import {
+  ExternalUserDomainService,
+  PublicShareDomainService as DomainPublicShareDomainService,
+} from '../../domain/external-share';
+import { FileDomainService } from '../../domain/file';
+import { FileState } from '../../domain/file/type/file.type';
+import { PublicShareDomainService } from './public-share-domain.service';
 import { PublicShare } from '../../domain/external-share/entities/public-share.entity';
 import { ExternalUser } from '../../domain/external-share/entities/external-user.entity';
 import { SharePermission } from '../../domain/external-share/type/public-share.type';
@@ -48,13 +51,13 @@ import { SharePermission } from '../../domain/external-share/type/public-share.t
 describe('PublicShareManagementService', () => {
   let service: PublicShareManagementService;
   let mockShareRepo: jest.Mocked<IPublicShareRepository>;
-  let mockUserRepo: jest.Mocked<Partial<IExternalUserRepository>>;
+  let mockExternalUserService: jest.Mocked<Partial<ExternalUserDomainService>>;
   let mockFileRepo: jest.Mocked<Partial<IFileRepository>>;
 
   /**
    * 🎭 Mock 설정
    * 📍 mockShareRepo: PublicShare 영속성 관리
-   * 📍 mockUserRepo: ExternalUser 존재 확인
+   * 📍 mockExternalUserService: ExternalUser 조회 (Employee 기반)
    * 📍 mockFileRepo: File 존재 확인
    */
   beforeEach(async () => {
@@ -73,25 +76,29 @@ describe('PublicShareManagementService', () => {
       delete: jest.fn(),
     } as jest.Mocked<IPublicShareRepository>;
 
-    mockUserRepo = {
-      findById: jest.fn(),
-    } as jest.Mocked<Partial<IExternalUserRepository>>;
+    mockExternalUserService = {
+      조회: jest.fn(),
+    } as jest.Mocked<Partial<ExternalUserDomainService>>;
 
     mockFileRepo = {
       findById: jest.fn(),
+      findByIds: jest.fn().mockResolvedValue([]),
     } as jest.Mocked<Partial<IFileRepository>>;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PublicShareManagementService,
+        PublicShareDomainService,
+        DomainPublicShareDomainService,
         {
           provide: PUBLIC_SHARE_REPOSITORY,
           useValue: mockShareRepo,
         },
         {
-          provide: EXTERNAL_USER_REPOSITORY,
-          useValue: mockUserRepo,
+          provide: ExternalUserDomainService,
+          useValue: mockExternalUserService,
         },
+        FileDomainService,
         {
           provide: FILE_REPOSITORY,
           useValue: mockFileRepo,
@@ -124,8 +131,11 @@ describe('PublicShareManagementService', () => {
       // ═══════════════════════════════════════════════════════
       // 📥 GIVEN (사전 조건 설정)
       // ═══════════════════════════════════════════════════════
-      mockFileRepo.findById.mockResolvedValue({ id: 'file-123' });
-      mockUserRepo.findById.mockResolvedValue(
+      mockFileRepo.findById!.mockResolvedValue({
+        id: 'file-123',
+        state: FileState.ACTIVE,
+      });
+      mockExternalUserService.조회!.mockResolvedValue(
         new ExternalUser({
           id: 'ext-user-456',
           username: 'partner',
@@ -145,7 +155,7 @@ describe('PublicShareManagementService', () => {
       // ✅ THEN (결과 검증)
       // ═══════════════════════════════════════════════════════
       expect(mockFileRepo.findById).toHaveBeenCalledWith('file-123');
-      expect(mockUserRepo.findById).toHaveBeenCalledWith('ext-user-456');
+      expect(mockExternalUserService.조회).toHaveBeenCalledWith('ext-user-456');
       expect(mockShareRepo.save).toHaveBeenCalled();
       expect(result.fileId).toBe('file-123');
       expect(result.ownerId).toBe('owner-123');
@@ -158,7 +168,7 @@ describe('PublicShareManagementService', () => {
      * 🎯 검증 목적: 파일이 존재하지 않으면 NotFoundException
      */
     it('should throw NotFoundException when file does not exist', async () => {
-      mockFileRepo.findById.mockResolvedValue(null);
+      mockFileRepo.findById!.mockResolvedValue(null);
 
       await expect(
         service.createPublicShare('owner-123', createShareDto),
@@ -169,8 +179,11 @@ describe('PublicShareManagementService', () => {
      * 🎯 검증 목적: 외부 사용자가 존재하지 않으면 NotFoundException
      */
     it('should throw NotFoundException when external user does not exist', async () => {
-      mockFileRepo.findById.mockResolvedValue({ id: 'file-123' });
-      mockUserRepo.findById.mockResolvedValue(null);
+      mockFileRepo.findById!.mockResolvedValue({
+        id: 'file-123',
+        state: FileState.ACTIVE,
+      });
+      mockExternalUserService.조회!.mockResolvedValue(null);
 
       await expect(
         service.createPublicShare('owner-123', createShareDto),
@@ -181,8 +194,11 @@ describe('PublicShareManagementService', () => {
      * 🎯 검증 목적: 중복 공유 시 ConflictException
      */
     it('should throw ConflictException when share already exists', async () => {
-      mockFileRepo.findById.mockResolvedValue({ id: 'file-123' });
-      mockUserRepo.findById.mockResolvedValue(
+      mockFileRepo.findById!.mockResolvedValue({
+        id: 'file-123',
+        state: FileState.ACTIVE,
+      });
+      mockExternalUserService.조회!.mockResolvedValue(
         new ExternalUser({ id: 'ext-user-456', isActive: true, createdBy: 'admin' }),
       );
       mockShareRepo.findByFileAndExternalUser.mockResolvedValue(
