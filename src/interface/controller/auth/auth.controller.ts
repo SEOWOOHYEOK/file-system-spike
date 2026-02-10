@@ -1,4 +1,4 @@
-import { Controller, Post, Body, BadRequestException, UnauthorizedException, UseGuards, Logger } from '@nestjs/common';
+import { Controller, Post, Body, BadRequestException, UnauthorizedException, UseGuards, Req, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -7,6 +7,7 @@ import { Repository } from 'typeorm';
 import { SSOService } from '../../../integrations/sso/sso.service';
 import { OrganizationMigrationService } from '../../../integrations/migration/migration.service';
 import { EmployeeDepartmentPosition } from '../../../integrations/migration/organization/entities/employee-department-position.entity';
+import { TokenBlacklistService } from '../../../business/external-share/security/token-blacklist.service';
 import { GenerateTokenRequestDto, GenerateTokenResponseDto } from './dto/generate-token.dto';
 import { VerifyTokenRequestDto, VerifyTokenResponseDto } from './dto/verify-token.dto';
 import { LoginRequestDto, LoginResponseDto } from './dto/login.dto';
@@ -16,7 +17,7 @@ import { MigrateOrganizationRequestDto, MigrateOrganizationResponseDto } from '.
 import { AuditAction } from '../../../common/decorators/audit-action.decorator';
 import { User } from '../../../common/decorators/user.decorator';
 import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
-import { TargetType } from '../../../domain/audit/enums/common.enum';
+import { TargetType, UserType } from '../../../domain/audit/enums/common.enum';
 import { UnifiedJwtAuthGuard } from '../../../common/guards';
 
 /**
@@ -34,6 +35,7 @@ export class AuthController {
         private readonly configService: ConfigService,
         private readonly ssoService: SSOService,
         private readonly organizationMigrationService: OrganizationMigrationService,
+        private readonly tokenBlacklistService: TokenBlacklistService,
         @InjectRepository(EmployeeDepartmentPosition)
         private readonly edpRepository: Repository<EmployeeDepartmentPosition>,
     ) {}
@@ -72,6 +74,10 @@ export class AuthController {
         let token: string;
         if (isExternal) {
             const secret = this.configService.get<string>('EXTERNAL_JWT_SECRET');
+            if (!secret) {
+                this.logger.error('EXTERNAL_JWT_SECRET 환경변수가 설정되지 않았습니다.');
+                throw new BadRequestException('인증 설정 오류가 발생했습니다.');
+            }
             const expiresIn = parseInt(
                 this.configService.get<string>('EXTERNAL_JWT_EXPIRES_IN') || '9000',
                 10,
@@ -79,6 +85,10 @@ export class AuthController {
             token = this.jwtService.sign(jwtPayload, { secret, expiresIn });
         } else {
             const secret = this.configService.get<string>('INNER_SECRET');
+            if (!secret) {
+                this.logger.error('INNER_SECRET 환경변수가 설정되지 않았습니다.');
+                throw new BadRequestException('인증 설정 오류가 발생했습니다.');
+            }
             const expiresIn = parseInt(
                 this.configService.get<string>('JWT_EXPIRES_IN') || '86400',
                 10,
@@ -158,9 +168,25 @@ export class AuthController {
         description: '현재 세션을 종료하고 로그아웃 이벤트를 기록합니다.',
     })
     async logout(
-        @User() user: { id: string; name?: string },
+        @User() user: { id: string; name?: string; type?: string },
+        @Req() req: any,
     ): Promise<LogoutResponseDto> {
-        this.logger.log(`로그아웃: userId=${user.id}`);
+        this.logger.log(`로그아웃: userId=${user.id}, type=${user.type}`);
+
+        // 외부 사용자 토큰은 블랙리스트에 추가 (로그아웃 후 재사용 방지)
+        if (user.type === UserType.EXTERNAL) {
+            const accessToken = req['accessToken'] as string;
+            if (accessToken) {
+                // 토큰 만료 시간 계산 (EXTERNAL_JWT_EXPIRES_IN 기준)
+                const expiresInSec = parseInt(
+                    this.configService.get<string>('EXTERNAL_JWT_EXPIRES_IN') || '9000',
+                    10,
+                );
+                const expiresAt = new Date(Date.now() + expiresInSec * 1000);
+                this.tokenBlacklistService.addToBlacklist(accessToken, user.id, 'logout', expiresAt);
+            }
+        }
+
         return {
             success: true,
             message: '로그아웃되었습니다.',
