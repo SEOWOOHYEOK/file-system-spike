@@ -8,7 +8,6 @@ import { AuditLogController } from './audit-log.controller';
 import { RoleController } from './role/role.controller';
 import { ShareAdminController } from './share/share-admin.controller';
 import { ShareRequestAdminController } from './share-request/share-request-admin.controller';
-import { ExternalUserAdminController } from './external-user/external-user-admin.controller';
 import { UserAdminController } from './user/user-admin.controller';
 import { ObservabilityController } from './observability.controller';
 import { TimelineAdminController } from './timeline/timeline-admin.controller';
@@ -29,7 +28,6 @@ import { RepositoryModule } from '../../../infra/database/repository.module';
  * - 파일 이력 조회
  * - 역할/권한 관리
  * - 공유 링크 관리
- * - 외부 사용자 관리
  */
 @Module({
   imports: [
@@ -51,7 +49,6 @@ import { RepositoryModule } from '../../../infra/database/repository.module';
     RoleController,
     ShareAdminController,
     ShareRequestAdminController,
-    ExternalUserAdminController,
     UserAdminController,
     ObservabilityController,
     TimelineAdminController,

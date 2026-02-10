@@ -11,19 +11,20 @@ import { AppController } from '../../app.controller';
 import { AdminController } from '../../interface/controller/admin/admin.controller';
 import { ObservabilityController } from '../../interface/controller/admin/observability.controller';
 import { AuditLogController } from '../../interface/controller/admin/audit-log.controller';
-import { ExternalUserAdminController } from '../../interface/controller/admin/external-user/external-user-admin.controller';
 import { RoleController } from '../../interface/controller/admin/role/role.controller';
 import { ShareAdminController } from '../../interface/controller/admin/share/share-admin.controller';
 import { ShareRequestAdminController } from '../../interface/controller/admin/share-request/share-request-admin.controller';
 import { TimelineAdminController } from '../../interface/controller/admin/timeline/timeline-admin.controller';
 import { UserAdminController } from '../../interface/controller/admin/user/user-admin.controller';
 import { AuthController } from '../../interface/controller/auth/auth.controller';
-import { ExternalAuthController } from '../../interface/controller/external-auth/external-auth.controller';
 import { ExternalShareController } from '../../interface/controller/external-auth/external-share.controller';
 import { FileController } from '../../interface/controller/file/file.controller';
 import { MultipartController } from '../../interface/controller/file/multipart.controller';
 import { FolderController } from '../../interface/controller/folder/folder.controller';
-import { PublicShareController } from '../../interface/controller/share/share.controller';
+import {
+  PublicShareController,
+  ExternalUsersController,
+} from '../../interface/controller/share/share.controller';
 import { ShareRequestController } from '../../interface/controller/share-request/share-request.controller';
 import { SyncEventController } from '../../interface/controller/sync-event/sync-event.controller';
 import { TrashController } from '../../interface/controller/trash/trash.controller';
@@ -65,19 +66,18 @@ const CONTROLLERS = [
   { name: 'AdminController', controller: AdminController },
   { name: 'ObservabilityController', controller: ObservabilityController },
   { name: 'AuditLogController', controller: AuditLogController },
-  { name: 'ExternalUserAdminController', controller: ExternalUserAdminController },
   { name: 'RoleController', controller: RoleController },
   { name: 'ShareAdminController', controller: ShareAdminController },
   { name: 'ShareRequestAdminController', controller: ShareRequestAdminController },
   { name: 'TimelineAdminController', controller: TimelineAdminController },
   { name: 'UserAdminController', controller: UserAdminController },
   { name: 'AuthController', controller: AuthController },
-  { name: 'ExternalAuthController', controller: ExternalAuthController },
   { name: 'ExternalShareController', controller: ExternalShareController },
   { name: 'FileController', controller: FileController },
   { name: 'MultipartController', controller: MultipartController },
   { name: 'FolderController', controller: FolderController },
   { name: 'PublicShareController', controller: PublicShareController },
+  { name: 'ExternalUsersController', controller: ExternalUsersController },
   { name: 'ShareRequestController', controller: ShareRequestController },
   { name: 'SyncEventController', controller: SyncEventController },
   { name: 'TrashController', controller: TrashController },

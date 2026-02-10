@@ -8,14 +8,11 @@ import { ExternalShareDomainModule } from '../../domain/external-share/external-
 import { FileDomainModule } from '../../domain/file/file.module';
 
 // Services
-import { ExternalUserManagementService } from './external-user-management.service';
 import { PublicShareManagementService } from './public-share-management.service';
-import { ExternalAuthService } from './external-auth.service';
 import { ExternalShareAccessService } from './external-share-access.service';
 import { PublicShareDomainService } from './public-share-domain.service';
 
 // Security Services
-import { LoginAttemptService } from './security/login-attempt.service';
 import { TokenBlacklistService } from './security/token-blacklist.service';
 
 /**
@@ -24,7 +21,6 @@ import { TokenBlacklistService } from './security/token-blacklist.service';
  * 외부 파일 공유 시스템의 비즈니스 레이어
  *
  * 보안 기능:
- * - 로그인 실패 횟수 제한 (LoginAttemptService)
  * - 토큰 블랙리스트 (TokenBlacklistService)
  *
  * 보안 주의:
@@ -62,24 +58,18 @@ import { TokenBlacklistService } from './security/token-blacklist.service';
   ],
   providers: [
     // Business Services
-    ExternalUserManagementService,
     PublicShareManagementService,
-    ExternalAuthService,
     ExternalShareAccessService,
     PublicShareDomainService,
     // Security Services
-    LoginAttemptService,
     TokenBlacklistService,
   ],
   exports: [
     // Business Services
-    ExternalUserManagementService,
     PublicShareManagementService,
-    ExternalAuthService,
     ExternalShareAccessService,
     PublicShareDomainService,
     // Security Services (가드에서 사용)
-    LoginAttemptService,
     TokenBlacklistService,
   ],
 })

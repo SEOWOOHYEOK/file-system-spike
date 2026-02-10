@@ -13,7 +13,6 @@ import { PublicShareController } from './controller/share/share.controller';
 import { ExternalUsersController } from './controller/share/share.controller';
 
 // 외부 사용자 컨트롤러
-import { ExternalAuthController } from './controller/external-auth/external-auth.controller';
 import { ExternalShareController } from './controller/external-auth/external-share.controller';
 
 // 동기화 컨트롤러
@@ -73,7 +72,6 @@ import { ShareRequestController } from './controller/share-request/share-request
     TrashController,
     AuthController,
     // 외부 사용자 컨트롤러
-    ExternalAuthController,
     ExternalShareController,
     PublicShareController,
     ExternalUsersController,

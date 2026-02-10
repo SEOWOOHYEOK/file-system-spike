@@ -12,7 +12,7 @@ import {
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../common/guards';
 import { PublicShareManagementService } from '../../../business/external-share/public-share-management.service';
-import { ExternalUserManagementService } from '../../../business/external-share/external-user-management.service';
+import { ExternalUserDomainService } from '../../../domain/external-share';
 import { User } from '../../../common/decorators/user.decorator';
 import {
   ApiCreatePublicShare,
@@ -27,7 +27,7 @@ import {
   PublicShareListItemDto,
   RevokeShareResponseDto,
 } from './dto/public-share-response.dto';
-import { ExternalUserListItemDto } from '../admin/external-user/dto/external-user-response.dto';
+import { ExternalUserListItemDto } from './dto/external-user-list-item.dto';
 import { PaginationQueryDto, PaginatedResponseDto } from '../../common/dto';
 import { AuditAction } from '../../../common/decorators';
 import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
@@ -115,7 +115,7 @@ export class PublicShareController {
 @UseGuards(JwtAuthGuard)
 export class ExternalUsersController {
   constructor(
-    private readonly userService: ExternalUserManagementService,
+    private readonly externalUserDomainService: ExternalUserDomainService,
   ) { }
 
   /**
@@ -127,6 +127,7 @@ export class ExternalUsersController {
     @Query() query: PaginationQueryDto,
   ): Promise<PaginatedResponseDto<ExternalUserListItemDto>> {
     // 활성 사용자만 반환
-    return this.userService.getExternalUsers(query);
+    const result = await this.externalUserDomainService.활성전체조회(query);
+    return PaginatedResponseDto.from(result, ExternalUserListItemDto.fromEntity);
   }
 }
