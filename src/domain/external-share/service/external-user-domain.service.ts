@@ -1,4 +1,4 @@
-import { Injectable, NotImplementedException } from '@nestjs/common';
+import { Injectable, Logger, NotImplementedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
@@ -6,6 +6,7 @@ import type { PaginatedResult, PaginationParams } from '../../../common/types/pa
 import { createPaginatedResult } from '../../../common/types/pagination';
 import type { ExternalUser } from '../entities/external-user.entity';
 import { ExternalUser as ExternalUserEntity } from '../entities/external-user.entity';
+import { BusinessException, ErrorCodes } from '../../../common/exceptions';
 import { DomainEmployeeService } from '../../../integrations/migration/organization/services/employee.service';
 import { EmployeeDepartmentPosition } from '../../../integrations/migration/organization/entities/employee-department-position.entity';
 
@@ -18,6 +19,8 @@ import { EmployeeDepartmentPosition } from '../../../integrations/migration/orga
  */
 @Injectable()
 export class ExternalUserDomainService {
+  private readonly logger = new Logger(ExternalUserDomainService.name);
+
   constructor(
     private readonly employeeService: DomainEmployeeService,
     @InjectRepository(EmployeeDepartmentPosition)
@@ -28,7 +31,8 @@ export class ExternalUserDomainService {
   private getExternalDepartmentId(): string {
     const id = this.configService.get<string>('EXTERNAL_DEPARTMENT_ID');
     if (!id) {
-      throw new Error('EXTERNAL_DEPARTMENT_ID is not configured');
+      this.logger.error('EXTERNAL_DEPARTMENT_ID 환경변수가 설정되지 않았습니다.');
+      throw BusinessException.of(ErrorCodes.AUTH_CONFIG_ERROR);
     }
     return id;
   }

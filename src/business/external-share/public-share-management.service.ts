@@ -1,9 +1,7 @@
 import {
   Injectable,
-  ConflictException,
-  ForbiddenException,
-  NotFoundException,
 } from '@nestjs/common';
+import { BusinessException, ErrorCodes } from '../../common/exceptions';
 import { v4 as uuidv4 } from 'uuid';
 import type { SharedFileStats } from '../../domain/external-share/repositories/public-share.repository.interface';
 import type { PaginationParams, PaginatedResult } from '../../common/types/pagination';
@@ -55,17 +53,17 @@ export class PublicShareManagementService {
     // 파일 존재 확인
     const file = await this.fileDomainService.조회(dto.fileId);
     if (!file) {
-      throw new NotFoundException('파일을 찾을 수 없습니다.');
+      throw BusinessException.of(ErrorCodes.PUBLIC_SHARE_FILE_NOT_FOUND, { fileId: dto.fileId });
     }
 
     if (file.state !== FileState.ACTIVE) {
-      throw new ForbiddenException('파일이 활성 상태가 아닙니다.');
+      throw BusinessException.of(ErrorCodes.PUBLIC_SHARE_FILE_NOT_ACTIVE, { fileId: dto.fileId });
     }
 
     // 외부 사용자 존재 확인
     const externalUser = await this.externalUserDomainService.조회(dto.externalUserId);
     if (!externalUser) {
-      throw new NotFoundException('공유 대상 사용자를 찾을 수 없습니다.');
+      throw BusinessException.of(ErrorCodes.PUBLIC_SHARE_TARGET_NOT_FOUND, { externalUserId: dto.externalUserId });
     }
 
     // 중복 공유 확인
@@ -77,7 +75,10 @@ export class PublicShareManagementService {
 
 
     if (existing) {
-      throw new ConflictException('이미 해당 사용자에게 파일이 공유가 되어 있습니다.');
+      throw BusinessException.of(ErrorCodes.PUBLIC_SHARE_DUPLICATE, {
+        fileId: dto.fileId,
+        externalUserId: dto.externalUserId,
+      });
     }
 
     const share = new PublicShare({
@@ -105,11 +106,11 @@ export class PublicShareManagementService {
   async revokeShare(ownerId: string, shareId: string): Promise<PublicShare> {
     const share = await this.shareRepositoryService.조회(shareId);
     if (!share) {
-      throw new NotFoundException('Share not found');
+      throw BusinessException.of(ErrorCodes.PUBLIC_SHARE_NOT_FOUND, { shareId });
     }
 
     if (share.ownerId !== ownerId) {
-      throw new ForbiddenException('Only owner can revoke share');
+      throw BusinessException.of(ErrorCodes.PUBLIC_SHARE_NOT_OWNER, { shareId, ownerId });
     }
 
     share.revoke();
@@ -132,7 +133,7 @@ export class PublicShareManagementService {
   async blockShare(adminId: string, shareId: string): Promise<PublicShare> {
     const share = await this.shareRepositoryService.조회(shareId);
     if (!share) {
-      throw new NotFoundException('Share not found');
+      throw BusinessException.of(ErrorCodes.PUBLIC_SHARE_NOT_FOUND, { shareId });
     }
 
     share.block(adminId);
@@ -145,7 +146,7 @@ export class PublicShareManagementService {
   async unblockShare(shareId: string): Promise<PublicShare> {
     const share = await this.shareRepositoryService.조회(shareId);
     if (!share) {
-      throw new NotFoundException('Share not found');
+      throw BusinessException.of(ErrorCodes.PUBLIC_SHARE_NOT_FOUND, { shareId });
     }
 
     share.unblock();
@@ -180,6 +181,12 @@ export class PublicShareManagementService {
     adminId: string,
     externalUserId: string,
   ): Promise<{ blockedCount: number }> {
+    // 외부 사용자 존재 확인 (내부 사용자 ID로 차단 방지)
+    const externalUser = await this.externalUserDomainService.조회(externalUserId);
+    if (!externalUser) {
+      throw BusinessException.of(ErrorCodes.EXT_USER_NOT_FOUND, { externalUserId });
+    }
+
     const blockedCount = await this.shareRepositoryService.외부사용자공유일괄차단(
       externalUserId,
       adminId,
@@ -201,7 +208,7 @@ export class PublicShareManagementService {
   async getPublicShareById(shareId: string): Promise<PublicShare> {
     const share = await this.shareRepositoryService.조회(shareId);
     if (!share) {
-      throw new NotFoundException('Share not found');
+      throw BusinessException.of(ErrorCodes.PUBLIC_SHARE_NOT_FOUND, { shareId });
     }
     return share;
   }
