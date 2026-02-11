@@ -13,6 +13,7 @@ import { ObservabilityController } from './observability/observability.controlle
 import { TimelineAdminController } from './timeline/timeline-admin.controller';
 import { ErrorMessageAdminController } from './error-message/error-message-admin.controller';
 import { SyncAdminController } from './sync/sync-admin.controller';
+import { FileActionRequestAdminController } from './file-action-request/file-action-request-admin.controller';
 
 // 비즈니스 모듈
 import { AuditModule } from '../../../business/audit/audit.module';
@@ -55,6 +56,7 @@ import { RepositoryModule } from '../../../infra/database/repository.module';
     TimelineAdminController,
     ErrorMessageAdminController,
     SyncAdminController,
+    FileActionRequestAdminController,
   ],
 })
 export class AdminModule {}
