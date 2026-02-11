@@ -1,0 +1,9 @@
+export enum FileActionRequestStatus {
+  PENDING = 'PENDING',
+  APPROVED = 'APPROVED',
+  REJECTED = 'REJECTED',
+  CANCELED = 'CANCELED',
+  EXECUTED = 'EXECUTED',
+  INVALIDATED = 'INVALIDATED',
+  FAILED = 'FAILED',
+}
