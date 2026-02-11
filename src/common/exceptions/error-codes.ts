@@ -33,6 +33,15 @@ export interface ErrorCodeDefinition {
  * 에러 코드 상수
  */
 export const ErrorCodes = {
+  // ─── File 도메인 (1000~1999) ───
+
+  FILE_NOT_FOUND: {
+    code: 1001,
+    internalCode: 'FILE_NOT_FOUND',
+    httpStatus: 404,
+    defaultMessage: '파일을 찾을 수 없습니다.',
+  },
+
   // Share/ShareRequest 도메인 (2000~2999)
   SHARE_PERMISSION_DENIED: {
     code: 2001,
