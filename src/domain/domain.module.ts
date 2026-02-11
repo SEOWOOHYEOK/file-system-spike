@@ -12,6 +12,7 @@ import { UploadSessionDomainModule } from './upload-session/upload-session.modul
 import { FavoriteDomainModule } from './favorite/favorite.module';
 import { SystemConfigDomainModule } from './system-config/system-config.module';
 import { NasHealthHistoryDomainModule } from './nas-health-history/nas-health-history.module';
+import { FileActionRequestDomainModule } from './file-action-request/file-action-request.module';
 
 /**
  * 도메인 레이어 통합 모듈
@@ -32,6 +33,7 @@ import { NasHealthHistoryDomainModule } from './nas-health-history/nas-health-hi
     FavoriteDomainModule,
     SystemConfigDomainModule,
     NasHealthHistoryDomainModule,
+    FileActionRequestDomainModule,
   ],
   exports: [
     FileDomainModule,
@@ -47,6 +49,7 @@ import { NasHealthHistoryDomainModule } from './nas-health-history/nas-health-hi
     FavoriteDomainModule,
     SystemConfigDomainModule,
     NasHealthHistoryDomainModule,
+    FileActionRequestDomainModule,
   ],
 })
 export class DomainModule {}

@@ -24,3 +24,6 @@ export * from './search-history.orm-entity';
 
 // Error Message
 export * from './error-message.orm-entity';
+
+// File Action Request
+export * from './file-action-request.orm-entity';
