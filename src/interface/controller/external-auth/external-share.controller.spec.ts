@@ -24,12 +24,28 @@ jest.mock('uuid', () => ({
 
 import { Test, TestingModule } from '@nestjs/testing';
 import { Response } from 'express';
-import { Readable } from 'stream';
+import { Readable, Writable } from 'stream';
 import { ExternalShareController } from './external-share.controller';
 import { ExternalShareAccessService } from '../../../business/external-share/external-share-access.service';
 import { PublicShare } from '../../../domain/external-share/entities/public-share.entity';
 import { FileEntity } from '../../../domain/file';
 import { ExternalJwtAuthGuard } from '../../../common/guards';
+import {
+  FileStorageObjectEntity,
+  StorageType,
+  AvailabilityStatus,
+} from '../../../domain/storage/file/entity/file-storage-object.entity';
+
+const createMockStorageObject = (fileId: string) =>
+  new FileStorageObjectEntity({
+    id: 'storage-obj-1',
+    fileId,
+    storageType: StorageType.NAS,
+    objectKey: 'some/storage/key',
+    availabilityStatus: AvailabilityStatus.AVAILABLE,
+    checksum: 'abc123def456',
+    createdAt: new Date(),
+  });
 
 describe('ExternalShareController', () => {
   let controller: ExternalShareController;
@@ -87,7 +103,7 @@ describe('ExternalShareController', () => {
       };
       mockAccessService.getMyShares.mockResolvedValue(paginatedResult);
 
-      const result = await controller.getMyShares(user, 1, 20);
+      const result = await controller.getMyShares(user, { page: 1, pageSize: 20 });
 
       expect(result.items).toHaveLength(1);
     });
@@ -147,6 +163,7 @@ describe('ExternalShareController', () => {
         name: '테스트문서.pdf',
         mimeType: 'application/pdf',
         sizeBytes: 1024,
+        updatedAt: new Date(),
       } as FileEntity;
 
       // Readable 스트림 Mock 생성
@@ -162,14 +179,16 @@ describe('ExternalShareController', () => {
         success: true,
         share,
         file: mockFile,
+        storageObject: createMockStorageObject('file-456'),
         stream: mockStream,
+        isPartial: false,
       });
 
       // Response Mock - pipe 동작 시뮬레이션
-      const mockRes = {
+      const mockRes = Object.assign(new Writable({ write(_chunk, _enc, cb) { cb(); } }), {
         set: jest.fn(),
         on: jest.fn(),
-      } as unknown as Response;
+      }) as unknown as Response;
 
       // mockStream.pipe 호출 시 end 이벤트 발생 시뮬레이션
       mockStream.pipe = jest.fn().mockImplementation((res) => {
@@ -186,8 +205,10 @@ describe('ExternalShareController', () => {
       await controller.getContent(
         user,
         'share-123',
-        'token-abc',
+        { token: 'token-abc' },
         'Mozilla/5.0',
+        '',
+        '',
         '192.168.1.100',
         mockRes,
       );
@@ -213,8 +234,8 @@ describe('ExternalShareController', () => {
         }),
       );
 
-      // 3. 스트림이 응답에 파이프됨
-      expect(mockStream.pipe).toHaveBeenCalledWith(mockRes);
+      // 3. 스트림이 countingStream에 파이프됨 (countingStream -> res 파이프 체인)
+      expect(mockStream.pipe).toHaveBeenCalledWith(expect.anything());
     });
 
     /**
@@ -244,6 +265,7 @@ describe('ExternalShareController', () => {
         name: '테스트문서.pdf',
         mimeType: 'application/pdf',
         sizeBytes: 1024,
+        updatedAt: new Date(),
       } as FileEntity;
 
       const mockStream = new Readable({
@@ -254,17 +276,19 @@ describe('ExternalShareController', () => {
         success: true,
         share,
         file: mockFile,
+        storageObject: createMockStorageObject('file-456'),
         stream: mockStream,
+        isPartial: false,
       });
 
-      const mockRes = {
+      const mockRes = Object.assign(new Writable({ write(_chunk, _enc, cb) { cb(); } }), {
         set: jest.fn(),
         on: jest.fn(),
-      } as unknown as Response;
+      }) as unknown as Response;
 
-      // 스트림 에러 시뮬레이션
+      // 스트림 에러 시뮬레이션 (setImmediate로 controller가 listener를 붙인 후 에러 발생)
       mockStream.pipe = jest.fn().mockImplementation((res) => {
-        process.nextTick(() => {
+        setImmediate(() => {
           mockStream.emit('error', new Error('Stream error'));
         });
         return res;
@@ -276,8 +300,10 @@ describe('ExternalShareController', () => {
       await controller.getContent(
         user,
         'share-123',
-        'token-abc',
+        { token: 'token-abc' },
         'Mozilla/5.0',
+        '',
+        '',
         '192.168.1.100',
         mockRes,
       );
@@ -318,6 +344,7 @@ describe('ExternalShareController', () => {
         name: '테스트문서.pdf',
         mimeType: 'application/pdf',
         sizeBytes: 1024,
+        updatedAt: new Date(),
       } as FileEntity;
 
       // 스트림이 null인 경우
@@ -325,7 +352,9 @@ describe('ExternalShareController', () => {
         success: true,
         share,
         file: mockFile,
+        storageObject: createMockStorageObject('file-456'),
         stream: null,
+        isPartial: false,
       });
 
       const mockRes = {
@@ -339,8 +368,10 @@ describe('ExternalShareController', () => {
       await controller.getContent(
         user,
         'share-123',
-        'token-abc',
+        { token: 'token-abc' },
         'Mozilla/5.0',
+        '',
+        '',
         '192.168.1.100',
         mockRes,
       );
@@ -385,6 +416,7 @@ describe('ExternalShareController', () => {
         name: '테스트문서.pdf',
         mimeType: 'application/pdf',
         sizeBytes: 2048,
+        updatedAt: new Date(),
       } as FileEntity;
 
       const mockStream = new Readable({
@@ -399,13 +431,15 @@ describe('ExternalShareController', () => {
         success: true,
         share,
         file: mockFile,
+        storageObject: createMockStorageObject('file-456'),
         stream: mockStream,
+        isPartial: false,
       });
 
-      const mockRes = {
+      const mockRes = Object.assign(new Writable({ write(_chunk, _enc, cb) { cb(); } }), {
         set: jest.fn(),
         on: jest.fn(),
-      } as unknown as Response;
+      }) as unknown as Response;
 
       mockStream.pipe = jest.fn().mockImplementation((res) => {
         process.nextTick(() => {
@@ -420,8 +454,10 @@ describe('ExternalShareController', () => {
       await controller.downloadFile(
         user,
         'share-123',
-        'token-abc',
+        { token: 'token-abc' },
         'Mozilla/5.0',
+        '',
+        '',
         '192.168.1.100',
         mockRes,
       );
@@ -457,8 +493,8 @@ describe('ExternalShareController', () => {
         }),
       );
 
-      // 4. 스트림이 응답에 파이프됨
-      expect(mockStream.pipe).toHaveBeenCalledWith(mockRes);
+      // 4. 스트림이 countingStream에 파이프됨 (countingStream -> res 파이프 체인)
+      expect(mockStream.pipe).toHaveBeenCalledWith(expect.anything());
     });
 
     /**
@@ -488,6 +524,7 @@ describe('ExternalShareController', () => {
         name: '테스트문서.pdf',
         mimeType: 'application/pdf',
         sizeBytes: 2048,
+        updatedAt: new Date(),
       } as FileEntity;
 
       const mockStream = new Readable({
@@ -498,13 +535,15 @@ describe('ExternalShareController', () => {
         success: true,
         share,
         file: mockFile,
+        storageObject: createMockStorageObject('file-456'),
         stream: mockStream,
+        isPartial: false,
       });
 
-      const mockRes = {
+      const mockRes = Object.assign(new Writable({ write(_chunk, _enc, cb) { cb(); } }), {
         set: jest.fn(),
         on: jest.fn(),
-      } as unknown as Response;
+      }) as unknown as Response;
 
       // 스트림 close 이벤트 시뮬레이션
       mockStream.pipe = jest.fn().mockImplementation((res) => {
@@ -520,8 +559,10 @@ describe('ExternalShareController', () => {
       await controller.downloadFile(
         user,
         'share-123',
-        'token-abc',
+        { token: 'token-abc' },
         'Mozilla/5.0',
+        '',
+        '',
         '192.168.1.100',
         mockRes,
       );
@@ -564,6 +605,7 @@ describe('ExternalShareController', () => {
         mimeType:
           'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         sizeBytes: 4096,
+        updatedAt: new Date(),
       } as FileEntity;
 
       const mockStream = new Readable({
@@ -576,15 +618,18 @@ describe('ExternalShareController', () => {
         success: true,
         share,
         file: mockFile,
+        storageObject: createMockStorageObject('file-456'),
         stream: mockStream,
+        isPartial: false,
       });
 
-      const mockRes = {
-        set: jest.fn(),
+      const mockSet = jest.fn();
+      const mockRes = Object.assign(new Writable({ write(_chunk, _enc, cb) { cb(); } }), {
+        set: mockSet,
         on: jest.fn(),
-      } as unknown as Response;
+      }) as unknown as Response;
 
-      mockStream.pipe = jest.fn().mockReturnValue(mockRes);
+      mockStream.pipe = jest.fn().mockImplementation((dest) => dest);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)
@@ -592,8 +637,10 @@ describe('ExternalShareController', () => {
       await controller.downloadFile(
         user,
         'share-123',
-        'token-abc',
+        { token: 'token-abc' },
         'Mozilla/5.0',
+        '',
+        '',
         '192.168.1.100',
         mockRes,
       );
@@ -601,7 +648,7 @@ describe('ExternalShareController', () => {
       // ═══════════════════════════════════════════════════════
       // ✅ THEN (결과 검증)
       // ═══════════════════════════════════════════════════════
-      const setCall = mockRes.set.mock.calls[0][0];
+      const setCall = mockSet.mock.calls[0][0];
       expect(setCall['Content-Disposition']).toContain(
         `filename*=UTF-8''${encodeURIComponent(koreanFileName)}`,
       );

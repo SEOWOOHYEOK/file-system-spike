@@ -20,48 +20,45 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { PublicShareDomainService } from './public-share-domain.service';
 import {
-  PUBLIC_SHARE_REPOSITORY,
-  type IPublicShareRepository,
-} from '../../domain/external-share/repositories/public-share.repository.interface';
-import {
-  FILE_REPOSITORY,
-  type IFileRepository,
-} from '../../domain/file/repositories/file.repository.interface';
+  PublicShareDomainService as DomainPublicShareDomainService,
+} from '../../domain/external-share';
+import { FileDomainService } from '../../domain/file';
 import { PublicShare } from '../../domain/external-share/entities/public-share.entity';
 import { FileEntity } from '../../domain/file/entities/file.entity';
+import { FileState } from '../../domain/file/type/file.type';
 import { SharePermission } from '../../domain/external-share/type/public-share.type';
 
 describe('PublicShareDomainService (Unit Tests)', () => {
   let service: PublicShareDomainService;
-  let mockShareRepo: jest.Mocked<IPublicShareRepository>;
-  let mockFileRepo: jest.Mocked<Partial<IFileRepository>>;
+  let mockShareDomainService: {
+    조회: jest.Mock;
+    외부사용자별조회: jest.Mock;
+    소유자별조회: jest.Mock;
+    전체조회: jest.Mock;
+  };
+  let mockFileDomainService: {
+    조회: jest.Mock;
+    아이디목록조회: jest.Mock;
+  };
 
   beforeEach(async () => {
-    mockShareRepo = {
-      save: jest.fn(),
-      findById: jest.fn(),
-      findByExternalUser: jest.fn(),
-      findByOwner: jest.fn(),
-      findByFileId: jest.fn(),
-      findByFileAndExternalUser: jest.fn(),
-      findAll: jest.fn(),
-      blockAllByFileId: jest.fn(),
-      unblockAllByFileId: jest.fn(),
-      blockAllByExternalUserId: jest.fn(),
-      getSharedFilesStats: jest.fn(),
-      delete: jest.fn(),
-    } as jest.Mocked<IPublicShareRepository>;
+    mockShareDomainService = {
+      조회: jest.fn(),
+      외부사용자별조회: jest.fn(),
+      소유자별조회: jest.fn(),
+      전체조회: jest.fn(),
+    };
 
-    mockFileRepo = {
-      findById: jest.fn(),
-      findByIds: jest.fn(),
+    mockFileDomainService = {
+      조회: jest.fn(),
+      아이디목록조회: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         PublicShareDomainService,
-        { provide: PUBLIC_SHARE_REPOSITORY, useValue: mockShareRepo },
-        { provide: FILE_REPOSITORY, useValue: mockFileRepo },
+        { provide: DomainPublicShareDomainService, useValue: mockShareDomainService },
+        { provide: FileDomainService, useValue: mockFileDomainService },
       ],
     }).compile();
 
@@ -87,13 +84,13 @@ describe('PublicShareDomainService (Unit Tests)', () => {
         mimeType: 'application/pdf',
         folderId: 'folder-1',
         sizeBytes: 1024,
-        state: 'ACTIVE',
+        state: FileState.ACTIVE,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
 
-      mockShareRepo.findById.mockResolvedValue(share);
-      mockFileRepo.findById!.mockResolvedValue(file);
+      mockShareDomainService.조회.mockResolvedValue(share);
+      mockFileDomainService.조회.mockResolvedValue(file);
 
       // When
       const result = await service.findByIdWithFile('share-123');
@@ -103,19 +100,19 @@ describe('PublicShareDomainService (Unit Tests)', () => {
       expect(result!.id).toBe('share-123');
       expect(result!.fileName).toBe('설계문서.pdf');
       expect(result!.mimeType).toBe('application/pdf');
-      expect(mockFileRepo.findById).toHaveBeenCalledWith('file-456');
+      expect(mockFileDomainService.조회).toHaveBeenCalledWith('file-456');
     });
 
     it('공유가 존재하지 않으면 null을 반환한다', async () => {
       // Given
-      mockShareRepo.findById.mockResolvedValue(null);
+      mockShareDomainService.조회.mockResolvedValue(null);
 
       // When
       const result = await service.findByIdWithFile('non-existent');
 
       // Then
       expect(result).toBeNull();
-      expect(mockFileRepo.findById).not.toHaveBeenCalled();
+      expect(mockFileDomainService.조회).not.toHaveBeenCalled();
     });
 
     it('파일이 존재하지 않으면 메타데이터 없이 공유를 반환한다', async () => {
@@ -128,8 +125,8 @@ describe('PublicShareDomainService (Unit Tests)', () => {
         permissions: [SharePermission.VIEW],
       });
 
-      mockShareRepo.findById.mockResolvedValue(share);
-      mockFileRepo.findById!.mockResolvedValue(null);
+      mockShareDomainService.조회.mockResolvedValue(share);
+      mockFileDomainService.조회.mockResolvedValue(null);
 
       // When
       const result = await service.findByIdWithFile('share-123');
@@ -171,7 +168,7 @@ describe('PublicShareDomainService (Unit Tests)', () => {
           mimeType: 'application/pdf',
           folderId: 'folder-1',
           sizeBytes: 1024,
-          state: 'ACTIVE',
+          state: FileState.ACTIVE,
           createdAt: new Date(),
           updatedAt: new Date(),
         }),
@@ -181,13 +178,13 @@ describe('PublicShareDomainService (Unit Tests)', () => {
           mimeType: 'image/png',
           folderId: 'folder-1',
           sizeBytes: 2048,
-          state: 'ACTIVE',
+          state: FileState.ACTIVE,
           createdAt: new Date(),
           updatedAt: new Date(),
         }),
       ];
 
-      mockShareRepo.findByExternalUser.mockResolvedValue({
+      mockShareDomainService.외부사용자별조회.mockResolvedValue({
         items: shares,
         page: 1,
         pageSize: 20,
@@ -196,7 +193,7 @@ describe('PublicShareDomainService (Unit Tests)', () => {
         hasNext: false,
         hasPrev: false,
       });
-      mockFileRepo.findByIds!.mockResolvedValue(files);
+      mockFileDomainService.아이디목록조회.mockResolvedValue(files);
 
       // When
       const result = await service.findByExternalUserWithFiles('ext-user-123', {
@@ -212,13 +209,13 @@ describe('PublicShareDomainService (Unit Tests)', () => {
       expect(result.items[1].mimeType).toBe('image/png');
 
       // 배치 조회가 한 번만 호출됨 (N+1 방지)
-      expect(mockFileRepo.findByIds).toHaveBeenCalledTimes(1);
-      expect(mockFileRepo.findByIds).toHaveBeenCalledWith(['file-1', 'file-2']);
+      expect(mockFileDomainService.아이디목록조회).toHaveBeenCalledTimes(1);
+      expect(mockFileDomainService.아이디목록조회).toHaveBeenCalledWith(['file-1', 'file-2']);
     });
 
     it('빈 목록이면 파일 조회를 하지 않는다', async () => {
       // Given
-      mockShareRepo.findByExternalUser.mockResolvedValue({
+      mockShareDomainService.외부사용자별조회.mockResolvedValue({
         items: [],
         page: 1,
         pageSize: 20,
@@ -236,7 +233,7 @@ describe('PublicShareDomainService (Unit Tests)', () => {
 
       // Then
       expect(result.items).toHaveLength(0);
-      expect(mockFileRepo.findByIds).not.toHaveBeenCalled();
+      expect(mockFileDomainService.아이디목록조회).not.toHaveBeenCalled();
     });
 
     it('중복된 fileId는 한 번만 조회한다', async () => {
@@ -265,13 +262,13 @@ describe('PublicShareDomainService (Unit Tests)', () => {
           mimeType: 'application/pdf',
           folderId: 'folder-1',
           sizeBytes: 1024,
-          state: 'ACTIVE',
+          state: FileState.ACTIVE,
           createdAt: new Date(),
           updatedAt: new Date(),
         }),
       ];
 
-      mockShareRepo.findByExternalUser.mockResolvedValue({
+      mockShareDomainService.외부사용자별조회.mockResolvedValue({
         items: shares,
         page: 1,
         pageSize: 20,
@@ -280,7 +277,7 @@ describe('PublicShareDomainService (Unit Tests)', () => {
         hasNext: false,
         hasPrev: false,
       });
-      mockFileRepo.findByIds!.mockResolvedValue(files);
+      mockFileDomainService.아이디목록조회.mockResolvedValue(files);
 
       // When
       const result = await service.findByExternalUserWithFiles('ext-user-123', {
@@ -289,7 +286,7 @@ describe('PublicShareDomainService (Unit Tests)', () => {
       });
 
       // Then: 중복 제거되어 한 번만 조회
-      expect(mockFileRepo.findByIds).toHaveBeenCalledWith(['same-file']);
+      expect(mockFileDomainService.아이디목록조회).toHaveBeenCalledWith(['same-file']);
       expect(result.items[0].fileName).toBe('공유문서.pdf');
       expect(result.items[1].fileName).toBe('공유문서.pdf');
     });
@@ -307,11 +304,11 @@ describe('PublicShareDomainService (Unit Tests)', () => {
         mimeType: 'application/pdf',
         folderId: 'folder-1',
         sizeBytes: 1024,
-        state: 'ACTIVE',
+        state: FileState.ACTIVE,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
-      mockFileRepo.findById!.mockResolvedValue(file);
+      mockFileDomainService.조회.mockResolvedValue(file);
 
       // When
       const result = await service.validateFileForShare('file-123');
@@ -324,7 +321,7 @@ describe('PublicShareDomainService (Unit Tests)', () => {
 
     it('존재하지 않는 파일은 유효하지 않다', async () => {
       // Given
-      mockFileRepo.findById!.mockResolvedValue(null);
+      mockFileDomainService.조회.mockResolvedValue(null);
 
       // When
       const result = await service.validateFileForShare('non-existent');
@@ -344,11 +341,11 @@ describe('PublicShareDomainService (Unit Tests)', () => {
         mimeType: 'application/pdf',
         folderId: 'folder-1',
         sizeBytes: 1024,
-        state: 'TRASHED',
+        state: FileState.TRASHED,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
-      mockFileRepo.findById!.mockResolvedValue(file);
+      mockFileDomainService.조회.mockResolvedValue(file);
 
       // When
       const result = await service.validateFileForShare('file-123');
@@ -367,11 +364,11 @@ describe('PublicShareDomainService (Unit Tests)', () => {
         mimeType: 'application/pdf',
         folderId: 'folder-1',
         sizeBytes: 1024,
-        state: 'DELETED',
+        state: FileState.DELETED,
         createdAt: new Date(),
         updatedAt: new Date(),
       });
-      mockFileRepo.findById!.mockResolvedValue(file);
+      mockFileDomainService.조회.mockResolvedValue(file);
 
       // When
       const result = await service.validateFileForShare('file-123');

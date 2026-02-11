@@ -24,13 +24,7 @@ jest.mock('uuid', () => ({
 }));
 
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  ForbiddenException,
-  NotFoundException,
-  UnauthorizedException,
-  GoneException,
-  HttpException,
-} from '@nestjs/common';
+import { BusinessException } from '../../common/exceptions';
 import { ExternalShareAccessService } from './external-share-access.service';
 import {
   PUBLIC_SHARE_REPOSITORY,
@@ -330,9 +324,9 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
     });
 
     /**
-     * 🎯 에러 시나리오: 본인 공유가 아니면 ForbiddenException
+     * 🎯 에러 시나리오: 본인 공유가 아니면 BusinessException (접근 거부)
      */
-    it('should throw ForbiddenException when not share recipient', async () => {
+    it('should throw BusinessException when not share recipient', async () => {
       const share = new PublicShare({
         id: 'share-123',
         fileId: 'file-456',
@@ -344,18 +338,18 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
       mockShareDomainService.findByIdWithFile.mockResolvedValue(share);
 
       await expect(service.getShareDetail('ext-user-123', 'share-123')).rejects.toThrow(
-        ForbiddenException,
+        BusinessException,
       );
     });
 
     /**
-     * 🎯 에러 시나리오: 존재하지 않으면 NotFoundException
+     * 🎯 에러 시나리오: 존재하지 않으면 BusinessException (공유 없음)
      */
-    it('should throw NotFoundException when share does not exist', async () => {
+    it('should throw BusinessException when share does not exist', async () => {
       mockShareDomainService.findByIdWithFile.mockResolvedValue(null);
 
       await expect(service.getShareDetail('ext-user-123', 'non-existent')).rejects.toThrow(
-        NotFoundException,
+        BusinessException,
       );
     });
   });
@@ -387,20 +381,23 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
     });
 
     /**
-     * 🎯 에러 시나리오: 존재하지 않는 토큰이면 UnauthorizedException
+     * 🎯 에러 시나리오: 존재하지 않는 토큰이면 BusinessException (토큰 무효)
      */
-    it('should throw UnauthorizedException when token not found', async () => {
+    it('should throw BusinessException when token not found', async () => {
       mockTokenStore.get.mockResolvedValue(null);
 
       await expect(service.validateAndConsumeToken('invalid-token')).rejects.toThrow(
-        '콘텐츠 토큰이 유효하지 않거나 만료되었습니다.',
+        BusinessException,
+      );
+      await expect(service.validateAndConsumeToken('invalid-token')).rejects.toThrow(
+        /콘텐츠 토큰이 유효하지 않거나 만료되었습니다/,
       );
     });
 
     /**
-     * 🎯 에러 시나리오: 이미 사용된 토큰이면 UnauthorizedException
+     * 🎯 에러 시나리오: 이미 사용된 토큰이면 BusinessException (토큰 이미 사용됨)
      */
-    it('should throw UnauthorizedException when token already used', async () => {
+    it('should throw BusinessException when token already used', async () => {
       mockTokenStore.get.mockResolvedValue(
         JSON.stringify({
           shareId: 'share-123',
@@ -410,7 +407,10 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
       );
 
       await expect(service.validateAndConsumeToken('used-token')).rejects.toThrow(
-        '이미 사용된 토큰입니다.',
+        BusinessException,
+      );
+      await expect(service.validateAndConsumeToken('used-token')).rejects.toThrow(
+        /이미 사용된 토큰입니다/,
       );
     });
   });
@@ -672,7 +672,7 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
       mockTokenStore.del.mockResolvedValue(undefined);
       mockLogRepo.save.mockImplementation(async (log) => log);
 
-      await expect(service.accessContent(accessParams)).rejects.toThrow(UnauthorizedException);
+      await expect(service.accessContent(accessParams)).rejects.toThrow(BusinessException);
     });
 
     /**
@@ -695,9 +695,7 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
       mockShareRepo.findById.mockResolvedValue(share);
       mockLogRepo.save.mockImplementation(async (log) => log);
 
-      await expect(service.accessContent(accessParams)).rejects.toThrow(
-        '관리자에 의해 차단된 공유입니다.',
-      );
+      await expect(service.accessContent(accessParams)).rejects.toThrow(BusinessException);
     });
 
     /**
@@ -720,7 +718,7 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
       mockShareRepo.findById.mockResolvedValue(share);
       mockLogRepo.save.mockImplementation(async (log) => log);
 
-      await expect(service.accessContent(accessParams)).rejects.toThrow('공유가 취소되었습니다.');
+      await expect(service.accessContent(accessParams)).rejects.toThrow(BusinessException);
     });
 
     /**
@@ -750,7 +748,7 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
       mockExternalUserService.조회.mockResolvedValue(user);
       mockLogRepo.save.mockImplementation(async (log) => log);
 
-      await expect(service.accessContent(accessParams)).rejects.toThrow('계정이 비활성화되었습니다.');
+      await expect(service.accessContent(accessParams)).rejects.toThrow(BusinessException);
     });
 
     /**
@@ -781,7 +779,7 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
       mockExternalUserService.조회.mockResolvedValue(user);
       mockLogRepo.save.mockImplementation(async (log) => log);
 
-      await expect(service.accessContent(accessParams)).rejects.toThrow(GoneException);
+      await expect(service.accessContent(accessParams)).rejects.toThrow(BusinessException);
     });
 
     /**
@@ -814,7 +812,7 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
       mockExternalUserService.조회.mockResolvedValue(user);
       mockLogRepo.save.mockImplementation(async (log) => log);
 
-      await expect(service.accessContent(accessParams)).rejects.toThrow(HttpException);
+      await expect(service.accessContent(accessParams)).rejects.toThrow(BusinessException);
     });
 
     /**
@@ -846,7 +844,7 @@ describe('ExternalShareAccessService (Unit Tests)', () => {
       mockLogRepo.save.mockImplementation(async (log) => log);
 
       const downloadParams = { ...accessParams, action: AccessAction.DOWNLOAD };
-      await expect(service.accessContent(downloadParams)).rejects.toThrow('다운로드 권한이 없습니다.');
+      await expect(service.accessContent(downloadParams)).rejects.toThrow(BusinessException);
     });
 
     /**

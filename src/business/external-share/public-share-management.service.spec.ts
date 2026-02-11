@@ -23,11 +23,7 @@ jest.mock('uuid', () => ({
 }));
 
 import { Test, TestingModule } from '@nestjs/testing';
-import {
-  ConflictException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { BusinessException, ErrorCodes } from '../../common/exceptions';
 import { PublicShareManagementService } from './public-share-management.service';
 import {
   PUBLIC_SHARE_REPOSITORY,
@@ -51,8 +47,8 @@ import { SharePermission } from '../../domain/external-share/type/public-share.t
 describe('PublicShareManagementService', () => {
   let service: PublicShareManagementService;
   let mockShareRepo: jest.Mocked<IPublicShareRepository>;
-  let mockExternalUserService: jest.Mocked<Partial<ExternalUserDomainService>>;
-  let mockFileRepo: jest.Mocked<Partial<IFileRepository>>;
+  let mockExternalUserService: { 조회: jest.Mock };
+  let mockFileRepo: { findById: jest.Mock; findByIds: jest.Mock };
 
   /**
    * 🎭 Mock 설정
@@ -78,12 +74,12 @@ describe('PublicShareManagementService', () => {
 
     mockExternalUserService = {
       조회: jest.fn(),
-    } as jest.Mocked<Partial<ExternalUserDomainService>>;
+    };
 
     mockFileRepo = {
       findById: jest.fn(),
       findByIds: jest.fn().mockResolvedValue([]),
-    } as jest.Mocked<Partial<IFileRepository>>;
+    };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -131,11 +127,11 @@ describe('PublicShareManagementService', () => {
       // ═══════════════════════════════════════════════════════
       // 📥 GIVEN (사전 조건 설정)
       // ═══════════════════════════════════════════════════════
-      mockFileRepo.findById!.mockResolvedValue({
+      mockFileRepo.findById.mockResolvedValue({
         id: 'file-123',
         state: FileState.ACTIVE,
       });
-      mockExternalUserService.조회!.mockResolvedValue(
+      mockExternalUserService.조회.mockResolvedValue(
         new ExternalUser({
           id: 'ext-user-456',
           username: 'partner',
@@ -154,7 +150,7 @@ describe('PublicShareManagementService', () => {
       // ═══════════════════════════════════════════════════════
       // ✅ THEN (결과 검증)
       // ═══════════════════════════════════════════════════════
-      expect(mockFileRepo.findById).toHaveBeenCalledWith('file-123');
+      expect(mockFileRepo.findById).toHaveBeenCalledWith('file-123', undefined);
       expect(mockExternalUserService.조회).toHaveBeenCalledWith('ext-user-456');
       expect(mockShareRepo.save).toHaveBeenCalled();
       expect(result.fileId).toBe('file-123');
@@ -165,40 +161,44 @@ describe('PublicShareManagementService', () => {
     });
 
     /**
-     * 🎯 검증 목적: 파일이 존재하지 않으면 NotFoundException
+     * 🎯 검증 목적: 파일이 존재하지 않으면 BusinessException (PUBLIC_SHARE_FILE_NOT_FOUND)
      */
-    it('should throw NotFoundException when file does not exist', async () => {
-      mockFileRepo.findById!.mockResolvedValue(null);
+    it('should throw BusinessException when file does not exist', async () => {
+      mockFileRepo.findById.mockResolvedValue(null);
 
       await expect(
         service.createPublicShare('owner-123', createShareDto),
-      ).rejects.toThrow(NotFoundException);
+      ).rejects.toMatchObject({
+        errorCode: ErrorCodes.PUBLIC_SHARE_FILE_NOT_FOUND.code,
+      });
     });
 
     /**
-     * 🎯 검증 목적: 외부 사용자가 존재하지 않으면 NotFoundException
+     * 🎯 검증 목적: 외부 사용자가 존재하지 않으면 BusinessException (PUBLIC_SHARE_TARGET_NOT_FOUND)
      */
-    it('should throw NotFoundException when external user does not exist', async () => {
-      mockFileRepo.findById!.mockResolvedValue({
+    it('should throw BusinessException when external user does not exist', async () => {
+      mockFileRepo.findById.mockResolvedValue({
         id: 'file-123',
         state: FileState.ACTIVE,
       });
-      mockExternalUserService.조회!.mockResolvedValue(null);
+      mockExternalUserService.조회.mockResolvedValue(null);
 
       await expect(
         service.createPublicShare('owner-123', createShareDto),
-      ).rejects.toThrow(NotFoundException);
+      ).rejects.toMatchObject({
+        errorCode: ErrorCodes.PUBLIC_SHARE_TARGET_NOT_FOUND.code,
+      });
     });
 
     /**
-     * 🎯 검증 목적: 중복 공유 시 ConflictException
+     * 🎯 검증 목적: 중복 공유 시 BusinessException (PUBLIC_SHARE_DUPLICATE)
      */
-    it('should throw ConflictException when share already exists', async () => {
-      mockFileRepo.findById!.mockResolvedValue({
+    it('should throw BusinessException when share already exists', async () => {
+      mockFileRepo.findById.mockResolvedValue({
         id: 'file-123',
         state: FileState.ACTIVE,
       });
-      mockExternalUserService.조회!.mockResolvedValue(
+      mockExternalUserService.조회.mockResolvedValue(
         new ExternalUser({ id: 'ext-user-456', isActive: true, createdBy: 'admin' }),
       );
       mockShareRepo.findByFileAndExternalUser.mockResolvedValue(
@@ -212,7 +212,9 @@ describe('PublicShareManagementService', () => {
 
       await expect(
         service.createPublicShare('owner-123', createShareDto),
-      ).rejects.toThrow(ConflictException);
+      ).rejects.toMatchObject({
+        errorCode: ErrorCodes.PUBLIC_SHARE_DUPLICATE.code,
+      });
     });
   });
 
@@ -241,9 +243,9 @@ describe('PublicShareManagementService', () => {
     });
 
     /**
-     * 🎯 검증 목적: 소유자가 아니면 ForbiddenException
+     * 🎯 검증 목적: 소유자가 아니면 BusinessException (PUBLIC_SHARE_NOT_OWNER)
      */
-    it('should throw ForbiddenException when user is not owner', async () => {
+    it('should throw BusinessException when user is not owner', async () => {
       const existingShare = new PublicShare({
         id: 'share-123',
         fileId: 'file-456',
@@ -254,18 +256,22 @@ describe('PublicShareManagementService', () => {
 
       await expect(
         service.revokeShare('owner-123', 'share-123'),
-      ).rejects.toThrow(ForbiddenException);
+      ).rejects.toMatchObject({
+        errorCode: ErrorCodes.PUBLIC_SHARE_NOT_OWNER.code,
+      });
     });
 
     /**
-     * 🎯 검증 목적: 존재하지 않으면 NotFoundException
+     * 🎯 검증 목적: 존재하지 않으면 BusinessException (PUBLIC_SHARE_NOT_FOUND)
      */
-    it('should throw NotFoundException when share does not exist', async () => {
+    it('should throw BusinessException when share does not exist', async () => {
       mockShareRepo.findById.mockResolvedValue(null);
 
       await expect(
         service.revokeShare('owner-123', 'non-existent'),
-      ).rejects.toThrow(NotFoundException);
+      ).rejects.toMatchObject({
+        errorCode: ErrorCodes.PUBLIC_SHARE_NOT_FOUND.code,
+      });
     });
   });
 
@@ -330,14 +336,14 @@ describe('PublicShareManagementService', () => {
     });
 
     /**
-     * 🎯 검증 목적: 존재하지 않으면 NotFoundException
+     * 🎯 검증 목적: 존재하지 않으면 BusinessException (PUBLIC_SHARE_NOT_FOUND)
      */
-    it('should throw NotFoundException when share does not exist', async () => {
+    it('should throw BusinessException when share does not exist', async () => {
       mockShareRepo.findById.mockResolvedValue(null);
 
-      await expect(service.blockShare('admin-123', 'non-existent')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.blockShare('admin-123', 'non-existent')).rejects.toMatchObject({
+        errorCode: ErrorCodes.PUBLIC_SHARE_NOT_FOUND.code,
+      });
     });
   });
 
@@ -414,6 +420,9 @@ describe('PublicShareManagementService', () => {
      * 🎯 검증 목적: 특정 외부 사용자의 모든 공유 일괄 차단
      */
     it('should block all shares of an external user', async () => {
+      mockExternalUserService.조회.mockResolvedValue(
+        new ExternalUser({ id: 'ext-user-456', isActive: true, createdBy: 'admin' }),
+      );
       mockShareRepo.blockAllByExternalUserId.mockResolvedValue(8);
 
       const result = await service.blockAllSharesByExternalUser(
@@ -479,14 +488,14 @@ describe('PublicShareManagementService', () => {
     });
 
     /**
-     * 🎯 검증 목적: 존재하지 않으면 NotFoundException
+     * 🎯 검증 목적: 존재하지 않으면 BusinessException (PUBLIC_SHARE_NOT_FOUND)
      */
-    it('should throw NotFoundException when share does not exist', async () => {
+    it('should throw BusinessException when share does not exist', async () => {
       mockShareRepo.findById.mockResolvedValue(null);
 
-      await expect(service.getPublicShareById('non-existent')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(service.getPublicShareById('non-existent')).rejects.toMatchObject({
+        errorCode: ErrorCodes.PUBLIC_SHARE_NOT_FOUND.code,
+      });
     });
   });
 
