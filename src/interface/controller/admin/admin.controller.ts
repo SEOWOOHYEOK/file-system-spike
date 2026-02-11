@@ -2,8 +2,12 @@
  * Admin 컨트롤러
  * 스토리지 헬스체크, 캐시 관리, 큐 상태 확인 API
  */
-import { Controller, Get, Post, Query } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiOkResponse, ApiQuery } from '@nestjs/swagger';
+import { Controller, Get, Post, Query, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiOkResponse, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
+import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
+import { PermissionEnum } from '../../../domain/role/permission.enum';
 import { AdminService, QueueStatusService } from '../../../business/admin';
 import {
   CacheHealthCheckResponseDto,
@@ -16,7 +20,10 @@ import {
 } from './dto';
 
 @ApiTags('899.관리자')
+@ApiBearerAuth()
 @Controller('v1/admin')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermissions(PermissionEnum.SYSTEM_MONITOR)
 export class AdminController {
   constructor(
     private readonly adminService: AdminService,
@@ -53,6 +60,7 @@ export class AdminController {
    * GET /v1/admin/storage/consistency - 스토리지 일관성 검증
    */
   @Get('storage/consistency')
+  @RequirePermissions(PermissionEnum.SYSTEM_CONFIG)
   @ApiOperation({
     summary: '스토리지 일관성 검증',
     description: 'DB와 실제 스토리지 간의 일관성을 확인합니다. DB에만 있거나, 크기가 다르거나, 고아 객체를 감지합니다.',
@@ -103,6 +111,7 @@ export class AdminController {
    * GET /v1/admin/queue/jobs - 큐 작업 목록 조회 (상태별 그룹화)
    */
   @Get('queue/jobs')
+  @RequirePermissions(PermissionEnum.SYNC_MANAGE)
   @ApiOperation({
     summary: '큐 작업 목록 조회',
     description:
@@ -152,6 +161,7 @@ export class AdminController {
    * POST /v1/admin/cache/evict - 수동 캐시 정리
    */
   @Post('cache/evict')
+  @RequirePermissions(PermissionEnum.SYSTEM_CONFIG)
   @ApiOperation({
     summary: '수동 캐시 정리',
     description:

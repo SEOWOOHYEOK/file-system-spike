@@ -71,6 +71,7 @@ export enum AuditAction {
   USER_ROLE_REMOVE = 'USER_ROLE_REMOVE', // 사용자 Role 제거
   USER_SYNC = 'USER_SYNC', // Employee → User 동기화
   TOKEN_GENERATE = 'TOKEN_GENERATE', // JWT 토큰 수동 생성
+  TOKEN_REFRESH = 'TOKEN_REFRESH', // 토큰 갱신 (리프레시 토큰 로테이션)
   ORG_MIGRATION = 'ORG_MIGRATION', // 조직 데이터 마이그레이션
 
   // === 보안 이벤트 (SecurityEvent 흡수) ===
@@ -135,6 +136,7 @@ export const AuditActionDescription: Record<AuditAction, string> = {
   [AuditAction.USER_ROLE_REMOVE]: '사용자 Role 제거',
   [AuditAction.USER_SYNC]: 'Employee → User 동기화',
   [AuditAction.TOKEN_GENERATE]: 'JWT 토큰 수동 생성',
+  [AuditAction.TOKEN_REFRESH]: '토큰 갱신',
   [AuditAction.ORG_MIGRATION]: '조직 데이터 마이그레이션',
   
   [AuditAction.LOGIN_SUCCESS]: '로그인 성공',
@@ -211,6 +213,7 @@ export const AuditActionCategory: Record<AuditAction, ActionCategory> = {
   [AuditAction.USER_ROLE_REMOVE]: ActionCategory.ADMIN,
   [AuditAction.USER_SYNC]: ActionCategory.ADMIN,
   [AuditAction.TOKEN_GENERATE]: ActionCategory.SECURITY,
+  [AuditAction.TOKEN_REFRESH]: ActionCategory.SECURITY,
   [AuditAction.ORG_MIGRATION]: ActionCategory.ADMIN,
   [AuditAction.LOGIN_SUCCESS]: ActionCategory.SECURITY,
   [AuditAction.LOGIN_FAILURE]: ActionCategory.SECURITY,

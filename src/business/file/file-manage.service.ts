@@ -151,7 +151,7 @@ export class FileManageService {
       await this.syncEventDomainService.저장(syncEvent);
 
       await queryRunner.commitTransaction();
-      this.logger.debug(`File renamed: ${fileId} -> ${finalName}`);
+      this.logger.debug(`파일 이름 변경됨: ${fileId} -> ${finalName}`);
 
       // 파일 이력 기록 (감사 로그)
       await this.fileHistoryService.logFileRenamed({
@@ -179,7 +179,7 @@ export class FileManageService {
         syncEvent.markQueued();
         await this.syncEventDomainService.저장(syncEvent);
 
-        this.logger.debug(`NAS_FILE_SYNC rename job added for file: ${fileId}`);
+        this.logger.debug(`NAS_FILE_SYNC rename 작업 등록됨: 파일 ${fileId}`);
       }
 
       return {
@@ -197,7 +197,7 @@ export class FileManageService {
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
-      this.logger.error(`Failed to rename file: ${fileId}`, error);
+      this.logger.error(`파일 이름 변경 실패: ${fileId}`, error);
       throw error;
     } finally {
       await queryRunner.release();
@@ -328,7 +328,7 @@ export class FileManageService {
       await this.syncEventDomainService.저장(syncEvent);
 
       await queryRunner.commitTransaction();
-      this.logger.debug(`File moved: ${fileId} -> folder ${targetFolderId}`);
+      this.logger.debug(`파일 이동됨: ${fileId} -> 폴더 ${targetFolderId}`);
 
       // 파일 이력 기록 (감사 로그)
       await this.fileHistoryService.logFileMoved({
@@ -360,7 +360,7 @@ export class FileManageService {
         syncEvent.markQueued();
         await this.syncEventDomainService.저장(syncEvent);
 
-        this.logger.debug(`NAS_FILE_SYNC move job added for file: ${fileId}`);
+        this.logger.debug(`NAS_FILE_SYNC move 작업 등록됨: 파일 ${fileId}`);
       }
 
       return {
@@ -379,7 +379,7 @@ export class FileManageService {
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
-      this.logger.error(`Failed to move file: ${fileId}`, error);
+      this.logger.error(`파일 이동 실패: ${fileId}`, error);
       throw error;
     } finally {
       await queryRunner.release();
@@ -495,7 +495,7 @@ export class FileManageService {
       await this.syncEventDomainService.저장(syncEvent);
 
       await queryRunner.commitTransaction();
-      this.logger.debug(`File deleted (moved to trash): ${fileId}`);
+      this.logger.debug(`파일 삭제됨 (휴지통 이동): ${fileId}`);
 
       // 파일 이력 기록 (감사 로그)
       await this.fileHistoryService.logFileTrashed({
@@ -523,7 +523,7 @@ export class FileManageService {
         syncEvent.markQueued();
         await this.syncEventDomainService.저장(syncEvent);
 
-        this.logger.debug(`NAS_FILE_SYNC trash job added for file: ${fileId}`);
+        this.logger.debug(`NAS_FILE_SYNC trash 작업 등록됨: 파일 ${fileId}`);
       }
 
       return {
@@ -539,7 +539,7 @@ export class FileManageService {
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
-      this.logger.error(`Failed to delete file: ${fileId}`, error);
+      this.logger.error(`파일 삭제 실패: ${fileId}`, error);
       throw error;
     } finally {
       await queryRunner.release();

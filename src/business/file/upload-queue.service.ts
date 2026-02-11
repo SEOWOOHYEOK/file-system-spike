@@ -311,7 +311,7 @@ export class UploadQueueService {
 
     if (expiredCount > 0 || promotedCount > 0) {
       this.logger.log(
-        `Queue maintenance: expired=${expiredCount}, promoted=${promotedCount}, waiting=${this.waitingOrder.length}`,
+        `대기열 유지 관리: 만료=${expiredCount}, 승격=${promotedCount}, 대기=${this.waitingOrder.length}`,
       );
     }
   }

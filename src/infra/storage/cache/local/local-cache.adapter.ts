@@ -32,7 +32,7 @@ export class LocalCacheAdapter implements ICacheStoragePort {
       ? configuredPath
       : path.join(process.cwd(), configuredPath);
 
-    this.logger.log(`LocalCacheAdapter initialized with basePath: ${this.basePath}`);
+    this.logger.log(`LocalCacheAdapter 초기화됨 - basePath: ${this.basePath}`);
   }
 
   /**
@@ -58,7 +58,7 @@ export class LocalCacheAdapter implements ICacheStoragePort {
       const filePath = this.getFullPath(objectKey);
       await this.ensureDirectory(filePath);
       await fs.writeFile(filePath, data);
-      this.logger.debug(`File written: ${objectKey}`);
+      this.logger.debug(`파일 저장 완료: ${objectKey}`);
     } finally {
       release();
     }
@@ -76,7 +76,7 @@ export class LocalCacheAdapter implements ICacheStoragePort {
         highWaterMark: 4 * 1024 * 1024,
       });
       await pipeline(stream, writeStream);
-      this.logger.debug(`File written (stream): ${objectKey}`);
+      this.logger.debug(`파일 저장 완료 (스트림): ${objectKey}`);
     } finally {
       release();
     }
@@ -134,12 +134,12 @@ export class LocalCacheAdapter implements ICacheStoragePort {
     try {
       const filePath = this.getFullPath(objectKey);
       await fs.unlink(filePath);
-      this.logger.debug(`File deleted: ${objectKey}`);
+      this.logger.debug(`파일 삭제 완료: ${objectKey}`);
     } catch (error: any) {
       if (error.code !== 'ENOENT') {
         throw error;
       }
-      this.logger.warn(`File not found for deletion: ${objectKey}`);
+      this.logger.warn(`삭제 대상 파일 없음: ${objectKey}`);
     } finally {
       release();
     }
@@ -166,7 +166,7 @@ export class LocalCacheAdapter implements ICacheStoragePort {
 
       await this.ensureDirectory(newPath);
       await fs.rename(oldPath, newPath);
-      this.logger.debug(`File moved: ${oldKey} -> ${newKey}`);
+      this.logger.debug(`파일 이동 완료: ${oldKey} -> ${newKey}`);
     } finally {
       release();
     }
@@ -183,7 +183,7 @@ export class LocalCacheAdapter implements ICacheStoragePort {
     const dirPath = this.getFullPath(dirKey);
     try {
       await fs.rm(dirPath, { recursive: true, force: true });
-      this.logger.debug(`Directory deleted: ${dirKey}`);
+      this.logger.debug(`디렉토리 삭제 완료: ${dirKey}`);
     } catch (error: any) {
       if (error.code !== 'ENOENT') {
         throw error;

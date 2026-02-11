@@ -12,6 +12,9 @@ export enum RoleNameEnum {
 
   /** 사용자 - 기본 권한 */
   USER = 'USER',
+
+  /** 게스트 - 외부 공유 접근만 가능 */
+  GUEST = 'GUEST',
 }
 
 /**
@@ -21,4 +24,5 @@ export const RoleDescriptions: Record<RoleNameEnum, string> = {
   [RoleNameEnum.ADMIN]: '관리자',
   [RoleNameEnum.MANAGER]: '매니저',
   [RoleNameEnum.USER]: '사용자',
+  [RoleNameEnum.GUEST]: '게스트',
 };

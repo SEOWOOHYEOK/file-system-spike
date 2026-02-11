@@ -15,7 +15,7 @@ import { LoginRequestDto, LoginResponseDto } from './dto/login.dto';
 import { LogoutResponseDto } from './dto/logout.dto';
 import { RefreshTokenRequestDto, RefreshTokenResponseDto } from './dto/refresh-token.dto';
 import { MigrateOrganizationRequestDto, MigrateOrganizationResponseDto } from './dto/migrate-organization.dto';
-import { AuditAction } from '../../../common/decorators/audit-action.decorator';
+import { AuditAction, AuthEventActor } from '../../../common/decorators/audit-action.decorator';
 import { User } from '../../../common/decorators/user.decorator';
 import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
 import { TargetType, UserType } from '../../../domain/audit/enums/common.enum';
@@ -73,6 +73,14 @@ export class AuthController {
     @AuditAction({
         action: AuditActionEnum.LOGIN_SUCCESS,
         targetType: TargetType.USER,
+        authEvent: true,
+        extractActorFromResponse: (res): AuthEventActor => ({
+            userId: res.user.id,
+            userName: res.user.name,
+            userEmail: res.user.email,
+            userType: res.userType === 'external' ? UserType.EXTERNAL : UserType.INTERNAL,
+        }),
+        extractTargetIdFromResponse: (res) => res.user.id,
     })
     @ApiOperation({
         summary: 'SSO 로그인-DMS-API JWT 토큰 발급',
@@ -142,6 +150,7 @@ export class AuthController {
     @AuditAction({
         action: AuditActionEnum.LOGOUT,
         targetType: TargetType.USER,
+        authEvent: true,
     })
     @ApiOperation({
         summary: '로그아웃',
@@ -192,6 +201,14 @@ export class AuthController {
      * 토큰 로테이션: 기존 리프레시 토큰은 사용됨(used) 처리되고 새 리프레시 토큰이 발급됩니다.
      */
     @Post('refresh-token')
+    @UseGuards(UnifiedJwtAuthGuard)
+    @ApiBearerAuth()
+    @AuditAction({
+        action: AuditActionEnum.TOKEN_REFRESH,
+        targetType: TargetType.USER,
+        authEvent: true,
+        // Guard가 있어 snapshot에 userId가 세팅됨 → extractActorFromResponse 불필요
+    })
     @ApiOperation({
         summary: 'DMS 토큰 갱신',
         description: 'DMS 리프레시 토큰을 사용하여 새로운 액세스 토큰과 리프레시 토큰을 발급받습니다. 토큰 로테이션이 적용됩니다.',
@@ -219,7 +236,7 @@ export class AuthController {
         targetType: TargetType.SYSTEM,
     })
     @ApiOperation({
-        summary: 'JWT 토큰 생성',
+        summary: 'DMS-API JWT 토큰 생성- 테스트용',
         description: '만료시간 2개월로 유효한 JWT 토큰을 생성합니다.',
     })
     async generateToken(@Body() dto: GenerateTokenRequestDto): Promise<GenerateTokenResponseDto> {
@@ -269,7 +286,7 @@ export class AuthController {
      */
     @Post('verify-token')
     @ApiOperation({
-        summary: 'DMS-API JWT 토큰 검증',
+        summary: 'DMS-API JWT 토큰 검증- 테스트용',
         description: 'DMS-API JWT 토큰의 유효성을 검증하고 payload를 반환합니다.',
     })
     async verifyToken(@Body() dto: VerifyTokenRequestDto): Promise<VerifyTokenResponseDto> {

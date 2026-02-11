@@ -57,7 +57,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
       // Log for debugging
       this.logger.warn(
-        `Legacy HttpException: ${exception.message}`,
+        `기존 HttpException: ${exception.message}`,
         exception.stack,
         'GlobalExceptionFilter',
       );
@@ -84,7 +84,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
       // Log full error for operators
       this.logger.error(
-        `Unhandled exception: errorCode=${errorCode}`,
+        `처리되지 않은 예외: errorCode=${errorCode}`,
         exception instanceof Error ? exception.stack : String(exception),
         'GlobalExceptionFilter',
       );

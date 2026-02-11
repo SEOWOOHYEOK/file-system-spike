@@ -82,10 +82,10 @@ export abstract class BufferedWriter<T> implements OnModuleDestroy {
 
     try {
       await this.persistBatch(itemsToSave);
-      this.logger.debug(`Flushed ${itemsToSave.length} ${this.entityName}`);
+      this.logger.debug(`로그 반영 완료 ${itemsToSave.length} ${this.entityName}`);
     } catch (error) {
       this.logger.error(
-        `Failed to flush ${itemsToSave.length} ${this.entityName}`,
+        `로그 반영 실패 ${itemsToSave.length} ${this.entityName}`,
         error,
       );
       // 실패한 항목을 다시 버퍼에 추가 (재시도)

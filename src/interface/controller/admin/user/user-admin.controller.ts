@@ -27,15 +27,22 @@ import {
   ApiRemoveRole,
   ApiSyncUsers,
 } from './user-admin.swagger';
+import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../../../business/role/guards/permissions.guard';
+import { RequirePermissions } from '../../../../business/role/decorators/require-permissions.decorator';
+import { PermissionEnum } from '../../../../domain/role/permission.enum';
 
 /**
  * User 관리 Admin API 컨트롤러
  *
  * 관리자 전용: User 목록 조회, Role 부여/제거, Employee 동기화
+ * ADMIN 권한이 있는 내부 사용자만 접근 가능
  */
 @ApiTags('810.관리자 - 사용자 역할 부여 관리')
 @ApiBearerAuth()
 @Controller('v1/admin/users')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermissions(PermissionEnum.USER_READ)
 export class UserAdminController {
   constructor(
     private readonly userService: UserService,
@@ -84,6 +91,7 @@ export class UserAdminController {
    * PATCH /admin/users/:id/role
    */
   @Patch(':id/role')
+  @RequirePermissions(PermissionEnum.USER_WRITE)
   @AuditAction({
     action: AuditActionEnum.USER_ROLE_ASSIGN,
     targetType: TargetType.USER,
@@ -102,6 +110,7 @@ export class UserAdminController {
    * DELETE /admin/users/:id/role
    */
   @Delete(':id/role')
+  @RequirePermissions(PermissionEnum.USER_WRITE)
   @AuditAction({
     action: AuditActionEnum.USER_ROLE_REMOVE,
     targetType: TargetType.USER,
@@ -119,6 +128,7 @@ export class UserAdminController {
    * Admin 권한 필요
    */
   @Post('sync')
+  @RequirePermissions(PermissionEnum.USER_WRITE)
   @AuditAction({
     action: AuditActionEnum.USER_SYNC,
     targetType: TargetType.SYSTEM,

@@ -113,7 +113,7 @@ export class RefreshTokenService {
       expiresAt,
     });
 
-    this.logger.log(`Refresh token created: userId=${userId}, familyId=${familyId}`);
+    this.logger.log(`리프레시 토큰 생성됨: userId=${userId}, familyId=${familyId}`);
     return { refreshToken, familyId };
   }
 
@@ -145,7 +145,7 @@ export class RefreshTokenService {
     // 2. 이미 사용된 토큰 → 탈취 감지
     if (existing.isUsed) {
       this.logger.warn(
-        `Token reuse detected! familyId=${existing.familyId}, userId=${existing.userId}`,
+        `토큰 재사용 감지: familyId=${existing.familyId}, userId=${existing.userId}`,
       );
       await this.revokeFamily(existing.familyId);
       throw new UnauthorizedException({
@@ -196,7 +196,7 @@ export class RefreshTokenService {
     );
 
     this.logger.log(
-      `Refresh token rotated: userId=${existing.userId}, familyId=${existing.familyId}`,
+      `리프레시 토큰 로테이션 완료: userId=${existing.userId}, familyId=${existing.familyId}`,
     );
 
     return { accessToken, refreshToken: newRefreshToken, expiresIn };
@@ -207,7 +207,7 @@ export class RefreshTokenService {
    */
   async revokeFamily(familyId: string): Promise<void> {
     await this.repo.update({ familyId }, { isRevoked: true });
-    this.logger.warn(`Token family revoked: familyId=${familyId}`);
+    this.logger.warn(`토큰 패밀리 무효화: familyId=${familyId}`);
   }
 
   /**
@@ -218,7 +218,7 @@ export class RefreshTokenService {
       { userId, isRevoked: false },
       { isRevoked: true },
     );
-    this.logger.log(`All refresh tokens revoked: userId=${userId}`);
+    this.logger.log(`모든 리프레시 토큰 무효화: userId=${userId}`);
   }
 
   /**
@@ -234,7 +234,7 @@ export class RefreshTokenService {
       .execute();
 
     if (result.affected && result.affected > 0) {
-      this.logger.debug(`Cleaned up ${result.affected} expired refresh tokens`);
+      this.logger.debug(`만료된 리프레시 토큰 ${result.affected}개 정리 완료`);
     }
   }
 }

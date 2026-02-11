@@ -8,8 +8,12 @@
  * - GET  /v1/admin/observability/settings   - Observability 설정 조회
  * - PUT  /v1/admin/observability/settings   - Observability 설정 변경
  */
-import { Controller, Get, Put, Query, Body } from '@nestjs/common';
-import { ApiTags } from '@nestjs/swagger';
+import { Controller, Get, Put, Query, Body, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
+import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../../../business/role/guards/permissions.guard';
+import { RequirePermissions } from '../../../../business/role/decorators/require-permissions.decorator';
+import { PermissionEnum } from '../../../../domain/role/permission.enum';
 import { ObservabilityService } from '../../../../business/admin/observability.service';
 import {
   ObservabilityCurrentDto,
@@ -26,7 +30,10 @@ import {
 } from './observability.swagger';
 
 @ApiTags('803.관리자 - NAS 서버 모니터링 관리')
+@ApiBearerAuth()
 @Controller('v1/admin/observability')
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermissions(PermissionEnum.SYSTEM_MONITOR)
 export class ObservabilityController {
   constructor(
     private readonly observabilityService: ObservabilityService,
@@ -59,6 +66,7 @@ export class ObservabilityController {
    * Observability 설정 조회
    */
   @Get('settings')
+  @RequirePermissions(PermissionEnum.SYSTEM_CONFIG)
   @ApiObservabilitySettingsGet()
   async getSettings(): Promise<ObservabilitySettingsResponseDto> {
     return this.observabilityService.getSettings();
@@ -69,6 +77,7 @@ export class ObservabilityController {
    * Observability 설정 변경
    */
   @Put('settings')
+  @RequirePermissions(PermissionEnum.SYSTEM_CONFIG)
   @ApiObservabilitySettingsUpdate()
   async updateSettings(
     @Body() dto: UpdateObservabilitySettingsDto,

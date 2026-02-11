@@ -50,12 +50,16 @@ import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audi
 import { TargetType } from '../../../domain/audit/enums/common.enum';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { NasAvailabilityGuard } from '../../../common/guards/nas-availability.guard';
+import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
+import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
+import { PermissionEnum } from '../../../domain/role/permission.enum';
 /**
  * 폴더 컨트롤러
  * 폴더 생성, 조회, 관리 API
  */
 @ApiTags('210.폴더')
-@UseGuards(JwtAuthGuard, NasAvailabilityGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, NasAvailabilityGuard)
+@RequirePermissions(PermissionEnum.FOLDER_READ)
 @Controller('v1/folders')
 export class FolderController {
   private readonly logger = new Logger(FolderController.name);
@@ -70,6 +74,7 @@ export class FolderController {
    * POST /folders - 폴더 생성
    */
   @Post()
+  @RequirePermissions(PermissionEnum.FOLDER_WRITE)
   @ApiFolderCreate()
   @HttpCode(HttpStatus.CREATED)
   @AuditAction({
@@ -179,6 +184,7 @@ export class FolderController {
    * PUT /folders/:folderId/rename - 폴더명 변경
    */
   @Put(':folderId/rename')
+  @RequirePermissions(PermissionEnum.FOLDER_WRITE)
   @ApiFolderRename()
   @AuditAction({
     action: AuditActionEnum.FOLDER_RENAME,
@@ -200,6 +206,7 @@ export class FolderController {
    * POST /folders/:folderId/move - 폴더 이동
    */
   @Post(':folderId/move')
+  @RequirePermissions(PermissionEnum.FOLDER_WRITE)
   @ApiFolderMove()
   @AuditAction({
     action: AuditActionEnum.FOLDER_MOVE,
@@ -220,6 +227,7 @@ export class FolderController {
    * DELETE /folders/:folderId - 폴더 삭제 (휴지통 이동)
    */
   @Delete(':folderId')
+  @RequirePermissions(PermissionEnum.FOLDER_DELETE)
   @ApiFolderDelete()
   @AuditAction({
     action: AuditActionEnum.FOLDER_DELETE,

@@ -76,7 +76,7 @@ export class MultipartOrphanCleanupScheduler {
   async runCleanup(): Promise<CleanupResult> {
     // 중복 실행 방지
     if (this.isRunning) {
-      this.logger.warn('Cleanup already in progress, skipping...');
+      this.logger.warn('멀티파트 고아 파일 정리 이미 진행 중, 건너뜁니다...');
       return { cleanedSessions: 0, cleanedParts: 0, freedBytes: 0, errorCount: 0 };
     }
 
@@ -91,7 +91,7 @@ export class MultipartOrphanCleanupScheduler {
     };
 
     try {
-      this.logger.log('Starting multipart orphan cleanup...');
+      this.logger.log('멀티파트 고아 파일 정리 시작...');
 
       // 1. 만료된 세션 정리
       const expiredResult = await this.cleanupExpiredSessions();
@@ -109,7 +109,7 @@ export class MultipartOrphanCleanupScheduler {
 
       const duration = Date.now() - startTime;
       this.logger.log(
-        `Cleanup completed in ${duration}ms: ` +
+        `멀티파트 고아 파일 정리 완료 ${duration}ms: ` +
         `sessions=${result.cleanedSessions}, parts=${result.cleanedParts}, ` +
         `freed=${this.formatBytes(result.freedBytes)}, errors=${result.errorCount}`,
       );
@@ -125,7 +125,7 @@ export class MultipartOrphanCleanupScheduler {
 
       return result;
     } catch (error) {
-      this.logger.error('Cleanup failed', error);
+      this.logger.error('정리 실패', error);
       result.errorCount++;
       return result;
     } finally {
@@ -152,7 +152,7 @@ export class MultipartOrphanCleanupScheduler {
         return result;
       }
 
-      this.logger.log(`Found ${expiredSessions.length} expired sessions to cleanup`);
+      this.logger.log(`만료된 세션 ${expiredSessions.length}개 정리 대상`);
 
       for (const session of expiredSessions) {
         try {
@@ -166,15 +166,15 @@ export class MultipartOrphanCleanupScheduler {
           await this.uploadSessionDomainService.세션삭제(session.id);
 
           result.cleanedSessions++;
-          this.logger.debug(`Cleaned up expired session: ${session.id}`);
+          this.logger.debug(`만료된 세션 정리 완료: ${session.id}`);
         } catch (error) {
           result.errorCount++;
-          this.logger.error(`Failed to cleanup expired session ${session.id}:`, error);
+          this.logger.error(`만료된 세션 정리 실패: ${session.id}`, error);
         }
       }
     } catch (error) {
       result.errorCount++;
-      this.logger.error('Failed to query expired sessions:', error);
+      this.logger.error('만료된 세션 조회 실패:', error);
     }
 
     return result;
@@ -218,7 +218,7 @@ export class MultipartOrphanCleanupScheduler {
         return result;
       }
 
-      this.logger.log(`Found ${abortedSessions.length} aborted/expired sessions to cleanup`);
+      this.logger.log(`취소/만료된 세션 ${abortedSessions.length}개 정리 대상`);
 
       for (const session of abortedSessions) {
         try {
@@ -232,15 +232,15 @@ export class MultipartOrphanCleanupScheduler {
           await this.uploadSessionDomainService.세션삭제(session.id);
 
           result.cleanedSessions++;
-          this.logger.debug(`Cleaned up aborted session: ${session.id}`);
+          this.logger.debug(`취소된 세션 정리 완료: ${session.id}`);
         } catch (error) {
           result.errorCount++;
-          this.logger.error(`Failed to cleanup aborted session ${session.id}:`, error);
+          this.logger.error(`취소된 세션 정리 실패: ${session.id}`, error);
         }
       }
     } catch (error) {
       result.errorCount++;
-      this.logger.error('Failed to query aborted sessions:', error);
+      this.logger.error('취소된 세션 조회 실패:', error);
     }
 
     return result;
@@ -281,7 +281,7 @@ export class MultipartOrphanCleanupScheduler {
           freedBytes += fileSize;
         } catch (error) {
           errorCount++;
-          this.logger.warn(`Failed to delete part file: ${part.objectKey}`, error);
+          this.logger.warn(`파트 파일 삭제 실패: ${part.objectKey}`, error);
         }
       }
 
@@ -293,7 +293,7 @@ export class MultipartOrphanCleanupScheduler {
       }
     } catch (error) {
       errorCount++;
-      this.logger.error(`Failed to query parts for session ${sessionId}:`, error);
+      this.logger.error(`파트 파일 조회 실패: ${sessionId}`, error);
     }
 
     return { cleanedParts, freedBytes, errorCount };

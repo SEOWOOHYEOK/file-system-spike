@@ -46,7 +46,7 @@ export class NfsNasAdapter implements INasStoragePort {
     private readonly clientProvider: NasClientProvider,
     private readonly lockManager: FileLockManager,
   ) {
-    this.logger.log(`NfsNasAdapter initialized with basePath: ${this.clientProvider.getRootPath()}`);
+    this.logger.log(`NfsNasAdapter 초기화됨 - basePath: ${this.clientProvider.getRootPath()}`);
   }
 
   // ============================================
@@ -315,13 +315,13 @@ export class NfsNasAdapter implements INasStoragePort {
 
       try {
         await fs.rename(oldPath, newPath);
-        this.logger.log(`📁 Moved: ${oldKey} → ${newKey}`);
+        this.logger.log(`📁 파일 이동 완료: ${oldKey} → ${newKey}`);
       } catch (error: any) {
         if (error.code === 'EXDEV') {
           // 다른 드라이브 간 이동
           await fs.copyFile(oldPath, newPath);
           await fs.unlink(oldPath);
-          this.logger.log(`📁 Moved (cross-device): ${oldKey} → ${newKey}`);
+          this.logger.log(`📁 파일 이동 완료 (크로스 디바이스): ${oldKey} → ${newKey}`);
         } else {
           throw new InternalServerErrorException(`이동 실패`, { cause: error });
         }
@@ -426,13 +426,13 @@ export class NfsNasAdapter implements INasStoragePort {
 
     try {
       await fs.rename(oldFullPath, newFullPath);
-      this.logger.log(`📁 Moved directory: ${oldPath} → ${newPath}`);
+      this.logger.log(`📁 디렉토리 이동 완료: ${oldPath} → ${newPath}`);
     } catch (error: any) {
       if (error.code === 'EXDEV') {
         // 다른 드라이브 간 이동
         await this.copyDirectoryRecursive(oldFullPath, newFullPath);
         await fs.rm(oldFullPath, { recursive: true, force: true });
-        this.logger.log(`📁 Moved directory (cross-device): ${oldPath} → ${newPath}`);
+        this.logger.log(`📁 디렉토리 이동 완료 (크로스 디바이스): ${oldPath} → ${newPath}`);
       } else {
         throw new InternalServerErrorException(`이동 실패`, { cause: error });
       }
@@ -721,7 +721,7 @@ export class NfsNasAdapter implements INasStoragePort {
       }
 
       await fs.rename(sourceFullPath, destFullPath);
-      this.logger.log(`✏️ Renamed: ${key} → ${newKey}`);
+      this.logger.log(`✏️ 이름 변경 완료: ${key} → ${newKey}`);
       return newKey;
     } catch (error: any) {
       if (error instanceof NotFoundException || error instanceof InternalServerErrorException) throw error;

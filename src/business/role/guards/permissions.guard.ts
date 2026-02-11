@@ -2,6 +2,7 @@ import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { PERMISSIONS_KEY } from '../decorators/require-permissions.decorator';
 import { PermissionEnum } from '../../../domain/role/permission.enum';
+import { RoleNameEnum } from '../../../domain/role/role-name.enum';
 import { UserService } from '../../user/user.service';
 
 /**
@@ -10,6 +11,7 @@ import { UserService } from '../../user/user.service';
  * User 테이블 기반으로 권한 검사 수행
  * - User.isActive가 false면 차단
  * - User.roleId가 null이면 차단
+ * - ADMIN 역할이면 모든 권한 자동 통과
  * - Role의 permissions에 필요 권한이 없으면 차단
  */
 @Injectable()
@@ -20,10 +22,12 @@ export class PermissionsGuard implements CanActivate {
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
+    
     const requiredPermissions = this.reflector.getAllAndOverride<PermissionEnum[]>(PERMISSIONS_KEY, [
       context.getHandler(),
       context.getClass(),
     ]);
+    
     if (!requiredPermissions) return true;
 
     const { user } = context.switchToHttp().getRequest();
@@ -38,6 +42,9 @@ export class PermissionsGuard implements CanActivate {
 
       // Role 없는 User 차단
       if (!foundUser.roleId || !role) return false;
+
+      // ADMIN 역할은 모든 권한 자동 통과
+      if (role.name === RoleNameEnum.ADMIN) return true;
 
       // Permission 추출
       const userPermissions = role.permissions.map((p) => p.code as PermissionEnum);

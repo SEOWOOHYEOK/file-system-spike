@@ -41,7 +41,7 @@ export class SeaweedFSCacheAdapter implements ICacheStoragePort {
   constructor(private readonly configService: ConfigService) {
     this.masterUrl = this.configService.get<string>('SEAWEEDFS_MASTER_URL', 'http://localhost:9333');
     this.filerUrl = this.configService.get<string>('SEAWEEDFS_FILER_URL', 'http://localhost:8888');
-    this.logger.log(`SeaweedFSCacheAdapter initialized - Master: ${this.masterUrl}, Filer: ${this.filerUrl}`);
+    this.logger.log(`SeaweedFSCacheAdapter 초기화됨 - Master: ${this.masterUrl}, Filer: ${this.filerUrl}`);
   }
 
   /**
@@ -66,7 +66,7 @@ export class SeaweedFSCacheAdapter implements ICacheStoragePort {
       throw new Error(`SeaweedFS write failed: ${response.status} ${response.statusText}`);
     }
 
-    this.logger.debug(`File written to SeaweedFS: ${objectKey}`);
+    this.logger.debug(`SeaweedFS에 파일 저장 완료: ${objectKey}`);
   }
 
   async 파일스트림쓰기(objectKey: string, stream: Readable): Promise<void> {
@@ -154,7 +154,7 @@ export class SeaweedFSCacheAdapter implements ICacheStoragePort {
       throw new Error(`SeaweedFS delete failed: ${response.status} ${response.statusText}`);
     }
 
-    this.logger.debug(`File deleted from SeaweedFS: ${objectKey}`);
+    this.logger.debug(`SeaweedFS에서 파일 삭제 완료: ${objectKey}`);
   }
 
   async 파일존재확인(objectKey: string): Promise<boolean> {
@@ -176,7 +176,7 @@ export class SeaweedFSCacheAdapter implements ICacheStoragePort {
     await this.파일쓰기(newKey, data);
     await this.파일삭제(oldKey);
 
-    this.logger.debug(`File moved in SeaweedFS: ${oldKey} -> ${newKey}`);
+    this.logger.debug(`SeaweedFS에서 파일 이동 완료: ${oldKey} -> ${newKey}`);
   }
 
   async 파일크기조회(objectKey: string): Promise<number> {
@@ -206,6 +206,6 @@ export class SeaweedFSCacheAdapter implements ICacheStoragePort {
       throw new Error(`SeaweedFS directory delete failed: ${response.status} ${response.statusText}`);
     }
 
-    this.logger.debug(`Directory deleted in SeaweedFS: ${dirKey}`);
+    this.logger.debug(`SeaweedFS에서 디렉토리 삭제 완료: ${dirKey}`);
   }
 }

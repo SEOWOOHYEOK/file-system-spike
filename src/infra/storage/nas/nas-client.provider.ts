@@ -137,7 +137,7 @@ export class NasClientProvider implements OnModuleInit {
 
     // 첫 호출 시 또는 디버그 레벨에서 경로 확인 로그
     // (너무 잦은 로그를 방지하기 위해 debug 레벨 사용)
-    this.logger.debug(`Path resolved: ${relativePath} -> ${fullPath}`);
+    this.logger.debug(`경로 해석됨: ${relativePath} -> ${fullPath}`);
 
     return fullPath;
   }

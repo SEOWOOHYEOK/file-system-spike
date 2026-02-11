@@ -153,10 +153,10 @@ export class FileDownloadService {
     if (nasObject && nasObject.isSyncing()) {
       const completingSession = await this.findCompletingSession(fileId);
       if (completingSession) {
-        this.logger.log(`Serving download from multipart parts: ${fileId}`);
+        this.logger.log(`멀티파트 파트 조립 다운로드 시작: ${fileId}`);
         return this.downloadFromParts(file, nasObject, completingSession.id);
       }
-      this.logger.warn(`File is syncing to NAS: ${fileId}`);
+      this.logger.warn(`파일 NAS에 동기화 중: ${fileId}`);
       throw new ConflictException({
         code: 'FILE_SYNCING',
         message: '파일이 NAS에 동기화 중입니다. 잠시 후 다시 시도해주세요.',
@@ -171,7 +171,7 @@ export class FileDownloadService {
 
     // 케이스 1: DB 상태 AVAILABLE인데 실제 파일 없음 → 상태 보정 후 NAS 폴백
     if (cacheObject && cacheObject.isAvailable() && !cacheFileExists) {
-      this.logger.warn(`Cache inconsistency: DB=AVAILABLE, file missing: ${fileId}`);
+      this.logger.warn(`캐시 일관성 불일치: DB=AVAILABLE, 파일 없음: ${fileId}`);
       cacheObject.updateStatus(AvailabilityStatus.MISSING);
       await this.fileCacheStorageDomainService.저장(cacheObject);
       // cacheObject를 null로 처리하여 아래 NAS 폴백 로직으로 진행
@@ -180,7 +180,7 @@ export class FileDownloadService {
 
     // 케이스 2: DB에 없거나 MISSING인데 실제 파일 있음 → 상태 복원
     if ((!cacheObject || !cacheObject.isAvailable()) && cacheFileExists) {
-      this.logger.log(`Cache inconsistency: DB=MISSING/NULL, file exists: ${fileId}`);
+      this.logger.log(`캐시 일관성 불일치: DB=MISSING/NULL, 파일 있음: ${fileId}`);
       if (cacheObject) {
         // 기존 캐시 객체가 있으면 상태만 복원
         cacheObject.updateStatus(AvailabilityStatus.AVAILABLE);
@@ -193,7 +193,7 @@ export class FileDownloadService {
           fileId: file.id,
           objectKey: file.id,
         });
-        this.logger.debug(`Created new cache object for existing file: ${fileId}`);
+        this.logger.debug(`기존 파일에 대한 새로운 캐시 객체 생성: ${fileId}`);
       }
     }
 
@@ -210,7 +210,7 @@ export class FileDownloadService {
     // 3-C. NAS 객체가 있지만 AVAILABLE이 아닌 경우 (ERROR, MISSING, EVICTING 등)
     if (nasObject && !nasObject.isAvailable()) {
       this.logger.error(
-        `NAS storage not available for file: ${fileId}, status: ${nasObject.availabilityStatus}`,
+        `NAS 스토리지 사용 불가: ${fileId}, 상태: ${nasObject.availabilityStatus}`,
       );
       // TODO: admin alert 전송
       throw new InternalServerErrorException({
@@ -220,7 +220,7 @@ export class FileDownloadService {
     }
 
     // 3-D. 둘 다 없음 (캐시 없음 + NAS 없음)
-    this.logger.error(`No storage found for file: ${fileId}`);
+    this.logger.error(`파일 스토리지 없음: ${fileId}`);
     // TODO: admin alert 전송
     throw new InternalServerErrorException({
       code: 'FILE_NOT_FOUND_IN_STORAGE',
@@ -248,7 +248,7 @@ export class FileDownloadService {
     cacheObject.acquireLease();
     await this.fileCacheStorageDomainService.저장(cacheObject);
 
-    this.logger.debug(`Cache hit for file: ${file.id}, objectKey: ${cacheObject.objectKey}`);
+    this.logger.debug(`캐시 히트: ${file.id}, objectKey: ${cacheObject.objectKey}`);
 
     try {
       // 2. 캐시 스토리지에서 스트림 획득
@@ -264,7 +264,7 @@ export class FileDownloadService {
       cacheObject.releaseLease();
       await this.fileCacheStorageDomainService.저장(cacheObject);
 
-      this.logger.error(`Failed to read from cache: ${file.id}`, error);
+      this.logger.error(`캐시에서 파일을 읽는 데 실패: ${file.id}`, error);
       throw new InternalServerErrorException({
         code: 'CACHE_READ_FAILED',
         message: '캐시에서 파일을 읽는 데 실패했습니다.',
@@ -293,7 +293,7 @@ export class FileDownloadService {
     nasObject.acquireLease();
     await this.fileNasStorageDomainService.저장(nasObject);
 
-    this.logger.debug(`Cache miss, downloading from NAS for file: ${file.id}, objectKey: ${nasObject.objectKey}`);
+    this.logger.debug(`캐시 미스, NAS에서 파일 다운로드 시작: ${file.id}, objectKey: ${nasObject.objectKey}`);
 
     try {
       // 2. NAS 스토리지에서 스트림 획득
@@ -310,7 +310,7 @@ export class FileDownloadService {
         }, {
           jobId: `cache-restore:${file.id}`,
         });
-        this.logger.debug(`Cache restore job registered for file: ${file.id}`);
+        this.logger.debug(`캐시 복원 작업 등록: ${file.id}`);
       }
 
       return {
@@ -323,7 +323,7 @@ export class FileDownloadService {
       nasObject.releaseLease();
       await this.fileNasStorageDomainService.저장(nasObject);
 
-      this.logger.error(`Failed to read from NAS: ${file.id}`, error);
+      this.logger.error(`NAS에서 파일을 읽는 데 실패: ${file.id}`, error);
       throw new InternalServerErrorException({
         code: 'NAS_READ_FAILED',
         message: 'NAS에서 파일을 읽는 데 실패했습니다.',
@@ -388,7 +388,7 @@ export class FileDownloadService {
     if (nasObject && nasObject.isSyncing()) {
       const completingSession = await this.findCompletingSession(fileId);
       if (completingSession) {
-        this.logger.log(`Serving range download from multipart parts: ${fileId}`);
+        this.logger.log(`멀티파트 파트 조립 범위 다운로드 시작: ${fileId}`);
         if (range) {
           return this.downloadFromPartsWithRange(file, nasObject, completingSession.id, range);
         }
@@ -396,7 +396,7 @@ export class FileDownloadService {
         const fullResult = await this.downloadFromParts(file, nasObject, completingSession.id);
         return { ...fullResult, isPartial: false };
       }
-      this.logger.warn(`File is syncing to NAS: ${fileId}`);
+      this.logger.warn(`파일 NAS에 동기화 중: ${fileId}`);
       throw new ConflictException({
         code: 'FILE_SYNCING',
         message: '파일이 NAS에 동기화 중입니다. 잠시 후 다시 시도해주세요.',
@@ -409,7 +409,7 @@ export class FileDownloadService {
 
     // 케이스 1: DB 상태 AVAILABLE인데 실제 파일 없음
     if (cacheObject && cacheObject.isAvailable() && !cacheFileExists) {
-      this.logger.warn(`Cache inconsistency: DB=AVAILABLE, file missing: ${fileId}`);
+      this.logger.warn(`캐시 일관성 불일치: DB=AVAILABLE, 파일 없음: ${fileId}`);
       cacheObject.updateStatus(AvailabilityStatus.MISSING);
       await this.fileCacheStorageDomainService.저장(cacheObject);
       cacheObject = null;
@@ -417,7 +417,7 @@ export class FileDownloadService {
 
     // 케이스 2: DB에 없거나 MISSING인데 실제 파일 있음
     if ((!cacheObject || !cacheObject.isAvailable()) && cacheFileExists) {
-      this.logger.log(`Cache inconsistency: DB=MISSING/NULL, file exists: ${fileId}`);
+      this.logger.log(`캐시 일관성 불일치: DB=MISSING/NULL, 파일 있음: ${fileId}`);
       if (cacheObject) {
         cacheObject.updateStatus(AvailabilityStatus.AVAILABLE);
         await this.fileCacheStorageDomainService.저장(cacheObject);
@@ -428,7 +428,7 @@ export class FileDownloadService {
           fileId: file.id,
           objectKey: file.id,
         });
-        this.logger.debug(`Created new cache object for existing file: ${fileId}`);
+        this.logger.debug(`기존 파일에 대한 새로운 캐시 객체 생성: ${fileId}`);
       }
     }
 
@@ -441,14 +441,14 @@ export class FileDownloadService {
       result = await this.downloadFromNasWithRange(file, nasObject, range || undefined);
     } else if (nasObject && !nasObject.isAvailable()) {
       this.logger.error(
-        `NAS storage not available for file: ${fileId}, status: ${nasObject.availabilityStatus}`,
+        `NAS 스토리지 사용 불가: ${fileId}, 상태: ${nasObject.availabilityStatus}`,
       );
       throw new InternalServerErrorException({
         code: 'FILE_STORAGE_UNAVAILABLE',
         message: '파일 스토리지가 현재 사용할 수 없는 상태입니다. 관리자에게 문의하세요.',
       });
     } else {
-      this.logger.error(`No storage found for file: ${fileId}`);
+      this.logger.error(`파일 스토리지 없음: ${fileId}`);
       throw new InternalServerErrorException({
         code: 'FILE_NOT_FOUND_IN_STORAGE',
         message: '파일 스토리지를 찾을 수 없습니다. 관리자에게 문의하세요.',
@@ -460,7 +460,7 @@ export class FileDownloadService {
       const expectedEtag = `"${result.storageObject.checksum}"`;
       if (options.ifRangeHeader !== expectedEtag) {
         this.logger.debug(
-          `If-Range ETag mismatch for file ${fileId}: expected=${expectedEtag}, received=${options.ifRangeHeader}`,
+          `If-Range ETag 불일치: ${fileId}: 예상=${expectedEtag}, 수신=${options.ifRangeHeader}`,
         );
 
         // 기존 lease 해제 후 전체 파일로 다시 요청
@@ -589,7 +589,7 @@ export class FileDownloadService {
     await this.fileCacheStorageDomainService.저장(cacheObject);
 
     const rangeStr = range ? `${range.start}-${range.end} (${range.end - range.start + 1} bytes)` : 'full';
-    this.logger.log(`[CACHE_DOWNLOAD] 📥 file=${file.id.substring(0, 8)}... | range=${rangeStr} | objectKey=${cacheObject.objectKey}`);
+    this.logger.log(`[캐시_다운로드] 📥 파일=${file.id.substring(0, 8)}... | 범위=${rangeStr} | objectKey=${cacheObject.objectKey}`);
 
     try {
       let stream: NodeJS.ReadableStream;
@@ -613,7 +613,7 @@ export class FileDownloadService {
       cacheObject.releaseLease();
       await this.fileCacheStorageDomainService.저장(cacheObject);
 
-      this.logger.error(`Failed to read from cache: ${file.id}`, error);
+      this.logger.error(`캐시에서 읽기 실패: ${file.id}`, error);
       throw new InternalServerErrorException({
         code: 'CACHE_READ_FAILED',
         message: '캐시에서 파일을 읽는 데 실패했습니다.',
@@ -639,7 +639,7 @@ export class FileDownloadService {
     await this.fileNasStorageDomainService.저장(nasObject);
 
     const rangeStr = range ? `${range.start}-${range.end} (${range.end - range.start + 1} bytes)` : 'full';
-    this.logger.log(`[NAS_FILE_RA_DOWNLOAD] 📥 file=${file.id.substring(0, 8)}... | range=${rangeStr} | objectKey=${nasObject.objectKey}`);
+    this.logger.log(`[NAS_파일_다운로드] 📥 파일=${file.id.substring(0, 8)}... | 범위=${rangeStr} | objectKey=${nasObject.objectKey}`);
 
     try {
       let stream: NodeJS.ReadableStream;
@@ -661,7 +661,7 @@ export class FileDownloadService {
         }, {
           jobId: `cache-restore:${file.id}`,
         });
-        this.logger.debug(`Cache restore job registered for file: ${file.id}`);
+        this.logger.debug(`캐시 복원 작업 등록: ${file.id}`);
       }
 
       return {
@@ -675,7 +675,7 @@ export class FileDownloadService {
       nasObject.releaseLease();
       await this.fileNasStorageDomainService.저장(nasObject);
 
-      this.logger.error(`Failed to read from NAS: ${file.id}`, error);
+      this.logger.error(`NAS에서 읽기 실패: ${file.id}`, error);
       throw new InternalServerErrorException({
         code: 'NAS_READ_FAILED',
         message: 'NAS에서 파일을 읽는 데 실패했습니다.',
@@ -771,7 +771,7 @@ export class FileDownloadService {
         if (storageObject && storageObject.leaseCount > 0) {
           storageObject.releaseLease();
           await this.fileCacheStorageDomainService.저장(storageObject);
-          this.logger.debug(`Lease released for file: ${fileId}, storage: CACHE`);
+          this.logger.debug(`파일 lease 해제됨: ${fileId}, 스토리지: CACHE`);
         }
         return;
       }
@@ -781,7 +781,7 @@ export class FileDownloadService {
         if (storageObject && storageObject.leaseCount > 0) {
           storageObject.releaseLease();
           await this.fileNasStorageDomainService.저장(storageObject);
-          this.logger.debug(`Lease released for file: ${fileId}, storage: NAS`);
+          this.logger.debug(`파일 lease 해제됨: ${fileId}, 스토리지: NAS`);
         }
         return;
       }
@@ -792,7 +792,7 @@ export class FileDownloadService {
       if (cacheObject && cacheObject.leaseCount > 0) {
         cacheObject.releaseLease();
         await this.fileCacheStorageDomainService.저장(cacheObject);
-        this.logger.debug(`Lease released for file: ${fileId}, storage: CACHE`);
+        this.logger.debug(`파일 lease 해제됨: ${fileId}, 스토리지: CACHE`);
         return;
       }
 
@@ -801,11 +801,11 @@ export class FileDownloadService {
       if (nasObject && nasObject.leaseCount > 0) {
         nasObject.releaseLease();
         await this.fileNasStorageDomainService.저장(nasObject);
-        this.logger.debug(`Lease released for file: ${fileId}, storage: NAS`);
+        this.logger.debug(`파일 lease 해제됨: ${fileId}, 스토리지: NAS`);
       }
     } catch (error) {
       // lease 해제 실패는 로깅만 하고 에러를 전파하지 않음
-      this.logger.error(`Failed to release lease for file: ${fileId}`, error);
+      this.logger.error(`파일 lease 해제 실패: ${fileId}`, error);
     }
   }
 

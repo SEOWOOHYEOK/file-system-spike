@@ -29,7 +29,7 @@ export class FileLockManager implements OnModuleDestroy {
 
   constructor() {
     this.cleanupInterval = setInterval(() => this.cleanup(), this.CLEANUP_INTERVAL);
-    this.logger.log('FileLockManager initialized');
+    this.logger.log('FileLockManager 초기화됨');
   }
 
   /**
@@ -190,7 +190,7 @@ export class FileLockManager implements OnModuleDestroy {
       }
     }
     if (cleanedCount > 0) {
-      this.logger.debug(`Cleaned up ${cleanedCount} unused locks`);
+      this.logger.debug(`미사용 락 ${cleanedCount}개 정리됨`);
     }
   }
 
@@ -223,6 +223,6 @@ export class FileLockManager implements OnModuleDestroy {
 
   onModuleDestroy(): void {
     clearInterval(this.cleanupInterval);
-    this.logger.log(`FileLockManager destroyed. Final lock count: ${this.locks.size}`);
+    this.logger.log(`FileLockManager 종료됨. 최종 락 수: ${this.locks.size}`);
   }
 }

@@ -29,7 +29,7 @@ export class InMemoryLockAdapter implements IDistributedLockPort {
   private readonly locks: Map<string, LockEntry> = new Map();
 
   constructor() {
-    this.logger.log('InMemoryLockAdapter initialized');
+    this.logger.log('InMemoryLockAdapter 초기화됨');
   }
 
   /**
@@ -47,7 +47,7 @@ export class InMemoryLockAdapter implements IDistributedLockPort {
     if (entry && Date.now() >= entry.expiresAt) {
       clearTimeout(entry.timeoutId);
       this.locks.delete(key);
-      this.logger.debug(`Expired lock cleaned up: ${key}`);
+      this.logger.debug(`만료된 락 정리됨: ${key}`);
       return true;
     }
     return false;
@@ -71,12 +71,12 @@ export class InMemoryLockAdapter implements IDistributedLockPort {
         const timeoutId = setTimeout(() => {
           if (this.locks.get(key)?.value === lockValue) {
             this.locks.delete(key);
-            this.logger.debug(`Lock auto-expired: ${key}`);
+            this.logger.debug(`락 자동 만료됨: ${key}`);
           }
         }, ttl);
 
         this.locks.set(key, { value: lockValue, expiresAt, timeoutId });
-        this.logger.debug(`Lock acquired: ${key}`);
+        this.logger.debug(`락 획득: ${key}`);
 
         return {
           acquired: true,
@@ -85,13 +85,13 @@ export class InMemoryLockAdapter implements IDistributedLockPort {
             if (entry?.value === lockValue) {
               clearTimeout(entry.timeoutId);
               this.locks.delete(key);
-              this.logger.debug(`Lock released: ${key}`);
+              this.logger.debug(`락 해제: ${key}`);
             }
           },
           extend: async (extendTtl?: number) => {
             const entry = this.locks.get(key);
             if (entry?.value !== lockValue) {
-              this.logger.warn(`Failed to extend lock (not owner): ${key}`);
+              this.logger.warn(`락 연장 실패 (소유자 아님): ${key}`);
               return false;
             }
 
@@ -104,12 +104,12 @@ export class InMemoryLockAdapter implements IDistributedLockPort {
             const newTimeoutId = setTimeout(() => {
               if (this.locks.get(key)?.value === lockValue) {
                 this.locks.delete(key);
-                this.logger.debug(`Lock auto-expired: ${key}`);
+                this.logger.debug(`락 자동 만료됨: ${key}`);
               }
             }, newTtl);
 
             this.locks.set(key, { value: lockValue, expiresAt: newExpiresAt, timeoutId: newTimeoutId });
-            this.logger.debug(`Lock extended: ${key} (ttl: ${newTtl}ms)`);
+            this.logger.debug(`락 연장: ${key} (ttl: ${newTtl}ms)`);
             return true;
           },
         };
@@ -117,7 +117,7 @@ export class InMemoryLockAdapter implements IDistributedLockPort {
 
       // 대기 시간 초과 확인
       if (Date.now() - startTime >= waitTimeout) {
-        this.logger.warn(`Failed to acquire lock (timeout): ${key}`);
+        this.logger.warn(`락 획득 실패 (시간 초과): ${key}`);
         return {
           acquired: false,
           release: async () => { /* no-op */ },
@@ -146,11 +146,11 @@ export class InMemoryLockAdapter implements IDistributedLockPort {
       renewTimer = setInterval(async () => {
         const extended = await lock.extend(ttl);
         if (!extended) {
-          this.logger.error(`Auto-renew failed for lock: ${key}`);
+          this.logger.error(`락 자동 갱신 실패: ${key}`);
         }
       }, renewInterval);
       
-      this.logger.debug(`Auto-renew enabled for lock: ${key} (interval: ${renewInterval}ms)`);
+      this.logger.debug(`락 자동 갱신 활성화: ${key} (주기: ${renewInterval}ms)`);
     }
 
     try {
@@ -173,7 +173,7 @@ export class InMemoryLockAdapter implements IDistributedLockPort {
     if (entry) {
       clearTimeout(entry.timeoutId);
       this.locks.delete(key);
-      this.logger.warn(`Lock force released: ${key}`);
+      this.logger.warn(`락 강제 해제: ${key}`);
     }
   }
 

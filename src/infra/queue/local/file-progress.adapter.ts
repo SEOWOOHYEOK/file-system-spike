@@ -35,7 +35,7 @@ export class FileProgressAdapter implements IProgressStoragePort, OnModuleInit, 
       : path.join(process.cwd(), queuePath);
     this.basePath = path.join(base, 'progress');
     this.ttlMs = this.configService.get<number>('PROGRESS_TTL_MS', DEFAULT_TTL_MS);
-    this.logger.log(`FileProgressAdapter initialized - Path: ${this.basePath}, TTL: ${this.ttlMs}ms`);
+    this.logger.log(`FileProgressAdapter 초기화됨 - 경로: ${this.basePath}, TTL: ${this.ttlMs}ms`);
   }
 
   async onModuleInit(): Promise<void> {
@@ -56,10 +56,10 @@ export class FileProgressAdapter implements IProgressStoragePort, OnModuleInit, 
   private startCleanupScheduler(): void {
     this.cleanupTimer = setInterval(() => {
       this.cleanup().catch((error) => {
-        this.logger.error(`Cleanup failed: ${error}`);
+        this.logger.error(`정리 실패: ${error}`);
       });
     }, CLEANUP_INTERVAL_MS);
-    this.logger.log('Cleanup scheduler started (interval: 5 min)');
+    this.logger.log('정리 스케줄러 시작됨 (주기: 5분)');
   }
 
   /**
@@ -86,13 +86,13 @@ export class FileProgressAdapter implements IProgressStoragePort, OnModuleInit, 
         } catch (error) {
           // 파일이 이미 삭제된 경우 무시
           if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-            this.logger.warn(`Failed to check/delete file ${file}: ${error}`);
+            this.logger.warn(`파일 확인/삭제 실패 ${file}: ${error}`);
           }
         }
       }
 
       if (cleaned > 0) {
-        this.logger.debug(`Cleaned ${cleaned} expired progress files`);
+        this.logger.debug(`만료된 진행률 파일 ${cleaned}개 정리 완료`);
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
@@ -113,7 +113,7 @@ export class FileProgressAdapter implements IProgressStoragePort, OnModuleInit, 
     // 방어적 디렉토리 생성 (HMR/재시작 등으로 디렉토리가 사라진 경우 대비)
     await fs.mkdir(this.basePath, { recursive: true }).catch(() => {});
     await fs.writeFile(filePath, JSON.stringify(progress, null, 2), 'utf-8');
-    this.logger.debug(`Progress set: ${syncEventId} (${progress.progress.percent}%)`);
+    this.logger.debug(`진행률 설정: ${syncEventId} (${progress.progress.percent}%)`);
   }
 
   async get(syncEventId: string): Promise<SyncProgress | null> {
@@ -142,7 +142,7 @@ export class FileProgressAdapter implements IProgressStoragePort, OnModuleInit, 
     const filePath = this.getFilePath(syncEventId);
     try {
       await fs.unlink(filePath);
-      this.logger.debug(`Progress deleted: ${syncEventId}`);
+      this.logger.debug(`진행률 삭제 완료: ${syncEventId}`);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
         throw error;
@@ -153,7 +153,7 @@ export class FileProgressAdapter implements IProgressStoragePort, OnModuleInit, 
   async update(syncEventId: string, partial: Partial<SyncProgress>): Promise<void> {
     const existing = await this.get(syncEventId);
     if (!existing) {
-      this.logger.warn(`Progress not found for update: ${syncEventId}`);
+      this.logger.warn(`업데이트할 진행률 없음: ${syncEventId}`);
       return;
     }
 

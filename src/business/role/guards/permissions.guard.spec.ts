@@ -4,6 +4,7 @@ import { RoleService } from '../role.service';
 import { UserService } from '../../user/user.service';
 import { Reflector } from '@nestjs/core';
 import { PermissionEnum } from '../../../domain/role/permission.enum';
+import { RoleNameEnum } from '../../../domain/role/role-name.enum';
 import { ExecutionContext } from '@nestjs/common';
 import { User } from '../../../domain/user/entities/user.entity';
 import { Role } from '../../../domain/role/entities/role.entity';
@@ -174,6 +175,50 @@ describe('PermissionsGuard', () => {
         new Permission({ id: 'p1', code: PermissionEnum.USER_READ }),
         new Permission({ id: 'p2', code: PermissionEnum.FILE_READ }),
       ],
+    });
+
+    userService.findByIdWithRole.mockResolvedValue({ user, role });
+
+    // ═══════════════════════════════════════════════════════
+    // 🎬 WHEN
+    // ═══════════════════════════════════════════════════════
+    const result = await guard.canActivate(context);
+
+    // ═══════════════════════════════════════════════════════
+    // ✅ THEN
+    // ═══════════════════════════════════════════════════════
+    expect(result).toBe(true);
+  });
+
+  /**
+   * 📌 테스트 시나리오: ADMIN 역할은 모든 권한 자동 통과
+   * 
+   * 🎯 검증 목적:
+   *   - ADMIN 역할(role.name === 'ADMIN')이면 개별 권한 검사 없이 통과
+   *   - DB에 permission이 동기화되지 않아도 ADMIN은 항상 접근 가능
+   * 
+   * ✅ 기대 결과:
+   *   - true 반환 (권한 목록과 무관하게)
+   */
+  it('should return true if user has ADMIN role regardless of permissions', async () => {
+    // ═══════════════════════════════════════════════════════
+    // 📥 GIVEN
+    // ═══════════════════════════════════════════════════════
+    reflector.getAllAndOverride.mockReturnValue([PermissionEnum.ROLE_WRITE]);
+    const context = createMockContext({ id: 'admin-1' });
+    
+    // ADMIN 역할이지만 해당 permission이 목록에 없는 상태
+    const user = new User({
+      id: 'admin-1',
+      roleId: 'role-admin',
+      isActive: true,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    });
+    const role = new Role({
+      id: 'role-admin',
+      name: RoleNameEnum.ADMIN,
+      permissions: [], // 권한 목록이 비어있어도 ADMIN이면 통과
     });
 
     userService.findByIdWithRole.mockResolvedValue({ user, role });

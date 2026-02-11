@@ -71,7 +71,7 @@ export class FolderCommandService implements OnModuleInit {
       const rootFolder = await this.folderDomainService.루트폴더조회();
 
       if (!rootFolder) {
-        this.logger.log('Root folder not found. Creating root folder...');
+        this.logger.log('루트 폴더 없음. 루트 폴더 생성...');
 
         const folderId = uuidv4();
         const createdBy = 'system';
@@ -93,12 +93,12 @@ export class FolderCommandService implements OnModuleInit {
           availabilityStatus: FolderAvailabilityStatus.AVAILABLE, // 루트는 이미 존재한다고 가정
         });
 
-        this.logger.log(`Root folder created with ID: ${folderId}`);
+        this.logger.log(`루트 폴더 생성됨 ID: ${folderId}`);
       } else {
-        this.logger.log(`Root folder already exists with ID: ${rootFolder.id}`);
+        this.logger.log(`루트 폴더 이미 존재함 ID: ${rootFolder.id}`);
       }
     } catch (error) {
-      this.logger.error('Failed to ensure root folder exists', error);
+      this.logger.error('루트 폴더 생성/확인 실패', error);
     }
   }
 
@@ -167,7 +167,7 @@ export class FolderCommandService implements OnModuleInit {
     });
 
 
-    this.logger.debug(`NAS_FOLDER_SYNC (mkdir) job added for folder: ${folderId}`);
+    this.logger.debug(`NAS_FOLDER_SYNC (mkdir) 작업 등록됨: 폴더 ${folderId}`);
 
     return {
       id: folder.id,
@@ -278,7 +278,7 @@ export class FolderCommandService implements OnModuleInit {
       syncEvent.markQueued();
       await this.syncEventDomainService.저장(syncEvent);
 
-      this.logger.debug(`NAS_FOLDER_SYNC (rename) job added for folder: ${folderId}`);
+      this.logger.debug(`NAS_FOLDER_SYNC (rename) 작업 등록됨: 폴더 ${folderId}`);
 
       return {
         id: folder.id,
@@ -414,7 +414,7 @@ export class FolderCommandService implements OnModuleInit {
         syncEventId,
       });
 
-      this.logger.debug(`NAS_FOLDER_SYNC (move) job added for folder: ${folderId}`);
+      this.logger.debug(`NAS_FOLDER_SYNC (move) 작업 등록됨: 폴더 ${folderId}`);
 
       return {
         id: folder.id,
@@ -538,7 +538,7 @@ export class FolderCommandService implements OnModuleInit {
         trashPath,
         syncEventId,
       });
-      this.logger.debug(`NAS_FOLDER_SYNC (trash) job added for folder: ${folderId}`);
+      this.logger.debug(`NAS_FOLDER_SYNC (trash) 작업 등록됨: 폴더 ${folderId}`);
 
       return {
         id: folder.id,

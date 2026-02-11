@@ -49,6 +49,9 @@ import {
 } from './file.swagger';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { NasAvailabilityGuard } from '../../../common/guards/nas-availability.guard';
+import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
+import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
+import { PermissionEnum } from '../../../domain/role/permission.enum';
 import { RequestContext } from '../../../common/context/request-context';
 import { AuditAction } from '../../../common/decorators';
 import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
@@ -70,7 +73,8 @@ import {
  */
 @ApiTags('200.파일')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, NasAvailabilityGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, NasAvailabilityGuard)
+@RequirePermissions(PermissionEnum.FILE_READ)
 @Controller('v1/files')
 export class FileController {
   private readonly logger = new Logger(FileController.name);
@@ -88,6 +92,7 @@ export class FileController {
    * POST /files/upload - 일반 파일 업로드 (100MB 미만)
    */
   @Post('upload')
+  @RequirePermissions(PermissionEnum.FILE_UPLOAD)
   @ApiFileUpload()
   @UseInterceptors(FileInterceptor('file'))//muliti part form 파싱처리를 위해서 해당  인터셉터 를 사용
   @HttpCode(HttpStatus.CREATED)
@@ -117,6 +122,7 @@ export class FileController {
    * POST /files/upload/many - 다중 파일 업로드
    */
   @Post('upload/many')
+  @RequirePermissions(PermissionEnum.FILE_UPLOAD)
   @ApiFilesUpload()
   @UseInterceptors(FilesInterceptor('files'))
   @HttpCode(HttpStatus.CREATED)
@@ -166,6 +172,7 @@ export class FileController {
    * - If-Range + ETag: 파일 변경 감지하여 이어받기 무결성 보장
    */
   @Get(':fileId/download')
+  @RequirePermissions(PermissionEnum.FILE_DOWNLOAD)
   @ApiFileDownload()
   @AuditAction({
     action: AuditActionEnum.FILE_DOWNLOAD,
@@ -231,6 +238,7 @@ export class FileController {
    *   <audio src="/v1/files/{fileId}/preview" controls />
    */
   @Get(':fileId/preview')
+  @RequirePermissions(PermissionEnum.FILE_DOWNLOAD)
   @ApiFilePreview()
   @AuditAction({
     action: AuditActionEnum.FILE_VIEW,
@@ -283,6 +291,7 @@ export class FileController {
    * PUT /files/:fileId/rename - 파일명 변경
    */
   @Put(':fileId/rename')
+  @RequirePermissions(PermissionEnum.FILE_WRITE)
   @ApiFileRename()
   @AuditAction({
     action: AuditActionEnum.FILE_RENAME,
@@ -307,6 +316,7 @@ export class FileController {
    * POST /files/:fileId/move - 파일 이동
    */
   @Post(':fileId/move')
+  @RequirePermissions(PermissionEnum.FILE_MOVE)
   @ApiFileMove()
   @AuditAction({
     action: AuditActionEnum.FILE_MOVE,
@@ -331,6 +341,7 @@ export class FileController {
    * 응답: 200 OK (id, name, state=TRASHED, syncEventId)
    */
   @Delete(':fileId')
+  @RequirePermissions(PermissionEnum.FILE_DELETE)
   @ApiFileDelete()
   @AuditAction({
     action: AuditActionEnum.FILE_DELETE,

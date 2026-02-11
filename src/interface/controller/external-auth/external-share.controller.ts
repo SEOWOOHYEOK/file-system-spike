@@ -32,6 +32,7 @@ import { createByteCountingStream, formatContentRange } from '../../../common/ut
 import { AuditAction } from '../../../common/decorators';
 import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
 import { TargetType } from '../../../domain/audit/enums/common.enum';
+import { UnifiedJwtAuthGuard } from '../../../common/guards/unified-jwt-auth.guard';
 
 /**
  * 외부 사용자 파일 접근 컨트롤러
@@ -45,7 +46,7 @@ import { TargetType } from '../../../domain/audit/enums/common.enum';
 @ApiTags('710.파일 외부공유 접근')
 @Controller('v1/file-shares-requests')
 @ApiBearerAuth()
-@UseGuards(ExternalJwtAuthGuard)
+@UseGuards(UnifiedJwtAuthGuard)
 export class ExternalShareController {
   private readonly logger = new Logger(ExternalShareController.name);
 

@@ -26,12 +26,12 @@ export class RedisProgressAdapter implements IProgressStoragePort, OnModuleDestr
       password: this.configService.get<string>('REDIS_PASSWORD'),
     });
     this.ttl = this.configService.get<number>('PROGRESS_TTL', DEFAULT_TTL);
-    this.logger.log(`RedisProgressAdapter initialized (TTL: ${this.ttl}s)`);
+    this.logger.log(`RedisProgressAdapter 초기화됨 (TTL: ${this.ttl}s)`);
   }
 
   async onModuleDestroy(): Promise<void> {
     await this.redis.quit();
-    this.logger.log('Redis connection closed');
+    this.logger.log('Redis 연결 종료됨');
   }
 
   /**
@@ -44,7 +44,7 @@ export class RedisProgressAdapter implements IProgressStoragePort, OnModuleDestr
   async set(syncEventId: string, progress: SyncProgress): Promise<void> {
     const key = this.getKey(syncEventId);
     await this.redis.setex(key, this.ttl, JSON.stringify(progress));
-    this.logger.debug(`Progress set: ${syncEventId} (${progress.progress.percent}%)`);
+    this.logger.debug(`진행률 설정: ${syncEventId} (${progress.progress.percent}%)`);
   }
 
   async get(syncEventId: string): Promise<SyncProgress | null> {
@@ -56,13 +56,13 @@ export class RedisProgressAdapter implements IProgressStoragePort, OnModuleDestr
   async delete(syncEventId: string): Promise<void> {
     const key = this.getKey(syncEventId);
     await this.redis.del(key);
-    this.logger.debug(`Progress deleted: ${syncEventId}`);
+    this.logger.debug(`진행률 삭제 완료: ${syncEventId}`);
   }
 
   async update(syncEventId: string, partial: Partial<SyncProgress>): Promise<void> {
     const existing = await this.get(syncEventId);
     if (!existing) {
-      this.logger.warn(`Progress not found for update: ${syncEventId}`);
+      this.logger.warn(`업데이트할 진행률 없음: ${syncEventId}`);
       return;
     }
 

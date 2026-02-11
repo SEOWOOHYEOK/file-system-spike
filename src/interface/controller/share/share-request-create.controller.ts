@@ -8,6 +8,9 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../common/guards';
+import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
+import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
+import { PermissionEnum } from '../../../domain/role/permission.enum';
 import { ShareTargetUserQueryService } from '../../../business/external-share/share-target-user-query.service';
 import { ShareRequestCommandService } from '../../../business/share-request/share-request-command.service';
 import { ShareRequestValidationService } from '../../../business/share-request/share-request-validation.service';
@@ -40,7 +43,8 @@ import { ApproverResponseDto } from '../share-request/dto/approver-response.dto'
 @ApiTags('700.파일 공유 요청 생성')
 @Controller('v1/file-shares-requests')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermissions(PermissionEnum.FILE_SHARE_REQUEST)
 export class ShareRequestCreateController {
   constructor(
     private readonly shareTargetUserQueryService: ShareTargetUserQueryService,

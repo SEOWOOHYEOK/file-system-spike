@@ -1,6 +1,10 @@
-import { Controller, Get, Patch, Post, Param, Body, ParseIntPipe } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiParam, ApiBody, ApiResponse } from '@nestjs/swagger';
+import { Controller, Get, Patch, Post, Param, Body, ParseIntPipe, UseGuards } from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiParam, ApiBody, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { ErrorMessageService } from '../../../../common/error-message/error-message.service';
+import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../../../business/role/guards/permissions.guard';
+import { RequirePermissions } from '../../../../business/role/decorators/require-permissions.decorator';
+import { PermissionEnum } from '../../../../domain/role/permission.enum';
 
 /**
  * 에러 메시지 관리 컨트롤러
@@ -11,6 +15,9 @@ import { ErrorMessageService } from '../../../../common/error-message/error-mess
  * - POST  /v1/admin/error-messages/reload     - 캐시 즉시 갱신
  */
 @ApiTags('902.프로젝트 관리자 -에러 메시지 관리')
+@ApiBearerAuth()
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermissions(PermissionEnum.SYSTEM_CONFIG)
 @Controller('v1/admin/error-messages')
 export class ErrorMessageAdminController {
   constructor(

@@ -1,12 +1,22 @@
 import { SetMetadata } from '@nestjs/common';
 import type { Request } from 'express';
 import { AuditAction } from '../../domain/audit/enums/audit-action.enum';
-import { TargetType } from '../../domain/audit/enums/common.enum';
+import { TargetType, UserType } from '../../domain/audit/enums/common.enum';
 
 /**
  * 감사 로그 메타데이터 키
  */
 export const AUDIT_ACTION_KEY = 'audit_action';
+
+/**
+ * 인증 이벤트에서 응답 데이터로부터 추출한 행위자 정보
+ */
+export interface AuthEventActor {
+  userId: string;
+  userName?: string;
+  userEmail?: string;
+  userType?: UserType;
+}
 
 /**
  * 감사 액션 옵션
@@ -91,6 +101,54 @@ export interface AuditActionOptions {
    * ```
    */
   extractItemMetadata?: (request: Request, item: any) => Record<string, unknown>;
+
+  // ────────── 인증 경계 이벤트 (Auth Event) ──────────
+
+  /**
+   * 인증 경계 이벤트 여부
+   *
+   * true이면 로그인/로그아웃 등 인증 전환 이벤트로 간주하여
+   * 일반 인증된 사용자 행위와 다른 경로로 감사 로그를 기록한다.
+   *
+   * - 비인증 요청(로그인)에서도 응답 데이터를 통해 actor/target 추출
+   * - isLoggable() userId 검증을 우회
+   * - extractActorFromResponse로 행위자 정보 추출
+   *
+   * @default false
+   */
+  authEvent?: boolean;
+
+  /**
+   * 인증 이벤트 성공 시 응답에서 행위자 정보 추출
+   *
+   * 로그인처럼 요청 시점에 인증 정보가 없는 경우,
+   * 핸들러 응답 데이터에서 userId/userName 등을 추출한다.
+   *
+   * 미지정 시 RequestContext snapshot에서 actor 정보를 사용한다 (로그아웃 등).
+   *
+   * @example
+   * ```typescript
+   * extractActorFromResponse: (res) => ({
+   *   userId: res.user.id,
+   *   userName: res.user.name,
+   *   userEmail: res.user.email,
+   *   userType: UserType.INTERNAL,
+   * })
+   * ```
+   */
+  extractActorFromResponse?: (response: any) => AuthEventActor | undefined;
+
+  /**
+   * 인증 이벤트에서 응답 데이터로부터 targetId 추출
+   *
+   * 미지정 시 추출된 actor의 userId를 targetId로 사용한다 (본인이 곧 target).
+   *
+   * @example
+   * ```typescript
+   * extractTargetIdFromResponse: (res) => res.user.id
+   * ```
+   */
+  extractTargetIdFromResponse?: (response: any) => string | undefined;
 }
 
 /**

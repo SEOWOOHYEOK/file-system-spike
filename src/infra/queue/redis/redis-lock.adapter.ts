@@ -30,12 +30,12 @@ export class RedisLockAdapter implements IDistributedLockPort, OnModuleDestroy {
       port: this.configService.get<number>('REDIS_PORT', 6379),
       password: this.configService.get<string>('REDIS_PASSWORD'),
     });
-    this.logger.log('RedisLockAdapter initialized');
+    this.logger.log('RedisLockAdapter 초기화됨');
   }
 
   async onModuleDestroy(): Promise<void> {
     await this.redis.quit();
-    this.logger.log('Redis connection closed');
+    this.logger.log('Redis 연결 종료됨');
   }
 
   /**
@@ -66,7 +66,7 @@ export class RedisLockAdapter implements IDistributedLockPort, OnModuleDestroy {
       const result = await this.redis.set(lockKey, lockValue, 'PX', ttl, 'NX');
 
       if (result === 'OK') {
-        this.logger.debug(`Lock acquired: ${key}`);
+        this.logger.debug(`락 획득: ${key}`);
 
         return {
           acquired: true,
@@ -80,7 +80,7 @@ export class RedisLockAdapter implements IDistributedLockPort, OnModuleDestroy {
               end
             `;
             await this.redis.eval(script, 1, lockKey, lockValue);
-            this.logger.debug(`Lock released: ${key}`);
+            this.logger.debug(`락 해제: ${key}`);
           },
           extend: async (extendTtl?: number) => {
             // 소유권 확인 후 TTL 연장 (Lua 스크립트로 원자적 실행)
@@ -94,10 +94,10 @@ export class RedisLockAdapter implements IDistributedLockPort, OnModuleDestroy {
             `;
             const extended = await this.redis.eval(script, 1, lockKey, lockValue, newTtl);
             if (extended === 1) {
-              this.logger.debug(`Lock extended: ${key} (ttl: ${newTtl}ms)`);
+              this.logger.debug(`락 연장: ${key} (ttl: ${newTtl}ms)`);
               return true;
             }
-            this.logger.warn(`Failed to extend lock (not owner): ${key}`);
+            this.logger.warn(`락 연장 실패 (소유자 아님): ${key}`);
             return false;
           },
         };
@@ -105,7 +105,7 @@ export class RedisLockAdapter implements IDistributedLockPort, OnModuleDestroy {
 
       // 대기 시간 초과 확인
       if (Date.now() - startTime >= waitTimeout) {
-        this.logger.warn(`Failed to acquire lock (timeout): ${key}`);
+        this.logger.warn(`락 획득 실패 (시간 초과): ${key}`);
         return {
           acquired: false,
           release: async () => { /* no-op */ },
@@ -134,11 +134,11 @@ export class RedisLockAdapter implements IDistributedLockPort, OnModuleDestroy {
       renewTimer = setInterval(async () => {
         const extended = await lock.extend(ttl);
         if (!extended) {
-          this.logger.error(`Auto-renew failed for lock: ${key}`);
+          this.logger.error(`락 자동 갱신 실패: ${key}`);
         }
       }, renewInterval);
       
-      this.logger.debug(`Auto-renew enabled for lock: ${key} (interval: ${renewInterval}ms)`);
+      this.logger.debug(`락 자동 갱신 활성화: ${key} (주기: ${renewInterval}ms)`);
     }
 
     try {
@@ -160,7 +160,7 @@ export class RedisLockAdapter implements IDistributedLockPort, OnModuleDestroy {
   async forceRelease(key: string): Promise<void> {
     const lockKey = this.getLockKey(key);
     await this.redis.del(lockKey);
-    this.logger.warn(`Lock force released: ${key}`);
+    this.logger.warn(`락 강제 해제: ${key}`);
   }
 
   private sleep(ms: number): Promise<void> {

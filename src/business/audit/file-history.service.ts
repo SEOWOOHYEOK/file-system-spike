@@ -37,7 +37,7 @@ export class FileHistoryService extends BufferedWriter<FileHistory> {
   }
 
   protected get entityName(): string {
-    return 'file histories';
+    return '파일 이력';
   }
 
   // ──────────────────────────────────────────────
@@ -72,7 +72,7 @@ export class FileHistoryService extends BufferedWriter<FileHistory> {
       });
       await this.enqueue(history);
     } catch (error) {
-      this.logger.error('Failed to create file history', error);
+      this.logger.error('파일 이력 기록 실패', error);
     }
   }
 

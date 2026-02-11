@@ -33,7 +33,7 @@ export class BullQueueAdapter implements IJobQueuePort, OnModuleDestroy {
       port: this.configService.get<number>('REDIS_PORT', 6379),
       password: this.configService.get<string>('REDIS_PASSWORD'),
     };
-    this.logger.log(`BullQueueAdapter initialized - Redis: ${this.redisConfig.host}:${this.redisConfig.port}`);
+    this.logger.log(`BullQueueAdapter 초기화됨 - Redis: ${this.redisConfig.host}:${this.redisConfig.port}`);
   }
 
   /**
@@ -56,19 +56,19 @@ export class BullQueueAdapter implements IJobQueuePort, OnModuleDestroy {
 
       // 큐 이벤트 로깅
       queue.on('error', (error) => {
-        this.logger.error(`Queue ${queueName} error: ${error.message}`);
+        this.logger.error(`큐 ${queueName} 오류: ${error.message}`);
       });
 
       queue.on('failed', (job, error) => {
-        this.logger.warn(`Job ${job.id} in ${queueName} failed: ${error.message}`);
+        this.logger.warn(`큐 ${queueName} 작업 ${job.id} 실패: ${error.message}`);
       });
 
       queue.on('completed', (job) => {
-        this.logger.debug(`Job ${job.id} in ${queueName} completed`);
+        this.logger.debug(`큐 ${queueName} 작업 ${job.id} 완료`);
       });
 
       this.queues.set(queueName, queue);
-      this.logger.log(`Queue created: ${queueName}`);
+      this.logger.log(`큐 생성됨: ${queueName}`);
     }
 
     return this.queues.get(queueName)!;
@@ -116,7 +116,7 @@ export class BullQueueAdapter implements IJobQueuePort, OnModuleDestroy {
     if (options?.removeOnFail !== undefined) bullOptions.removeOnFail = options.removeOnFail;
 
     const bullJob = await queue.add(data, bullOptions);
-    this.logger.debug(`Job added to ${queueName}: ${bullJob.id}`);
+    this.logger.debug(`작업 추가됨 ${queueName}: ${bullJob.id}`);
 
     return this.mapBullJobToJob(bullJob, queueName);
   }
@@ -134,7 +134,7 @@ export class BullQueueAdapter implements IJobQueuePort, OnModuleDestroy {
       await processor(job);
     });
 
-    this.logger.log(`Processor registered for queue: ${queueName} (concurrency: ${concurrency})`);
+    this.logger.log(`큐 프로세서 등록됨: ${queueName} (동시성: ${concurrency})`);
   }
 
   async getJob<T = JobData>(queueName: string, jobId: string): Promise<Job<T> | null> {
@@ -152,7 +152,7 @@ export class BullQueueAdapter implements IJobQueuePort, OnModuleDestroy {
 
     if (bullJob) {
       await bullJob.remove();
-      this.logger.debug(`Job removed from ${queueName}: ${jobId}`);
+      this.logger.debug(`작업 제거됨 ${queueName}: ${jobId}`);
     }
   }
 
@@ -181,19 +181,19 @@ export class BullQueueAdapter implements IJobQueuePort, OnModuleDestroy {
     const queue = this.getOrCreateQueue(queueName);
     await queue.clean(0, 'completed');
     await queue.clean(0, 'failed');
-    this.logger.log(`Queue cleaned: ${queueName}`);
+    this.logger.log(`큐 정리 완료: ${queueName}`);
   }
 
   async pauseQueue(queueName: string): Promise<void> {
     const queue = this.getOrCreateQueue(queueName);
     await queue.pause();
-    this.logger.log(`Queue paused: ${queueName}`);
+    this.logger.log(`큐 일시정지됨: ${queueName}`);
   }
 
   async resumeQueue(queueName: string): Promise<void> {
     const queue = this.getOrCreateQueue(queueName);
     await queue.resume();
-    this.logger.log(`Queue resumed: ${queueName}`);
+    this.logger.log(`큐 재개됨: ${queueName}`);
   }
 
   async getQueueStats(queueName: string): Promise<QueueStats> {
@@ -260,7 +260,7 @@ export class BullQueueAdapter implements IJobQueuePort, OnModuleDestroy {
   async onModuleDestroy(): Promise<void> {
     for (const [name, queue] of this.queues) {
       await queue.close();
-      this.logger.log(`Queue closed: ${name}`);
+      this.logger.log(`큐 종료됨: ${name}`);
     }
   }
 }

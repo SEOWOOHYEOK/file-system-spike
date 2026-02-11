@@ -54,7 +54,7 @@ export class CacheHealthCheckService {
         checkedAt: new Date(),
       };
     } catch (error) {
-      this.logger.error(`Cache health check failed: ${error}`);
+      this.logger.error(`캐시 상태 확인 실패: ${error}`);
       return {
         status: 'unhealthy',
         responseTimeMs: Date.now() - startTime,
@@ -65,7 +65,7 @@ export class CacheHealthCheckService {
       // 헬스체크 파일 정리 (에러 무시)
       try {
         await this.cacheStorage.파일삭제(healthCheckKey);
-        this.logger.debug(`Health check file deleted: ${healthCheckKey}`);
+        this.logger.debug(`상태 확인 파일 삭제됨: ${healthCheckKey}`);
       } catch {
         // 삭제 실패해도 무시 (파일이 없을 수 있음)
       }
@@ -85,7 +85,7 @@ export class CacheHealthCheckService {
   ): Promise<void> {
     // 1. 파일 쓰기
     await this.cacheStorage.파일쓰기(healthCheckKey, testBuffer);
-    this.logger.debug(`Health check file written: ${healthCheckKey}`);
+    this.logger.debug(`상태 확인 파일 저장됨: ${healthCheckKey}`);
 
     // 2. 파일 읽기
     const readBuffer = await this.cacheStorage.파일읽기(healthCheckKey);
@@ -98,6 +98,6 @@ export class CacheHealthCheckService {
       );
     }
 
-    this.logger.debug(`Health check passed: content verified`);
+    this.logger.debug(`상태 확인 통과: 내용 검증 완료`);
   }
 }

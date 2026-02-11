@@ -45,6 +45,9 @@ import {
 } from './multipart.swagger';
 
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
+import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
+import { PermissionEnum } from '../../../domain/role/permission.enum';
 import { AuditAction } from '../../../common/decorators';
 import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
 import { TargetType } from '../../../domain/audit/enums/common.enum';
@@ -72,7 +75,8 @@ interface CompleteRequestBody {
  */
 @ApiTags('201.파일-멀티파트')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermissions(PermissionEnum.FILE_UPLOAD)
 @Controller('v1/files/multipart')
 export class MultipartController {
   private readonly logger = new Logger(MultipartController.name);

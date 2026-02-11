@@ -339,7 +339,7 @@ export class MultipartUploadService {
       };
     } catch (error) {
       this.logger.error(
-        `Stream part upload failed: session=${sessionId}, part=${partNumber}`,
+        `스트림 파트 업로드 실패: session=${sessionId}, part=${partNumber}`,
         error instanceof Error ? error.stack : error,
       );
       throw error;
@@ -488,12 +488,12 @@ export class MultipartUploadService {
 
       // 트랜잭션 커밋
       await queryRunner.commitTransaction();
-      this.logger.debug(`Multipart upload completing (async): ${fileId}`);
+      this.logger.debug(`멀티파트 업로드 완료 (비동기): ${fileId}`);
 
     } catch (error) {
       // 트랜잭션 롤백 (캐시 파일 정리 불필요 - merge 없음)
       await queryRunner.rollbackTransaction();
-      this.logger.error(`Failed to complete multipart upload: ${sessionId}`, error);
+      this.logger.error(`멀티파트 업로드 완료 실패: ${sessionId}`, error);
       throw error;
     } finally {
       await queryRunner.release();
@@ -515,10 +515,10 @@ export class MultipartUploadService {
       // 15. 큐 등록 성공 시 QUEUED로 변경
       syncEvent.markQueued();
       await this.syncEventDomainService.저장(syncEvent);
-      this.logger.debug(`NAS_FILE_SYNC job added for file: ${fileId} (multipart)`);
+      this.logger.debug(`NAS_FILE_SYNC 작업 등록: ${fileId} (멀티파트)`);
     } catch (queueError) {
       // 큐 등록 실패해도 PENDING 상태로 유지 - 스케줄러가 복구
-      this.logger.error(`Failed to add job to queue, scheduler will recover: ${fileId}`, queueError);
+      this.logger.error(`큐에 작업을 추가하는 데 실패했습니다, 스케줄러가 복구합니다: ${fileId}`, queueError);
     }
 
     return {

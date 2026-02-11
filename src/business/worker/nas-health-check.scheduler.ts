@@ -42,7 +42,7 @@ export class NasHealthCheckScheduler {
       this.lastCheckTime = new Date();
       await this.observabilityService.executeHealthCheckAndRecord();
     } catch (error) {
-      this.logger.error('Scheduled health check failed:', error);
+      this.logger.error('예약된 헬스체크 실패:', error);
     }
   }
 
@@ -54,10 +54,10 @@ export class NasHealthCheckScheduler {
     try {
       const deleted = await this.observabilityService.cleanupOldHistory();
       if (deleted > 0) {
-        this.logger.log(`Cleaned up ${deleted} old health history records`);
+        this.logger.log(`오래된 헬스 기록 ${deleted}개 정리 완료`);
       }
     } catch (error) {
-      this.logger.error('Health history cleanup failed:', error);
+      this.logger.error('헬스 기록 정리 실패:', error);
     }
   }
 }

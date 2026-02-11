@@ -12,6 +12,7 @@ import { Request, Response } from 'express';
 import {
   AUDIT_ACTION_KEY,
   AuditActionOptions,
+  AuthEventActor,
 } from '../decorators/audit-action.decorator';
 import { AuditLogService } from '../../business/audit/audit-log.service';
 import {
@@ -70,7 +71,7 @@ export class AuditLogInterceptor implements NestInterceptor {
             await this.logSuccess(request, response, responseData, auditOptions, durationMs);
           }
         } catch (error) {
-          this.logger.error('Failed to log audit success', error);
+          this.logger.error('감사 로그 성공 기록 실패', error);
         }
       }),
       catchError(async (error) => {
@@ -78,7 +79,7 @@ export class AuditLogInterceptor implements NestInterceptor {
           const durationMs = Date.now() - startTime;
           await this.logFailure(request, response, error, auditOptions, durationMs);
         } catch (logError) {
-          this.logger.error('Failed to log audit failure', logError);
+          this.logger.error('감사 로그 실패 기록 실패', logError);
         }
         throw error;
       }),
@@ -99,6 +100,12 @@ export class AuditLogInterceptor implements NestInterceptor {
     options: AuditActionOptions,
     durationMs: number,
   ): Promise<void> {
+    // 인증 경계 이벤트는 별도 경로로 처리
+    if (options.authEvent) {
+      await this.logAuthEventSuccess(request, response, responseData, options, durationMs);
+      return;
+    }
+
     const snapshot = RequestContext.getAuditSnapshot();
 
     if (!this.isLoggable(snapshot, options.action)) {
@@ -107,7 +114,7 @@ export class AuditLogInterceptor implements NestInterceptor {
 
     const targetId = this.extractTargetId(request, responseData, options.targetIdParam);
     if (!this.isValidUuid(targetId)) {
-      this.logger.warn(`Skipping audit log: invalid targetId "${targetId}" for action ${options.action}`);
+      this.logger.warn(`감사 로그 스킵: 유효하지 않은 targetId "${targetId}" (액션: ${options.action})`);
       return;
     }
 
@@ -169,7 +176,7 @@ export class AuditLogInterceptor implements NestInterceptor {
       try {
         const targetId = this.extractTargetId(request, item, options.targetIdParam);
         if (!this.isValidUuid(targetId)) {
-          this.logger.warn(`Skipping per-item audit log: invalid targetId "${targetId}" for action ${options.action}`);
+          this.logger.warn(`항목별 감사 로그 스킵: 유효하지 않은 targetId "${targetId}" (액션: ${options.action})`);
           continue;
         }
 
@@ -208,7 +215,7 @@ export class AuditLogInterceptor implements NestInterceptor {
           description,
         });
       } catch (itemError) {
-        this.logger.error(`Failed to log per-item audit for item`, itemError);
+        this.logger.error(`항목별 감사 로그 기록 실패`, itemError);
       }
     }
   }
@@ -223,6 +230,12 @@ export class AuditLogInterceptor implements NestInterceptor {
     options: AuditActionOptions,
     durationMs: number,
   ): Promise<void> {
+    // 인증 경계 이벤트는 별도 경로로 처리
+    if (options.authEvent) {
+      await this.logAuthEventFailure(request, response, error, options, durationMs);
+      return;
+    }
+
     const snapshot = RequestContext.getAuditSnapshot();
 
     if (!this.isLoggable(snapshot, options.action)) {
@@ -231,7 +244,7 @@ export class AuditLogInterceptor implements NestInterceptor {
 
     const targetId = this.extractTargetId(request, null, options.targetIdParam);
     if (!this.isValidUuid(targetId)) {
-      this.logger.warn(`Skipping audit log: invalid targetId "${targetId}" for action ${options.action}`);
+      this.logger.warn(`감사 로그 스킵: 유효하지 않은 targetId "${targetId}" (액션: ${options.action})`);
       return;
     }
 
@@ -260,6 +273,163 @@ export class AuditLogInterceptor implements NestInterceptor {
   }
 
   // ──────────────────────────────────────────────
+  //  인증 경계 이벤트 (Auth Event)
+  // ──────────────────────────────────────────────
+
+  /**
+   * 인증 이벤트 성공 로그 기록
+   *
+   * 로그인/로그아웃 등 인증 경계 이벤트에 대한 성공 감사 로그를 기록한다.
+   * - 로그인: 응답 데이터에서 actor/target 추출 (extractActorFromResponse)
+   * - 로그아웃: RequestContext snapshot에서 actor 정보 사용
+   */
+  private async logAuthEventSuccess(
+    request: Request,
+    response: Response,
+    responseData: any,
+    options: AuditActionOptions,
+    durationMs: number,
+  ): Promise<void> {
+    const snapshot = RequestContext.getAuditSnapshot();
+
+    // Actor 결정: 응답에서 추출 → snapshot fallback
+    const actorFromResponse = options.extractActorFromResponse?.(responseData);
+    const actor: AuthEventActor = {
+      userId: actorFromResponse?.userId ?? snapshot.userId ?? '',
+      userName: actorFromResponse?.userName ?? snapshot.userName,
+      userEmail: actorFromResponse?.userEmail ?? snapshot.userEmail,
+      userType: actorFromResponse?.userType ?? snapshot.userType,
+    };
+
+    if (!actor.userId) {
+      this.logger.warn(
+        `인증 감사 로그 스킵: userId를 확인할 수 없음 (액션: ${options.action})`,
+      );
+      return;
+    }
+
+    // TargetId 결정: 응답에서 추출 → actor.userId fallback (본인이 곧 target)
+    const targetId = options.extractTargetIdFromResponse
+      ? options.extractTargetIdFromResponse(responseData)
+      : actor.userId;
+
+    if (!this.isValidUuid(targetId)) {
+      this.logger.warn(
+        `인증 감사 로그 스킵: 유효하지 않은 targetId "${targetId}" (액션: ${options.action})`,
+      );
+      return;
+    }
+
+    const metadata = options.extractMetadata?.(request, responseData);
+    const targetName =
+      this.extractTargetName(request, responseData, options.targetNameParam)
+      ?? actor.userName;
+
+    const description = this.buildDescription({
+      action: options.action,
+      actorName: actor.userName ?? 'unknown',
+      actorType: actor.userType,
+      targetName,
+      result: LogResult.SUCCESS,
+      metadata,
+    });
+
+    await this.auditLogService.logSuccess({
+      requestId: snapshot.requestId,
+      sessionId: snapshot.sessionId,
+      traceId: snapshot.traceId,
+      userId: actor.userId,
+      userType: actor.userType ?? UserType.INTERNAL,
+      userName: actor.userName,
+      userEmail: actor.userEmail,
+      action: options.action,
+      targetType: options.targetType,
+      targetId,
+      targetName,
+      ipAddress: snapshot.ipAddress,
+      userAgent: snapshot.userAgent,
+      clientType: snapshot.clientType,
+      httpMethod: request.method,
+      apiEndpoint: this.extractApiEndpoint(request),
+      responseStatusCode: response.statusCode,
+      durationMs,
+      metadata,
+      description,
+    });
+  }
+
+  /**
+   * 인증 이벤트 실패 로그 기록
+   *
+   * 로그인 실패 등 인증 경계 이벤트의 실패를 기록한다.
+   * - snapshot에 userId가 있으면 사용 (로그아웃 실패 등)
+   * - userId가 없으면 (로그인 실패) 요청 정보(email 등)를 metadata로 기록
+   */
+  private async logAuthEventFailure(
+    request: Request,
+    response: Response,
+    error: Error,
+    options: AuditActionOptions,
+    durationMs: number,
+  ): Promise<void> {
+    const snapshot = RequestContext.getAuditSnapshot();
+    const { statusCode, errorCode, failReason } = this.extractErrorInfo(error, response);
+    const systemAction = resolveSystemAction(errorCode);
+
+    // Actor: snapshot에서 가져오기 (로그아웃 실패 등 인증된 상태)
+    const userId = snapshot.userId;
+
+    if (!userId) {
+      // 로그인 실패: userId 없음 → 요청 정보만으로 기록
+      // audit_log 테이블에서 userId는 필수이므로 요청 email을 metadata에 포함하여 기록
+      const attemptEmail = request.body?.email as string | undefined;
+      this.logger.warn(
+        `userId 없이 인증 이벤트 실패 (액션: ${options.action}, 이메일: ${attemptEmail ?? '알 수 없음'}). ` +
+        `사유: ${failReason}`,
+      );
+      // userId 없이는 감사 로그 생성 불가 → 스킵 (warn으로 추적 가능)
+      return;
+    }
+
+    // userId가 있는 경우 (로그아웃 실패 등)
+    const targetId = userId; // 인증 이벤트에서 target은 본인
+
+    const description = this.buildDescription({
+      action: options.action,
+      actorName: snapshot.userName,
+      actorType: snapshot.userType,
+      result: LogResult.FAIL,
+      failReason,
+      errorCode,
+    });
+
+    await this.auditLogService.logFailure({
+      requestId: snapshot.requestId,
+      sessionId: snapshot.sessionId,
+      traceId: snapshot.traceId,
+      userId,
+      userType: snapshot.userType,
+      userName: snapshot.userName,
+      userEmail: snapshot.userEmail,
+      action: options.action,
+      targetType: options.targetType,
+      targetId,
+      ipAddress: snapshot.ipAddress,
+      userAgent: snapshot.userAgent,
+      clientType: snapshot.clientType,
+      httpMethod: request.method,
+      apiEndpoint: this.extractApiEndpoint(request),
+      responseStatusCode: statusCode,
+      durationMs,
+      failReason,
+      resultCode: errorCode,
+      errorCode,
+      systemAction,
+      description,
+    });
+  }
+
+  // ──────────────────────────────────────────────
   //  공통 헬퍼
   // ──────────────────────────────────────────────
 
@@ -273,7 +443,7 @@ export class AuditLogInterceptor implements NestInterceptor {
     action: string,
   ): boolean {
     if (!snapshot.userId) {
-      this.logger.debug(`Skipping audit log for unauthenticated request (action: ${action})`);
+      this.logger.debug(`비인증 요청에 대한 감사 로그 스킵 (액션: ${action})`);
       return false;
     }
     return true;
@@ -326,7 +496,7 @@ export class AuditLogInterceptor implements NestInterceptor {
       ?? (err.errorCode as string)
       ?? String(statusCode);
 
-    const failReason = error.message || 'Unknown error';
+    const failReason = error.message || '알 수 없는 오류';
 
     return { statusCode, errorCode, failReason };
   }
@@ -358,7 +528,7 @@ export class AuditLogInterceptor implements NestInterceptor {
       });
     } catch (error) {
       this.logger.warn(
-        `Failed to generate description for action ${params.action}: ${error instanceof Error ? error.message : String(error)}`,
+        `액션 ${params.action}에 대한 설명 생성 실패: ${error instanceof Error ? error.message : String(error)}`,
       );
       const suffix = params.failReason ? ` 실패: ${params.failReason}` : '';
       return `${params.actorName}가 ${params.action} 수행${suffix}`;

@@ -29,6 +29,10 @@ import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audi
 import { TargetType } from '../../../domain/audit/enums/common.enum';
 import { RequestContext } from '../../../common/context/request-context';
 import { NasAvailabilityGuard } from '../../../common/guards/nas-availability.guard';
+import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
+import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
+import { PermissionEnum } from '../../../domain/role/permission.enum';
 
 
 /**
@@ -37,7 +41,8 @@ import { NasAvailabilityGuard } from '../../../common/guards/nas-availability.gu
  * 설계 문서: 060-1.휴지통_처리_FLOW.md
  */
 @ApiTags('220.휴지통')
-@UseGuards(NasAvailabilityGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard, NasAvailabilityGuard)
+@RequirePermissions(PermissionEnum.TRASH_READ)
 @Controller('v1/trash')
 export class TrashController {
   private readonly logger = new Logger(TrashController.name);
@@ -61,6 +66,7 @@ export class TrashController {
    * POST /trash/restore/preview - 복원 미리보기 (경로 상태 확인)
    */
   @Post('restore/preview')
+  @RequirePermissions(PermissionEnum.FILE_RESTORE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '복원 미리보기' })
   async previewRestore(@Body() request: RestorePreviewRequest): Promise<RestorePreviewResponse> {
@@ -71,6 +77,7 @@ export class TrashController {
    * POST /trash/restore/execute - 복원 실행
    */
   @Post('restore/execute')
+  @RequirePermissions(PermissionEnum.FILE_RESTORE)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: '복원 실행' })
   @AuditAction({
@@ -100,6 +107,7 @@ export class TrashController {
    * DELETE /trash/files/:trashMetadataId - 파일 영구삭제
    */
   @Delete('files/:trashMetadataId')
+  @RequirePermissions(PermissionEnum.FILE_PURGE)
   @ApiOperation({ summary: '파일 영구삭제' })
   @AuditAction({
     action: AuditActionEnum.FILE_PURGE,
@@ -120,6 +128,7 @@ export class TrashController {
    * DELETE /trash/all - 휴지통 비우기
    */
   @Delete('all')
+  @RequirePermissions(PermissionEnum.FILE_PURGE)
   @ApiOperation({ summary: '휴지통 비우기' })
   @AuditAction({
     action: AuditActionEnum.TRASH_EMPTY,

@@ -54,8 +54,8 @@ export class TokenBlacklistService {
 
     const existing = await this.repo.findOne({ where: { tokenHash } });
     if (existing) {
-      this.logger.debug(`Token already blacklisted: userId=${userId}`);
-      return;
+      this.logger.debug(`토큰 이미 블랙리스트에 있음: userId=${userId}`);
+    return;
     }
 
     await this.repo.save({
@@ -66,7 +66,7 @@ export class TokenBlacklistService {
       expiresAt: tokenExpiresAt,
     });
 
-    this.logger.log(`Token blacklisted: userId=${userId}, reason=${reason}`);
+    this.logger.log(`토큰 블랙리스트에 추가: userId=${userId}, reason=${reason}`);
   }
 
   /**
@@ -99,7 +99,7 @@ export class TokenBlacklistService {
       .execute();
 
     if (result.affected && result.affected > 0) {
-      this.logger.debug(`Cleaned up ${result.affected} expired blacklisted tokens`);
+      this.logger.debug(`만료된 블랙리스트 레코드 삭제 완료 ${result.affected}개`);
     }
   }
 

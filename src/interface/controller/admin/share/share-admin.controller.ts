@@ -9,6 +9,9 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiExtraModels } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../../common/guards';
+import { PermissionsGuard } from '../../../../business/role/guards/permissions.guard';
+import { RequirePermissions } from '../../../../business/role/decorators/require-permissions.decorator';
+import { PermissionEnum } from '../../../../domain/role/permission.enum';
 import { PublicShareManagementService } from '../../../../business/external-share/public-share-management.service';
 import { User } from '../../../../common/decorators/user.decorator';
 import {
@@ -40,7 +43,8 @@ import { TargetType } from '../../../../domain/audit/enums/common.enum';
 @ApiTags('805.관리자 - 파일 공유 관리')
 @Controller('v1/admin/shares')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermissions(PermissionEnum.FILE_SHARE_READ)
 @ApiExtraModels(PublicShareListItemDto, SharedFileStatsDto)
 export class ShareAdminController {
   constructor(
@@ -74,7 +78,9 @@ export class ShareAdminController {
   /**
    * 공유 차단
    */
+
   @Patch(':id/block')
+  @RequirePermissions(PermissionEnum.FILE_SHARE_DELETE)
   @ApiBlockShare()
   @AuditAction({
     action: AuditActionEnum.SHARE_BLOCK,
@@ -93,6 +99,7 @@ export class ShareAdminController {
    * 차단 해제
    */
   @Patch(':id/unblock')
+  @RequirePermissions(PermissionEnum.FILE_SHARE_DELETE)
   @ApiUnblockShare()
   @AuditAction({
     action: AuditActionEnum.SHARE_UNBLOCK,
@@ -122,6 +129,7 @@ export class ShareAdminController {
    * 특정 파일의 모든 공유 일괄 차단
    */
   @Patch('files/:fileId/block-all')
+  @RequirePermissions(PermissionEnum.FILE_SHARE_DELETE)
   @ApiBlockAllSharesByFile()
   @AuditAction({
     action: AuditActionEnum.SHARE_BULK_BLOCK,
@@ -139,6 +147,7 @@ export class ShareAdminController {
    * 특정 파일의 모든 공유 일괄 차단 해제
    */
   @Patch('files/:fileId/unblock-all')
+  @RequirePermissions(PermissionEnum.FILE_SHARE_DELETE)
   @ApiUnblockAllSharesByFile()
   @AuditAction({
     action: AuditActionEnum.SHARE_BULK_UNBLOCK,
@@ -155,6 +164,7 @@ export class ShareAdminController {
    * 특정 외부 사용자의 모든 공유 일괄 차단
    */
   @Patch('external-users/:userId/block-all')
+  @RequirePermissions(PermissionEnum.FILE_SHARE_DELETE)
   @ApiBlockAllSharesByExternalUser()
   @AuditAction({
     action: AuditActionEnum.SHARE_BULK_BLOCK,

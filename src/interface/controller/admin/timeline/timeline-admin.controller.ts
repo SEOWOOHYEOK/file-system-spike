@@ -8,6 +8,9 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../../common/guards';
+import { PermissionsGuard } from '../../../../business/role/guards/permissions.guard';
+import { RequirePermissions } from '../../../../business/role/decorators/require-permissions.decorator';
+import { PermissionEnum } from '../../../../domain/role/permission.enum';
 import { UnifiedTimelineService } from '../../../../business/audit/unified-timeline.service';
 import {
   TimelineTimeRangeQueryDto,
@@ -23,7 +26,8 @@ import {
 @ApiTags('806.관리자 - audit log 확인')
 @Controller('v1/admin/timeline')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermissions(PermissionEnum.AUDIT_READ)
 export class TimelineAdminController {
   constructor(
     private readonly unifiedTimelineService: UnifiedTimelineService,

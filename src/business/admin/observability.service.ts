@@ -150,13 +150,13 @@ export class ObservabilityService {
         freeBytes: result.capacity?.freeBytes ?? 0,
         error: result.error,
       });
-      this.logger.debug(`Health check recorded: ${result.status}`);
+      this.logger.debug(`헬스 체크 완료: ${result.status}`);
     } catch (error) {
       // 체크 자체 실패 시 unhealthy로 전환
       this.nasStatusCache.markUnhealthy(
         error instanceof Error ? error.message : 'Health check failed',
       );
-      this.logger.error('Failed to execute health check:', error);
+      this.logger.error('헬스 체크 실패:', error);
     }
   }
 

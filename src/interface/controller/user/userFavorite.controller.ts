@@ -30,9 +30,13 @@ import {
 } from './userFavorite.swagger';
 import { RequestContext } from '../../../common/context/request-context';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
+import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
+import { PermissionEnum } from '../../../domain/role/permission.enum';
 
 @ApiTags('310.사용자 즐겨 찾기')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermissions(PermissionEnum.FOLDER_READ)
 @Controller('v1/users/favorites')
 export class UserFavoriteController {
   constructor(

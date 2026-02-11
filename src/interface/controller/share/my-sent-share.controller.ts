@@ -9,6 +9,9 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../common/guards';
+import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
+import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
+import { PermissionEnum } from '../../../domain/role/permission.enum';
 import { PublicShareManagementService } from '../../../business/external-share/public-share-management.service';
 import { ShareRequestCommandService } from '../../../business/share-request/share-request-command.service';
 import { ShareRequestQueryService } from '../../../business/share-request/share-request-query.service';
@@ -43,7 +46,8 @@ import { createPaginatedResult } from '../../../common/types/pagination';
 @ApiTags('701.내가 보낸 파일 공유 관리')
 @Controller('v1/file-shares-requests')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, PermissionsGuard)
+@RequirePermissions(PermissionEnum.FILE_SHARE_READ)
 export class MySentShareController {
   constructor(
     private readonly shareService: PublicShareManagementService,
@@ -173,6 +177,7 @@ export class MySentShareController {
    * PENDING ShareRequest → cancel, ACTIVE PublicShare → revoke
    */
   @Post(':id/cancel')
+  @RequirePermissions(PermissionEnum.FILE_SHARE_REQUEST)
   @ApiCancelMySentShare()
   @AuditAction({
     action: AuditActionEnum.SHARE_REVOKE,

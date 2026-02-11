@@ -184,7 +184,7 @@ export class StorageConsistencyService {
       }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.warn(`Storage check failed for ${storageObject.objectKey}: ${errorMessage}`);
+      this.logger.warn(`스토리지 확인 실패: ${storageObject.objectKey}: ${errorMessage}`);
       issues.push({
         fileId: file.id,
         fileName: file.name,

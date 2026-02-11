@@ -362,6 +362,9 @@ const auditLogTemplates: Record<AuditAction, AuditLogTemplate> = {
   [AuditAction.TOKEN_GENERATE]: ({ actor, metadata }) =>
     `${actor}이 JWT 토큰을 수동 생성함${metadata?.employeeNumber ? ` (${metadata.employeeNumber})` : ''}`,
 
+  [AuditAction.TOKEN_REFRESH]: ({ actor }) =>
+    `${actor}이 토큰을 갱신함`,
+
   [AuditAction.ORG_MIGRATION]: ({ actor }) =>
     `${actor}이 SSO 조직 데이터 마이그레이션을 실행함`,
 

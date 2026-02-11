@@ -12,7 +12,7 @@ export class PermissionSyncService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    this.logger.log('Starting permission synchronization...');
+    this.logger.log('권한 동기화 시작...');
 
     const definedPermissions = Object.values(PermissionEnum);
 
@@ -25,10 +25,10 @@ export class PermissionSyncService implements OnModuleInit {
             description: PermissionDescriptions[code],
           }),
         );
-        this.logger.log(`Created permission: ${code} (${PermissionDescriptions[code]})`);
+        this.logger.log(`권한 생성됨: ${code} (${PermissionDescriptions[code]})`);
       }
     }
 
-    this.logger.log('Permission synchronization completed');
+    this.logger.log('권한 동기화 완료');
   }
 }

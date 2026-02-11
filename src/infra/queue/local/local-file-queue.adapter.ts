@@ -62,7 +62,7 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
     this.pollingInterval = this.configService.get<number>('QUEUE_POLLING_INTERVAL', 3000);
     this.defaultMaxAttempts = this.configService.get<number>('QUEUE_DEFAULT_MAX_ATTEMPTS', 3);
     this.defaultBackoffMs = this.configService.get<number>('QUEUE_DEFAULT_BACKOFF_MS', 5000);
-    this.logger.log(`LocalFileQueueAdapter initialized - Path: ${this.basePath}, maxAttempts: ${this.defaultMaxAttempts}, backoff: ${this.defaultBackoffMs}ms`);
+    this.logger.log(`LocalFileQueueAdapter 초기화됨 - 경로: ${this.basePath}, maxAttempts: ${this.defaultMaxAttempts}, backoff: ${this.defaultBackoffMs}ms`);
   }
 
   async onModuleInit(): Promise<void> {
@@ -84,13 +84,13 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
     const cleanupIntervalMs = 60 * 60 * 1000; // 1시간
     const cleanupTimer = setInterval(() => {
       this.cleanupOldJobs().catch((error) => {
-        this.logger.error(`Failed to cleanup old jobs: ${error}`);
+        this.logger.error(`오래된 작업 정리 실패: ${error}`);
       });
     }, cleanupIntervalMs);
     
     // 타이머 정리를 위해 저장 (onModuleDestroy에서 정리)
     this.pollingTimers.set('__cleanup__', cleanupTimer);
-    this.logger.log('Cleanup scheduler started (interval: 1 hour)');
+    this.logger.log('정리 스케줄러 시작됨 (주기: 1시간)');
   }
 
   /**
@@ -128,7 +128,7 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
     }
     
     if (deletedCount > 0) {
-      this.logger.log(`Cleanup completed: deleted ${deletedCount} old job files`);
+      this.logger.log(`정리 완료: 오래된 작업 파일 ${deletedCount}개 삭제됨`);
     }
   }
 
@@ -147,7 +147,7 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
         await this.recoverQueueActiveJobs(queueName);
       }
     } catch (error) {
-      this.logger.error(`Failed to recover stale active jobs: ${error}`);
+      this.logger.error(`미완료 활성 작업 복구 실패: ${error}`);
     }
   }
 
@@ -184,7 +184,7 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
     if (activeJobIds.length === 0) return;
     
     this.logger.warn(
-      `Recovering ${activeJobIds.length} stale active jobs in queue: ${queueName}`,
+      `큐 ${queueName}에서 미완료 활성 작업 ${activeJobIds.length}개 복구 중`,
     );
     
     for (const jobId of activeJobIds) {
@@ -192,7 +192,7 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
         const jobFile = await this.readJobFile<JobData>(queueName, jobId, 'active');
         if (!jobFile) {
           // 다른 인스턴스가 이미 복구했거나 파일이 없음
-          this.logger.debug(`Job already recovered by another instance: ${jobId}`);
+          this.logger.debug(`작업이 다른 인스턴스에서 이미 복구됨: ${jobId}`);
           continue;
         }
         
@@ -208,15 +208,15 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
         await this.moveJobFile(queueName, jobFile, 'active', 'waiting');
         
         this.logger.log(
-          `Recovered stale job: ${jobId} (attempts: ${jobFile.job.attemptsMade})`,
+          `미완료 작업 복구됨: ${jobId} (시도 횟수: ${jobFile.job.attemptsMade})`,
         );
       } catch (error: any) {
         // Race condition으로 인한 파일 없음 에러는 무시
         if (error.code === 'ENOENT') {
-          this.logger.debug(`Job already recovered by another instance: ${jobId}`);
+          this.logger.debug(`작업이 다른 인스턴스에서 이미 복구됨: ${jobId}`);
           continue;
         }
-        this.logger.error(`Failed to recover job ${jobId}: ${error.message}`);
+        this.logger.error(`작업 복구 실패 ${jobId}: ${error.message}`);
       }
     }
   }
@@ -225,7 +225,7 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
     // 모든 폴링 타이머 정리
     for (const [queueName, timer] of this.pollingTimers) {
       clearInterval(timer);
-      this.logger.log(`Polling stopped for queue: ${queueName}`);
+      this.logger.log(`큐 폴링 중지: ${queueName}`);
     }
   }
 
@@ -352,7 +352,7 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
 
     const status = options?.delay ? 'delayed' : 'waiting';
     await this.saveJobFile(queueName, jobFile, status);
-    this.logger.debug(`Job added to ${queueName}: ${jobId}`);
+    this.logger.debug(`작업 추가됨 ${queueName}: ${jobId}`);
 
     return job;
   }
@@ -367,7 +367,7 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
     this.concurrencyMap.set(queueName, concurrency);
     this.activeJobsCount.set(queueName, 0);
     this.startPolling(queueName);
-    this.logger.log(`Processor registered for queue: ${queueName} (concurrency: ${concurrency})`);
+    this.logger.log(`큐 프로세서 등록됨: ${queueName} (동시성: ${concurrency})`);
   }
 
   /**
@@ -386,7 +386,7 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
         // 대기 중인 작업 처리
         await this.processWaitingJobs(queueName);
       } catch (error) {
-        this.logger.error(`Polling error for ${queueName}: ${error}`);
+        this.logger.error(`큐 폴링 오류 ${queueName}: ${error}`);
       }
     };
 
@@ -394,7 +394,7 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
     poll();
     const timer = setInterval(poll, this.pollingInterval);
     this.pollingTimers.set(queueName, timer);
-    this.logger.log(`Polling started for queue: ${queueName} (interval: ${this.pollingInterval}ms)`);
+    this.logger.log(`큐 폴링 시작됨: ${queueName} (주기: ${this.pollingInterval}ms)`);
   }
 
   /**
@@ -411,7 +411,7 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
       if (jobFile.scheduledAt && jobFile.scheduledAt <= now) {
         jobFile.job.status = 'waiting';
         await this.moveJobFile(queueName, jobFile, 'delayed', 'waiting');
-        this.logger.debug(`Delayed job moved to waiting: ${jobId}`);
+        this.logger.debug(`지연 작업 대기로 이동됨: ${jobId}`);
       }
     }
   }
@@ -470,7 +470,7 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
           await this.moveJobFile(queueName, jobFile, 'active', 'completed');
         }
 
-        this.logger.debug(`Job completed: ${jobId}`);
+        this.logger.debug(`작업 완료: ${jobId}`);
       } catch (error: any) {
         // 실패 처리
         jobFile.job.failedReason = error.message;
@@ -482,7 +482,7 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
           const backoff = jobFile.options?.backoff || this.defaultBackoffMs;
           jobFile.scheduledAt = Date.now() + backoff * jobFile.job.attemptsMade!;
           await this.moveJobFile(queueName, jobFile, 'active', 'delayed');
-          this.logger.warn(`Job ${jobId} failed, will retry (attempt ${jobFile.job.attemptsMade}/${maxAttempts})`);
+          this.logger.warn(`작업 ${jobId} 실패, 재시도 예정 (시도 ${jobFile.job.attemptsMade}/${maxAttempts})`);
         } else {
           // 최종 실패
           jobFile.job.status = 'failed';
@@ -493,7 +493,7 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
             await this.moveJobFile(queueName, jobFile, 'active', 'failed');
           }
 
-          this.logger.error(`Job ${jobId} failed permanently: ${error.message}`);
+          this.logger.error(`작업 ${jobId} 최종 실패: ${error.message}`);
         }
       } finally {
         // active 카운트 감소
@@ -527,7 +527,7 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
       await this.deleteJobFile(queueName, jobId, status);
     }
 
-    this.logger.debug(`Job removed: ${jobId}`);
+    this.logger.debug(`작업 제거됨: ${jobId}`);
   }
 
   async getWaitingCount(queueName: string): Promise<number> {
@@ -557,20 +557,20 @@ export class LocalFileQueueAdapter implements IJobQueuePort, OnModuleInit, OnMod
     try {
       await fs.rm(completedPath, { recursive: true, force: true });
       await fs.rm(failedPath, { recursive: true, force: true });
-      this.logger.log(`Queue cleaned: ${queueName}`);
+      this.logger.log(`큐 정리 완료: ${queueName}`);
     } catch (error) {
-      this.logger.error(`Failed to clean queue ${queueName}: ${error}`);
+      this.logger.error(`큐 정리 실패 ${queueName}: ${error}`);
     }
   }
 
   async pauseQueue(queueName: string): Promise<void> {
     this.pausedQueues.add(queueName);
-    this.logger.log(`Queue paused: ${queueName}`);
+    this.logger.log(`큐 일시정지됨: ${queueName}`);
   }
 
   async resumeQueue(queueName: string): Promise<void> {
     this.pausedQueues.delete(queueName);
-    this.logger.log(`Queue resumed: ${queueName}`);
+    this.logger.log(`큐 재개됨: ${queueName}`);
   }
 
   async getQueueStats(queueName: string): Promise<QueueStats> {

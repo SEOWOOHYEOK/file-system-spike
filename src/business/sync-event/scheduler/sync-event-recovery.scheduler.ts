@@ -66,17 +66,17 @@ export class SyncEventRecoveryScheduler {
         return;
       }
 
-      this.logger.log(`Found ${staleEvents.length} stale PENDING SyncEvents, recovering...`);
+      this.logger.log(`오래된 PENDING SyncEvent ${staleEvents.length}개 발견, 복구 중...`);
 
       for (const event of staleEvents) {
         try {
           await this.recoverSyncEvent(event);
         } catch (error) {
-          this.logger.error(`Failed to recover SyncEvent ${event.id}:`, error);
+          this.logger.error(`SyncEvent 복구 실패: ${event.id}:`, error);
         }
       }
     } catch (error) {
-      this.logger.error('Failed to recover stale PENDING SyncEvents:', error);
+      this.logger.error('오래된 PENDING SyncEvent 복구 실패:', error);
     }
   }
 
@@ -88,7 +88,7 @@ export class SyncEventRecoveryScheduler {
     const queueName = this.getQueueName(event);
 
     if (!jobData || !queueName) {
-      this.logger.warn(`Cannot build jobData for SyncEvent ${event.id}, skipping`);
+      this.logger.warn(`SyncEvent ${event.id}용 jobData 생성 불가, 스킵`);
       return;
     }
 
@@ -99,7 +99,7 @@ export class SyncEventRecoveryScheduler {
     event.markQueued();
     await this.syncEventDomainService.저장(event);
 
-    this.logger.log(`Recovered SyncEvent ${event.id}: ${event.eventType} ${event.targetType}`);
+    this.logger.log(`SyncEvent 복구됨: ${event.id}: ${event.eventType} ${event.targetType}`);
   }
 
   /**

@@ -84,7 +84,7 @@ export class NasHealthCheckService {
         capacity,
       };
     } catch (error) {
-      this.logger.error(`NAS health check failed: ${error}`);
+      this.logger.error(`NAS 상태 확인 실패: ${error}`);
       return {
         status: 'unhealthy',
         responseTimeMs: Date.now() - startTime,

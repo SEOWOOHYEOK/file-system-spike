@@ -147,9 +147,9 @@ export class FileUploadService {
       await this.syncEventDomainService.저장(syncEvent);
     } catch (dbError) {
       // DB 저장 실패 시 SeaweedFS 파일 삭제 (보상 트랜잭션)
-      this.logger.warn(`DB save failed, cleaning up SeaweedFS file: ${fileId}`);
+      this.logger.warn(`DB 저장 실패, SeaweedFS 파일 정리 중: ${fileId}`);
       await this.cacheStorage.파일삭제(fileId).catch((cleanupError) => {
-        this.logger.error(`Failed to cleanup SeaweedFS file: ${fileId}`, cleanupError);
+        this.logger.error(`SeaweedFS 파일 정리 실패: ${fileId}`, cleanupError);
       });
       throw dbError;
     }

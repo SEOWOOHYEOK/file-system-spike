@@ -36,7 +36,7 @@ export class AuditLogService extends BufferedWriter<AuditLog> {
   }
 
   protected get entityName(): string {
-    return 'audit logs';
+    return '감사 로그';
   }
 
   // ──────────────────────────────────────────────
@@ -51,7 +51,7 @@ export class AuditLogService extends BufferedWriter<AuditLog> {
       const log = AuditLog.create(params);
       await this.enqueue(log);
     } catch (error) {
-      this.logger.error('Failed to create audit log', error);
+      this.logger.error('감사 로그 생성 실패', error);
     }
   }
 
