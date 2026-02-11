@@ -74,6 +74,16 @@ export enum AuditAction {
   TOKEN_REFRESH = 'TOKEN_REFRESH', // 토큰 갱신 (리프레시 토큰 로테이션)
   ORG_MIGRATION = 'ORG_MIGRATION', // 조직 데이터 마이그레이션
 
+  // 파일 작업 요청 관련
+  FILE_ACTION_REQUEST_MOVE_CREATE = 'FILE_ACTION_REQUEST_MOVE_CREATE', // 파일 이동 요청 생성
+  FILE_ACTION_REQUEST_DELETE_CREATE = 'FILE_ACTION_REQUEST_DELETE_CREATE', // 파일 삭제 요청 생성
+  FILE_ACTION_REQUEST_CANCEL = 'FILE_ACTION_REQUEST_CANCEL', // 파일 작업 요청 취소
+  FILE_ACTION_REQUEST_APPROVE = 'FILE_ACTION_REQUEST_APPROVE', // 파일 작업 요청 승인
+  FILE_ACTION_REQUEST_REJECT = 'FILE_ACTION_REQUEST_REJECT', // 파일 작업 요청 반려
+  FILE_ACTION_REQUEST_BULK_APPROVE = 'FILE_ACTION_REQUEST_BULK_APPROVE', // 파일 작업 요청 일괄 승인
+  FILE_ACTION_REQUEST_BULK_REJECT = 'FILE_ACTION_REQUEST_BULK_REJECT', // 파일 작업 요청 일괄 반려
+  FILE_ACTION_REQUEST_INVALIDATED = 'FILE_ACTION_REQUEST_INVALIDATED', // 파일 작업 요청 무효화
+
   // === 보안 이벤트 (SecurityEvent 흡수) ===
   LOGIN_SUCCESS = 'LOGIN_SUCCESS', // 로그인 성공
   LOGIN_FAILURE = 'LOGIN_FAILURE', // 로그인 실패
@@ -139,6 +149,15 @@ export const AuditActionDescription: Record<AuditAction, string> = {
   [AuditAction.TOKEN_REFRESH]: '토큰 갱신',
   [AuditAction.ORG_MIGRATION]: '조직 데이터 마이그레이션',
   
+  [AuditAction.FILE_ACTION_REQUEST_MOVE_CREATE]: '파일 이동 요청 생성',
+  [AuditAction.FILE_ACTION_REQUEST_DELETE_CREATE]: '파일 삭제 요청 생성',
+  [AuditAction.FILE_ACTION_REQUEST_CANCEL]: '파일 작업 요청 취소',
+  [AuditAction.FILE_ACTION_REQUEST_APPROVE]: '파일 작업 요청 승인',
+  [AuditAction.FILE_ACTION_REQUEST_REJECT]: '파일 작업 요청 반려',
+  [AuditAction.FILE_ACTION_REQUEST_BULK_APPROVE]: '파일 작업 요청 일괄 승인',
+  [AuditAction.FILE_ACTION_REQUEST_BULK_REJECT]: '파일 작업 요청 일괄 반려',
+  [AuditAction.FILE_ACTION_REQUEST_INVALIDATED]: '파일 작업 요청 무효화',
+
   [AuditAction.LOGIN_SUCCESS]: '로그인 성공',
   [AuditAction.LOGIN_FAILURE]: '로그인 실패',
   [AuditAction.LOGOUT]: '로그아웃',
@@ -215,6 +234,15 @@ export const AuditActionCategory: Record<AuditAction, ActionCategory> = {
   [AuditAction.TOKEN_GENERATE]: ActionCategory.SECURITY,
   [AuditAction.TOKEN_REFRESH]: ActionCategory.SECURITY,
   [AuditAction.ORG_MIGRATION]: ActionCategory.ADMIN,
+  [AuditAction.FILE_ACTION_REQUEST_MOVE_CREATE]: ActionCategory.FILE,
+  [AuditAction.FILE_ACTION_REQUEST_DELETE_CREATE]: ActionCategory.FILE,
+  [AuditAction.FILE_ACTION_REQUEST_CANCEL]: ActionCategory.FILE,
+  [AuditAction.FILE_ACTION_REQUEST_APPROVE]: ActionCategory.ADMIN,
+  [AuditAction.FILE_ACTION_REQUEST_REJECT]: ActionCategory.ADMIN,
+  [AuditAction.FILE_ACTION_REQUEST_BULK_APPROVE]: ActionCategory.ADMIN,
+  [AuditAction.FILE_ACTION_REQUEST_BULK_REJECT]: ActionCategory.ADMIN,
+  [AuditAction.FILE_ACTION_REQUEST_INVALIDATED]: ActionCategory.FILE,
+
   [AuditAction.LOGIN_SUCCESS]: ActionCategory.SECURITY,
   [AuditAction.LOGIN_FAILURE]: ActionCategory.SECURITY,
   [AuditAction.LOGOUT]: ActionCategory.SECURITY,

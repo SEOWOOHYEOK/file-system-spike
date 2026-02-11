@@ -25,6 +25,7 @@ export enum TargetType {
   FAVORITE = 'FAVORITE',
   ACTIVITY = 'ACTIVITY',
   SYSTEM = 'SYSTEM',
+  FILE_ACTION_REQUEST = 'FILE_ACTION_REQUEST',
 }
 
 /**
@@ -38,6 +39,7 @@ export const TargetTypeDescription: Record<TargetType, string> = {
   [TargetType.FAVORITE]: '즐겨찾기',
   [TargetType.ACTIVITY]: '활동',
   [TargetType.SYSTEM]: '시스템',
+  [TargetType.FILE_ACTION_REQUEST]: '파일 작업 요청',
 };
 
 /**

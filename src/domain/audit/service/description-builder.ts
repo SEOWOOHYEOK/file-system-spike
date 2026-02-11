@@ -368,6 +368,31 @@ const auditLogTemplates: Record<AuditAction, AuditLogTemplate> = {
   [AuditAction.ORG_MIGRATION]: ({ actor }) =>
     `${actor}이 SSO 조직 데이터 마이그레이션을 실행함`,
 
+  // === 파일 작업 요청 ===
+  [AuditAction.FILE_ACTION_REQUEST_MOVE_CREATE]: ({ actor, targetName }) =>
+    `${actor}이 '${targetName}' 파일 이동 요청을 생성함`,
+
+  [AuditAction.FILE_ACTION_REQUEST_DELETE_CREATE]: ({ actor, targetName }) =>
+    `${actor}이 '${targetName}' 파일 삭제 요청을 생성함`,
+
+  [AuditAction.FILE_ACTION_REQUEST_CANCEL]: ({ actor, targetName }) =>
+    `${actor}이 '${targetName}' 파일 작업 요청을 취소함`,
+
+  [AuditAction.FILE_ACTION_REQUEST_APPROVE]: ({ actor, targetName }) =>
+    `${actor}이 '${targetName}' 파일 작업 요청을 승인함`,
+
+  [AuditAction.FILE_ACTION_REQUEST_REJECT]: ({ actor, targetName }) =>
+    `${actor}이 '${targetName}' 파일 작업 요청을 반려함`,
+
+  [AuditAction.FILE_ACTION_REQUEST_BULK_APPROVE]: ({ actor, metadata }) =>
+    `${actor}이 파일 작업 요청 ${metadata?.count || ''}건을 일괄 승인함`,
+
+  [AuditAction.FILE_ACTION_REQUEST_BULK_REJECT]: ({ actor, metadata }) =>
+    `${actor}이 파일 작업 요청 ${metadata?.count || ''}건을 일괄 반려함`,
+
+  [AuditAction.FILE_ACTION_REQUEST_INVALIDATED]: ({ actor, targetName }) =>
+    `'${targetName}' 파일 작업 요청이 상태 변경으로 무효화됨`,
+
   // === 보안 이벤트 (SecurityEvent 흡수) ===
   [AuditAction.LOGIN_SUCCESS]: ({ actor }) =>
     `${actor}이 로그인함`,
