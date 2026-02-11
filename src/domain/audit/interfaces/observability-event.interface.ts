@@ -71,7 +71,7 @@ export interface ObservabilityEvent {
   /** HTTP 메서드 - GET, POST, DELETE 등 */
   httpMethod?: string;
 
-  /** API 엔드포인트 - /v1/files/upload, /v1/share-requests 등 */
+  /** API 엔드포인트 - /v1/files/upload, /v1/file-shares-requests 등 */
   apiEndpoint?: string;
 
   // === System Response (시스템이 어떻게 반응했는가) ===

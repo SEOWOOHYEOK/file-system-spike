@@ -10,7 +10,7 @@ import {
   ClientType,
   Sensitivity,
 } from '../../../domain/audit/enums/common.enum';
-import { Severity } from '../../../domain/audit/enums/security-event.enum';
+import { Severity } from '../../../domain/audit/enums/severity.enum';
 import { SystemAction } from '../../../domain/audit/enums/system-action.enum';
 import { AuditLogOrmEntity } from '../entities/audit-log.orm-entity';
 

@@ -10,7 +10,7 @@ import {
   ClientType,
   Sensitivity,
 } from '../enums/common.enum';
-import { Severity } from '../enums/security-event.enum';
+import { Severity } from '../enums/severity.enum';
 import { SystemAction } from '../enums/system-action.enum';
 
 /**
@@ -121,7 +121,7 @@ export interface CreateAuditLogParams {
   // ========== API 컨텍스트 (신규) ==========
   /** HTTP 메서드 - 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH' */
   httpMethod?: string;
-  /** API 엔드포인트 - '/v1/files/upload', '/v1/share-requests' 등 */
+  /** API 엔드포인트 - '/v1/files/upload', '/v1/file-shares-requests' 등 */
   apiEndpoint?: string;
 
   // ========== 인과관계 (신규) ==========
@@ -376,7 +376,7 @@ export class AuditLog {
   /**
    * API 엔드포인트
    * - 요청된 API 경로
-   * - 예: '/v1/files/upload', '/v1/share-requests'
+   * - 예: '/v1/files/upload', '/v1/file-shares-requests'
    */
   apiEndpoint?: string;
 

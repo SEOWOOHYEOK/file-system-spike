@@ -1,7 +1,9 @@
 import { Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CacheInfraModule } from '../../infra/cache/cache-infra.module';
+import { TokenBlacklistOrmEntity } from '../../infra/database/entities/token-blacklist.orm-entity';
 import { FileBusinessModule } from '../file/file.module';
 import { AuditModule } from '../audit/audit.module';
 import { ExternalShareDomainModule } from '../../domain/external-share/external-share.module';
@@ -11,6 +13,7 @@ import { FileDomainModule } from '../../domain/file/file.module';
 import { PublicShareManagementService } from './public-share-management.service';
 import { ExternalShareAccessService } from './external-share-access.service';
 import { PublicShareDomainService } from './public-share-domain.service';
+import { ShareTargetUserQueryService } from './share-target-user-query.service';
 
 // Security Services
 import { TokenBlacklistService } from './security/token-blacklist.service';
@@ -29,6 +32,7 @@ import { TokenBlacklistService } from './security/token-blacklist.service';
  */
 @Module({
   imports: [
+    TypeOrmModule.forFeature([TokenBlacklistOrmEntity]),
     ExternalShareDomainModule,
     FileDomainModule,
     CacheInfraModule,
@@ -61,6 +65,7 @@ import { TokenBlacklistService } from './security/token-blacklist.service';
     PublicShareManagementService,
     ExternalShareAccessService,
     PublicShareDomainService,
+    ShareTargetUserQueryService,
     // Security Services
     TokenBlacklistService,
   ],
@@ -69,6 +74,7 @@ import { TokenBlacklistService } from './security/token-blacklist.service';
     PublicShareManagementService,
     ExternalShareAccessService,
     PublicShareDomainService,
+    ShareTargetUserQueryService,
     // Security Services (가드에서 사용)
     TokenBlacklistService,
   ],

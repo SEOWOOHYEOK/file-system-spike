@@ -9,7 +9,7 @@ const METHOD_METADATA = 'method';
 // Import all controllers
 import { AppController } from '../../app.controller';
 import { AdminController } from '../../interface/controller/admin/admin.controller';
-import { ObservabilityController } from '../../interface/controller/admin/observability.controller';
+import { ObservabilityController } from '../../interface/controller/admin/observability/observability.controller';
 import { AuditLogController } from '../../interface/controller/admin/audit-log.controller';
 import { RoleController } from '../../interface/controller/admin/role/role.controller';
 import { ShareAdminController } from '../../interface/controller/admin/share/share-admin.controller';
@@ -21,11 +21,9 @@ import { ExternalShareController } from '../../interface/controller/external-aut
 import { FileController } from '../../interface/controller/file/file.controller';
 import { MultipartController } from '../../interface/controller/file/multipart.controller';
 import { FolderController } from '../../interface/controller/folder/folder.controller';
-import {
-  PublicShareController,
-  ExternalUsersController,
-} from '../../interface/controller/share/share.controller';
-import { ShareRequestController } from '../../interface/controller/share-request/share-request.controller';
+import { ShareRequestCreateController } from '../../interface/controller/share/share-request-create.controller';
+import { MySentShareController } from '../../interface/controller/share/my-sent-share.controller';
+import { MyReceivedRequestController } from '../../interface/controller/share/my-received-request.controller';
 import { SyncEventController } from '../../interface/controller/sync-event/sync-event.controller';
 import { TrashController } from '../../interface/controller/trash/trash.controller';
 import { UserAuditLogController } from '../../interface/controller/user/audit.controller';
@@ -76,9 +74,9 @@ const CONTROLLERS = [
   { name: 'FileController', controller: FileController },
   { name: 'MultipartController', controller: MultipartController },
   { name: 'FolderController', controller: FolderController },
-  { name: 'PublicShareController', controller: PublicShareController },
-  { name: 'ExternalUsersController', controller: ExternalUsersController },
-  { name: 'ShareRequestController', controller: ShareRequestController },
+  { name: 'ShareRequestCreateController', controller: ShareRequestCreateController },
+  { name: 'MySentShareController', controller: MySentShareController },
+  { name: 'MyReceivedRequestController', controller: MyReceivedRequestController },
   { name: 'SyncEventController', controller: SyncEventController },
   { name: 'TrashController', controller: TrashController },
   { name: 'UserAuditLogController', controller: UserAuditLogController },

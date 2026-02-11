@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
   AuditLog,
   CreateAuditLogParams,
@@ -13,49 +13,35 @@ import { AuditAction } from '../../domain/audit/enums/audit-action.enum';
 import { TargetType } from '../../domain/audit/enums/common.enum';
 import type { PaginationParams, PaginatedResult as CommonPaginatedResult } from '../../common/types/pagination';
 import { createPaginatedResult } from '../../common/types/pagination';
-
-/**
- * 로그 버퍼 설정
- */
-interface LogBufferConfig {
-  maxSize: number; // 최대 버퍼 크기
-  flushIntervalMs: number; // 자동 플러시 간격 (밀리초)
-}
-
-const DEFAULT_BUFFER_CONFIG: LogBufferConfig = {
-  maxSize: 100,
-  flushIntervalMs: 5000, // 5초
-};
+import { BufferedWriter } from './buffered-writer';
 
 /**
  * AuditLogService
  *
  * 감사 로그를 비동기적으로 처리하고 배치로 저장
- * - 로그 버퍼링으로 DB 부하 감소
+ * - BufferedWriter로 로그 버퍼링 (DB 부하 감소)
  * - 주기적 자동 플러시
  * - 앱 종료 시 남은 로그 저장
  */
 @Injectable()
-export class AuditLogService implements OnModuleDestroy {
-  private readonly logger = new Logger(AuditLogService.name);
-  private readonly buffer: AuditLog[] = [];
-  private flushTimer: NodeJS.Timeout | null = null;
-  private readonly config: LogBufferConfig;
-
+export class AuditLogService extends BufferedWriter<AuditLog> {
   constructor(
     private readonly auditLogDomainService: AuditLogDomainService,
   ) {
-    this.config = DEFAULT_BUFFER_CONFIG;
-    this.startAutoFlush();
+    super(AuditLogService.name, { maxSize: 100, flushIntervalMs: 5000 });
   }
 
-  /**
-   * 모듈 종료 시 남은 로그 저장
-   */
-  async onModuleDestroy(): Promise<void> {
-    this.stopAutoFlush();
-    await this.flush();
+  protected async persistBatch(items: AuditLog[]): Promise<void> {
+    await this.auditLogDomainService.다중저장(items);
   }
+
+  protected get entityName(): string {
+    return 'audit logs';
+  }
+
+  // ──────────────────────────────────────────────
+  //  기록 API
+  // ──────────────────────────────────────────────
 
   /**
    * 감사 로그 기록 (비동기, 버퍼링)
@@ -63,12 +49,7 @@ export class AuditLogService implements OnModuleDestroy {
   async log(params: CreateAuditLogParams): Promise<void> {
     try {
       const log = AuditLog.create(params);
-      this.buffer.push(log);
-
-      // 버퍼가 가득 차면 즉시 플러시
-      if (this.buffer.length >= this.config.maxSize) {
-        await this.flush();
-      }
+      await this.enqueue(log);
     } catch (error) {
       this.logger.error('Failed to create audit log', error);
     }
@@ -81,11 +62,7 @@ export class AuditLogService implements OnModuleDestroy {
     params: Omit<CreateAuditLogParams, 'result' | 'failReason'>,
   ): Promise<void> {
     const log = AuditLog.createSuccess(params);
-    this.buffer.push(log);
-
-    if (this.buffer.length >= this.config.maxSize) {
-      await this.flush();
-    }
+    await this.enqueue(log);
   }
 
   /**
@@ -95,11 +72,7 @@ export class AuditLogService implements OnModuleDestroy {
     params: Omit<CreateAuditLogParams, 'result'> & { failReason: string },
   ): Promise<void> {
     const log = AuditLog.createFailure(params);
-    this.buffer.push(log);
-
-    if (this.buffer.length >= this.config.maxSize) {
-      await this.flush();
-    }
+    await this.enqueue(log);
   }
 
   /**
@@ -110,45 +83,9 @@ export class AuditLogService implements OnModuleDestroy {
     return this.auditLogDomainService.저장(log);
   }
 
-  /**
-   * 버퍼 플러시 (DB 저장)
-   */
-  async flush(): Promise<void> {
-    if (this.buffer.length === 0) {
-      return;
-    }
-
-    const logsToSave = [...this.buffer];
-    this.buffer.length = 0;
-
-    try {
-      await this.auditLogDomainService.다중저장(logsToSave);
-      this.logger.debug(`Flushed ${logsToSave.length} audit logs`);
-    } catch (error) {
-      this.logger.error(`Failed to flush ${logsToSave.length} audit logs`, error);
-      // 실패한 로그를 다시 버퍼에 추가 (재시도)
-      this.buffer.push(...logsToSave);
-    }
-  }
-
-  /**
-   * 자동 플러시 시작
-   */
-  private startAutoFlush(): void {
-    this.flushTimer = setInterval(async () => {
-      await this.flush();
-    }, this.config.flushIntervalMs);
-  }
-
-  /**
-   * 자동 플러시 중지
-   */
-  private stopAutoFlush(): void {
-    if (this.flushTimer) {
-      clearInterval(this.flushTimer);
-      this.flushTimer = null;
-    }
-  }
+  // ──────────────────────────────────────────────
+  //  조회 API
+  // ──────────────────────────────────────────────
 
   /**
    * ID로 로그 조회

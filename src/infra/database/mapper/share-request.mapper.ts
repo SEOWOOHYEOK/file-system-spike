@@ -23,6 +23,7 @@ export class ShareRequestMapper {
       startAt: ormEntity.startAt,
       endAt: ormEntity.endAt,
       reason: ormEntity.reason,
+      designatedApproverId: ormEntity.designatedApproverId,
       approverId:
         ormEntity.approverId !== null ? ormEntity.approverId : undefined,
       decidedAt:
@@ -53,6 +54,7 @@ export class ShareRequestMapper {
     ormEntity.startAt = domainEntity.startAt;
     ormEntity.endAt = domainEntity.endAt;
     ormEntity.reason = domainEntity.reason;
+    ormEntity.designatedApproverId = domainEntity.designatedApproverId;
     ormEntity.approverId = domainEntity.approverId ?? null;
     ormEntity.decidedAt = domainEntity.decidedAt ?? null;
     ormEntity.decisionComment = domainEntity.decisionComment ?? null;

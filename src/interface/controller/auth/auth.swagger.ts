@@ -83,7 +83,7 @@ SSO를 통해 로그인하고 JWT 토큰을 발급합니다.
 export const ApiGenerateToken = () =>
     applyDecorators(
         ApiOperation({
-            summary: 'JWT 토큰 생성',
+            summary: 'JWT 토큰 생성-테스트용',
             description: `
 만료시간 없이 유효한 JWT 토큰을 생성합니다.
 테스트 및 개발 용도로 사용합니다.

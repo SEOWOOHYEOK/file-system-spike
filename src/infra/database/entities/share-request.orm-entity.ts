@@ -43,6 +43,10 @@ export class ShareRequestOrmEntity {
   @Column({ type: 'text' })
   reason: string;
 
+  @Column({ name: 'designated_approver_id', type: 'uuid' })
+  @Index()
+  designatedApproverId: string;
+
   @Column({ name: 'approver_id', type: 'uuid', nullable: true })
   @Index()
   approverId: string | null;

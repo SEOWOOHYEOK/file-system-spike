@@ -27,7 +27,6 @@ import { UploadPartOrmEntity } from './entities/upload-part.orm-entity';
 
 // Audit Log Entities
 import { AuditLogOrmEntity } from './entities/audit-log.orm-entity';
-import { SecurityLogOrmEntity } from './entities/security-log.orm-entity';
 import { FileHistoryOrmEntity } from './entities/file-history.orm-entity';
 
 // Favorite Entity
@@ -43,6 +42,12 @@ import { NasHealthHistoryOrmEntity } from './entities/nas-health-history.orm-ent
 
 // ShareRequest Entity
 import { ShareRequestOrmEntity } from './entities/share-request.orm-entity';
+
+// Token Blacklist Entity
+import { TokenBlacklistOrmEntity } from './entities/token-blacklist.orm-entity';
+
+// Refresh Token Entity
+import { RefreshTokenOrmEntity } from './entities/refresh-token.orm-entity';
 
 // Organization Entities (조직 관련 엔티티)
 import {
@@ -70,7 +75,6 @@ const entities = [
   UploadPartOrmEntity,
   // Audit Log 엔티티
   AuditLogOrmEntity,
-  SecurityLogOrmEntity,
   FileHistoryOrmEntity,
   // Favorite 엔티티
   FavoriteOrmEntity,
@@ -82,6 +86,10 @@ const entities = [
   NasHealthHistoryOrmEntity,
   // ShareRequest 엔티티
   ShareRequestOrmEntity,
+  // Token Blacklist 엔티티
+  TokenBlacklistOrmEntity,
+  // Refresh Token 엔티티
+  RefreshTokenOrmEntity,
   // Organization 관련 엔티티
   Rank,
   Position,

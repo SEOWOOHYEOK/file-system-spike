@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import {
   FileHistory,
   CreateFileHistoryParams,
@@ -12,44 +12,65 @@ import {
   PaginatedResult,
 } from '../../domain/audit/repositories/audit-log.repository.interface';
 import { UserType } from '../../domain/audit/enums/common.enum';
+import { RequestContext } from '../../common/context/request-context';
+import { BufferedWriter } from './buffered-writer';
 
 /**
  * FileHistoryService
  *
  * 파일 변경 이력을 관리
+ * - BufferedWriter로 이력 버퍼링 (DB 부하 감소)
  * - 파일 무결성 증명용 영구 보관
  * - 버전 관리
+ * - RequestContext에서 requestId/traceId를 자동 주입 (호출부 누락 불가)
  */
 @Injectable()
-export class FileHistoryService implements OnModuleDestroy {
-  private readonly logger = new Logger(FileHistoryService.name);
-  private readonly buffer: FileHistory[] = [];
-  private flushTimer: NodeJS.Timeout | null = null;
-  private readonly maxBufferSize = 50;
-  private readonly flushIntervalMs = 5000;
-
+export class FileHistoryService extends BufferedWriter<FileHistory> {
   constructor(
     private readonly fileHistoryDomainService: FileHistoryDomainService,
   ) {
-    this.startAutoFlush();
+    super(FileHistoryService.name, { maxSize: 50, flushIntervalMs: 5000 });
   }
 
-  async onModuleDestroy(): Promise<void> {
-    this.stopAutoFlush();
-    await this.flush();
+  protected async persistBatch(items: FileHistory[]): Promise<void> {
+    await this.fileHistoryDomainService.다중저장(items);
   }
+
+  protected get entityName(): string {
+    return 'file histories';
+  }
+
+  // ──────────────────────────────────────────────
+  //  상관관계 자동 주입
+  // ──────────────────────────────────────────────
+
+  /**
+   * 현재 요청 컨텍스트에서 상관관계 필드를 추출.
+   * 모든 기록 메서드에서 자동 호출되어, 호출부가 직접 전달할 필요 없음.
+   */
+  private getCorrelation(): { requestId: string; traceId?: string } {
+    return {
+      requestId: RequestContext.getRequestId(),
+      traceId: RequestContext.getTraceId(),
+    };
+  }
+
+  // ──────────────────────────────────────────────
+  //  기록 API
+  // ──────────────────────────────────────────────
 
   /**
    * 파일 이력 기록 (비동기)
    */
   async log(params: CreateFileHistoryParams): Promise<void> {
     try {
-      const history = FileHistory.create(params);
-      this.buffer.push(history);
-
-      if (this.buffer.length >= this.maxBufferSize) {
-        await this.flush();
-      }
+      const correlation = this.getCorrelation();
+      const history = FileHistory.create({
+        ...params,
+        requestId: params.requestId || correlation.requestId,
+        traceId: params.traceId || correlation.traceId,
+      });
+      await this.enqueue(history);
     } catch (error) {
       this.logger.error('Failed to create file history', error);
     }
@@ -68,12 +89,11 @@ export class FileHistoryService implements OnModuleDestroy {
     path: string;
     checksum?: string;
   }): Promise<void> {
-    const history = FileHistory.createForFileCreated(params);
-    this.buffer.push(history);
-
-    if (this.buffer.length >= this.maxBufferSize) {
-      await this.flush();
-    }
+    const history = FileHistory.createForFileCreated({
+      ...params,
+      ...this.getCorrelation(),
+    });
+    await this.enqueue(history);
   }
 
   /**
@@ -90,12 +110,9 @@ export class FileHistoryService implements OnModuleDestroy {
     const history = FileHistory.createForRenamed({
       ...params,
       version,
+      ...this.getCorrelation(),
     });
-    this.buffer.push(history);
-
-    if (this.buffer.length >= this.maxBufferSize) {
-      await this.flush();
-    }
+    await this.enqueue(history);
   }
 
   /**
@@ -114,12 +131,9 @@ export class FileHistoryService implements OnModuleDestroy {
     const history = FileHistory.createForMoved({
       ...params,
       version,
+      ...this.getCorrelation(),
     });
-    this.buffer.push(history);
-
-    if (this.buffer.length >= this.maxBufferSize) {
-      await this.flush();
-    }
+    await this.enqueue(history);
   }
 
   /**
@@ -138,12 +152,9 @@ export class FileHistoryService implements OnModuleDestroy {
     const history = FileHistory.createForContentReplaced({
       ...params,
       version,
+      ...this.getCorrelation(),
     });
-    this.buffer.push(history);
-
-    if (this.buffer.length >= this.maxBufferSize) {
-      await this.flush();
-    }
+    await this.enqueue(history);
   }
 
   /**
@@ -160,12 +171,9 @@ export class FileHistoryService implements OnModuleDestroy {
     const history = FileHistory.createForTrashed({
       ...params,
       version,
+      ...this.getCorrelation(),
     });
-    this.buffer.push(history);
-
-    if (this.buffer.length >= this.maxBufferSize) {
-      await this.flush();
-    }
+    await this.enqueue(history);
   }
 
   /**
@@ -182,12 +190,9 @@ export class FileHistoryService implements OnModuleDestroy {
     const history = FileHistory.createForRestored({
       ...params,
       version,
+      ...this.getCorrelation(),
     });
-    this.buffer.push(history);
-
-    if (this.buffer.length >= this.maxBufferSize) {
-      await this.flush();
-    }
+    await this.enqueue(history);
   }
 
   /**
@@ -203,57 +208,27 @@ export class FileHistoryService implements OnModuleDestroy {
     const history = FileHistory.createForDeleted({
       ...params,
       version,
+      ...this.getCorrelation(),
     });
-    this.buffer.push(history);
-
-    if (this.buffer.length >= this.maxBufferSize) {
-      await this.flush();
-    }
+    await this.enqueue(history);
   }
 
   /**
    * 즉시 저장
    */
   async logImmediate(params: CreateFileHistoryParams): Promise<FileHistory> {
-    const history = FileHistory.create(params);
+    const correlation = this.getCorrelation();
+    const history = FileHistory.create({
+      ...params,
+      requestId: params.requestId || correlation.requestId,
+      traceId: params.traceId || correlation.traceId,
+    });
     return this.fileHistoryDomainService.저장(history);
   }
 
-  /**
-   * 버퍼 플러시
-   */
-  async flush(): Promise<void> {
-    if (this.buffer.length === 0) {
-      return;
-    }
-
-    const historiesToSave = [...this.buffer];
-    this.buffer.length = 0;
-
-    try {
-      await this.fileHistoryDomainService.다중저장(historiesToSave);
-      this.logger.debug(`Flushed ${historiesToSave.length} file histories`);
-    } catch (error) {
-      this.logger.error(
-        `Failed to flush ${historiesToSave.length} file histories`,
-        error,
-      );
-      this.buffer.push(...historiesToSave);
-    }
-  }
-
-  private startAutoFlush(): void {
-    this.flushTimer = setInterval(async () => {
-      await this.flush();
-    }, this.flushIntervalMs);
-  }
-
-  private stopAutoFlush(): void {
-    if (this.flushTimer) {
-      clearInterval(this.flushTimer);
-      this.flushTimer = null;
-    }
-  }
+  // ──────────────────────────────────────────────
+  //  조회 API
+  // ──────────────────────────────────────────────
 
   /**
    * 다음 버전 번호 조회

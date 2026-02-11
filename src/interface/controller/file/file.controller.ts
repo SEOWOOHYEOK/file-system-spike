@@ -23,6 +23,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { FileInterceptor, FilesInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { FileQueryService, FileUploadService, FileDownloadService, FileManageService, SyncProgressService } from '../../../business/file';
+import { SyncEventQueryService, FileSyncStatusResponse } from '../../../business/sync-event';
 import { SyncProgressResponseDto } from './dto/sync-progress-response.dto';
 import {
   UploadFileResponse,
@@ -43,9 +44,11 @@ import {
   ApiFileRename,
   ApiFileMove,
   ApiFileDelete,
+  ApiFileSyncStatus,
   ApiFileSyncProgress,
 } from './file.swagger';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { NasAvailabilityGuard } from '../../../common/guards/nas-availability.guard';
 import { RequestContext } from '../../../common/context/request-context';
 import { AuditAction } from '../../../common/decorators';
 import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
@@ -67,7 +70,7 @@ import {
  */
 @ApiTags('200.파일')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, NasAvailabilityGuard)
 @Controller('v1/files')
 export class FileController {
   private readonly logger = new Logger(FileController.name);
@@ -78,6 +81,7 @@ export class FileController {
     private readonly fileDownloadService: FileDownloadService,
     private readonly fileManageService: FileManageService,
     private readonly syncProgressService: SyncProgressService,
+    private readonly syncEventQueryService: SyncEventQueryService,
   ) {}
 
   /**
@@ -340,6 +344,17 @@ export class FileController {
       `파일 삭제(휴지통 이동) 요청: fileId=${fileId}, userId=${userId}`,
     );
     return this.fileManageService.delete(fileId, userId);
+  }
+
+  /**
+   * GET /files/:fileId/sync-status - 파일 동기화 상태 조회
+   */
+  @Get(':fileId/sync-status')
+  @ApiFileSyncStatus()
+  async getFileSyncStatus(
+    @Param('fileId') fileId: string,
+  ): Promise<FileSyncStatusResponse> {
+    return this.syncEventQueryService.getFileSyncStatus(fileId);
   }
 
   /**

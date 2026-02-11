@@ -136,6 +136,7 @@ export const AuditActionDescription: Record<AuditAction, string> = {
   [AuditAction.USER_SYNC]: 'Employee → User 동기화',
   [AuditAction.TOKEN_GENERATE]: 'JWT 토큰 수동 생성',
   [AuditAction.ORG_MIGRATION]: '조직 데이터 마이그레이션',
+  
   [AuditAction.LOGIN_SUCCESS]: '로그인 성공',
   [AuditAction.LOGIN_FAILURE]: '로그인 실패',
   [AuditAction.LOGOUT]: '로그아웃',

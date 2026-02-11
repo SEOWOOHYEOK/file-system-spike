@@ -121,6 +121,15 @@ export class CreateShareRequestDto {
   @IsNotEmpty({ message: '사유를 입력해주세요.' })
   reason: string;
 
+  @ApiProperty({
+    description: '승인 대상자 ID (매니저 이상 역할 사용자의 UUID)',
+    example: '550e8400-e29b-41d4-a716-446655440003',
+    format: 'uuid',
+  })
+  @IsUUID('4', { message: '올바른 승인 대상자 ID 형식이 아닙니다.' })
+  @IsNotEmpty({ message: '승인 대상자를 선택해주세요.' })
+  designatedApproverId: string;
+
   /**
    * Request DTO를 서비스 레이어에서 사용하는 DTO로 변환
    * - startAt, endAt: string → Date 변환
@@ -140,6 +149,7 @@ export class CreateShareRequestDto {
       startAt: new Date(this.startAt),
       endAt: new Date(this.endAt),
       reason: this.reason,
+      designatedApproverId: this.designatedApproverId,
     };
   }
 }

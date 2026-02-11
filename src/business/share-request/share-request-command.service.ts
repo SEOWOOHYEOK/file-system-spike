@@ -25,6 +25,7 @@ export interface CreateShareRequestDto {
   startAt: Date;
   endAt: Date;
   reason: string;
+  designatedApproverId: string;
 }
 
 /**
@@ -66,6 +67,9 @@ export class ShareRequestCommandService {
 
     // Step 2: 대상 사용자 검증
     await this.validationService.validateTargets(dto.targets);
+
+    // Step 2.5: 지정 승인자 검증
+    await this.validationService.validateDesignatedApprover(dto.designatedApproverId);
 
     // Step 3: 날짜 검증
     if (dto.startAt >= dto.endAt) {
@@ -126,6 +130,7 @@ export class ShareRequestCommandService {
       startAt: dto.startAt,
       endAt: dto.endAt,
       reason: dto.reason,
+      designatedApproverId: dto.designatedApproverId,
       isAutoApproved: false,
       publicShareIds: [],
       requestedAt: new Date(),

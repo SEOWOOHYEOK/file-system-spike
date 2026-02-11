@@ -2,6 +2,18 @@ import { FileChangeType } from '../enums/file-change.enum';
 import { UserType } from '../enums/common.enum';
 
 /**
+ * 이벤트 상관관계 파라미터
+ *
+ * AuditLog와 FileHistory를 연결하기 위한 공통 추적 필드
+ */
+export interface CorrelationParams {
+  /** HTTP 요청 고유 ID */
+  requestId?: string;
+  /** 작업 전체 추적 ID */
+  traceId?: string;
+}
+
+/**
  * 파일 상태 인터페이스
  *
  * 변경 전/후 상태를 저장하는 유연한 구조
@@ -323,7 +335,7 @@ export class FileHistory {
     path: string;
     /** 파일 체크섬 */
     checksum?: string;
-  }): FileHistory {
+  } & CorrelationParams): FileHistory {
     return FileHistory.create({
       fileId: params.fileId,
       version: 1,
@@ -339,6 +351,8 @@ export class FileHistory {
       },
       checksumAfter: params.checksum,
       changeSummary: `파일 생성: ${params.name}`,
+      requestId: params.requestId,
+      traceId: params.traceId,
     });
   }
 
@@ -361,7 +375,7 @@ export class FileHistory {
     previousName: string;
     /** 새 파일 이름 */
     newName: string;
-  }): FileHistory {
+  } & CorrelationParams): FileHistory {
     return FileHistory.create({
       fileId: params.fileId,
       version: params.version,
@@ -371,6 +385,8 @@ export class FileHistory {
       previousState: { name: params.previousName },
       newState: { name: params.newName },
       changeSummary: `이름 변경: ${params.previousName} → ${params.newName}`,
+      requestId: params.requestId,
+      traceId: params.traceId,
     });
   }
 
@@ -397,7 +413,7 @@ export class FileHistory {
     newFolderId: string;
     /** 새 경로 */
     newPath: string;
-  }): FileHistory {
+  } & CorrelationParams): FileHistory {
     return FileHistory.create({
       fileId: params.fileId,
       version: params.version,
@@ -407,6 +423,8 @@ export class FileHistory {
       previousState: { folderId: params.previousFolderId, path: params.previousPath },
       newState: { folderId: params.newFolderId, path: params.newPath },
       changeSummary: `위치 이동: ${params.previousPath} → ${params.newPath}`,
+      requestId: params.requestId,
+      traceId: params.traceId,
     });
   }
 
@@ -433,7 +451,7 @@ export class FileHistory {
     checksumBefore?: string;
     /** 새 체크섬 */
     checksumAfter?: string;
-  }): FileHistory {
+  } & CorrelationParams): FileHistory {
     return FileHistory.create({
       fileId: params.fileId,
       version: params.version,
@@ -445,6 +463,8 @@ export class FileHistory {
       checksumBefore: params.checksumBefore,
       checksumAfter: params.checksumAfter,
       changeSummary: `내용 교체: 버전 ${params.version}`,
+      requestId: params.requestId,
+      traceId: params.traceId,
     });
   }
 
@@ -467,7 +487,7 @@ export class FileHistory {
     fileName: string;
     /** 원래 경로 */
     originalPath: string;
-  }): FileHistory {
+  } & CorrelationParams): FileHistory {
     return FileHistory.create({
       fileId: params.fileId,
       version: params.version,
@@ -476,6 +496,8 @@ export class FileHistory {
       userType: params.userType,
       previousState: { path: params.originalPath },
       changeSummary: `휴지통 이동: ${params.fileName}`,
+      requestId: params.requestId,
+      traceId: params.traceId,
     });
   }
 
@@ -498,7 +520,7 @@ export class FileHistory {
     fileName: string;
     /** 복원된 경로 */
     restoredPath: string;
-  }): FileHistory {
+  } & CorrelationParams): FileHistory {
     return FileHistory.create({
       fileId: params.fileId,
       version: params.version,
@@ -507,6 +529,8 @@ export class FileHistory {
       userType: params.userType,
       newState: { path: params.restoredPath },
       changeSummary: `복원됨: ${params.fileName}`,
+      requestId: params.requestId,
+      traceId: params.traceId,
     });
   }
 
@@ -527,7 +551,7 @@ export class FileHistory {
     userType: UserType;
     /** 파일 이름 */
     fileName: string;
-  }): FileHistory {
+  } & CorrelationParams): FileHistory {
     return FileHistory.create({
       fileId: params.fileId,
       version: params.version,
@@ -535,6 +559,8 @@ export class FileHistory {
       changedBy: params.changedBy,
       userType: params.userType,
       changeSummary: `영구 삭제: ${params.fileName}`,
+      requestId: params.requestId,
+      traceId: params.traceId,
     });
   }
 

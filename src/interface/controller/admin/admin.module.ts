@@ -9,9 +9,10 @@ import { RoleController } from './role/role.controller';
 import { ShareAdminController } from './share/share-admin.controller';
 import { ShareRequestAdminController } from './share-request/share-request-admin.controller';
 import { UserAdminController } from './user/user-admin.controller';
-import { ObservabilityController } from './observability.controller';
+import { ObservabilityController } from './observability/observability.controller';
 import { TimelineAdminController } from './timeline/timeline-admin.controller';
 import { ErrorMessageAdminController } from './error-message/error-message-admin.controller';
+import { SyncAdminController } from './sync/sync-admin.controller';
 
 // 비즈니스 모듈
 import { AuditModule } from '../../../business/audit/audit.module';
@@ -53,6 +54,7 @@ import { RepositoryModule } from '../../../infra/database/repository.module';
     ObservabilityController,
     TimelineAdminController,
     ErrorMessageAdminController,
+    SyncAdminController,
   ],
 })
 export class AdminModule {}

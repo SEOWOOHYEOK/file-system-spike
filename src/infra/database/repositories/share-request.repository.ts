@@ -78,10 +78,17 @@ export class ShareRequestRepository implements IShareRequestRepository {
       );
     }
 
-    // 승인자 ID 필터
+    // 승인자 ID 필터 (실제 승인/반려 처리자)
     if (filter.approverId) {
       queryBuilder.andWhere('sr.approver_id = :approverId', {
         approverId: filter.approverId,
+      });
+    }
+
+    // 지정 승인자 ID 필터 (승인 담당자)
+    if (filter.designatedApproverId) {
+      queryBuilder.andWhere('sr.designated_approver_id = :designatedApproverId', {
+        designatedApproverId: filter.designatedApproverId,
       });
     }
 

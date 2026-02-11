@@ -35,7 +35,10 @@ export class ShareRequestResponseDto {
   @ApiProperty({ description: '공유 요청 사유', example: '프로젝트 협업을 위한 파일 공유' })
   reason: string;
 
-  @ApiProperty({ description: '승인자 ID', required: false, example: '550e8400-e29b-41d4-a716-446655440003' })
+  @ApiProperty({ description: '지정 승인 대상자 ID', example: '550e8400-e29b-41d4-a716-446655440003' })
+  designatedApproverId: string;
+
+  @ApiProperty({ description: '실제 승인/반려 처리자 ID', required: false, example: '550e8400-e29b-41d4-a716-446655440003' })
   approverId?: string;
 
   @ApiProperty({ description: '결정일시', required: false, example: '2026-02-10T10:00:00.000Z' })
@@ -67,6 +70,7 @@ export class ShareRequestResponseDto {
     dto.startAt = entity.startAt;
     dto.endAt = entity.endAt;
     dto.reason = entity.reason;
+    dto.designatedApproverId = entity.designatedApproverId;
     dto.approverId = entity.approverId;
     dto.decidedAt = entity.decidedAt;
     dto.decisionComment = entity.decisionComment;

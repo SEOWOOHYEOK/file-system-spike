@@ -38,7 +38,8 @@ export class ExternalJwtAuthGuard extends BaseJwtAuthGuard {
    * 토큰 블랙리스트 확인 (로그아웃/비밀번호 변경된 토큰)
    */
   protected async preVerifyChecks(token: string): Promise<void> {
-    if (this.tokenBlacklistService.isBlacklisted(token)) {
+    const isBlacklisted = await this.tokenBlacklistService.isBlacklisted(token);
+    if (isBlacklisted) {
       throw new UnauthorizedException('만료된 토큰입니다. 다시 로그인하세요.');
     }
   }

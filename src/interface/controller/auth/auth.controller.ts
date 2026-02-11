@@ -8,6 +8,7 @@ import { SSOService } from '../../../integrations/sso/sso.service';
 import { OrganizationMigrationService } from '../../../integrations/migration/migration.service';
 import { EmployeeDepartmentPosition } from '../../../integrations/migration/organization/entities/employee-department-position.entity';
 import { TokenBlacklistService } from '../../../business/external-share/security/token-blacklist.service';
+import { RefreshTokenService } from '../../../business/auth/refresh-token.service';
 import { GenerateTokenRequestDto, GenerateTokenResponseDto } from './dto/generate-token.dto';
 import { VerifyTokenRequestDto, VerifyTokenResponseDto } from './dto/verify-token.dto';
 import { LoginRequestDto, LoginResponseDto } from './dto/login.dto';
@@ -36,6 +37,7 @@ export class AuthController {
         private readonly ssoService: SSOService,
         private readonly organizationMigrationService: OrganizationMigrationService,
         private readonly tokenBlacklistService: TokenBlacklistService,
+        private readonly refreshTokenService: RefreshTokenService,
         @InjectRepository(EmployeeDepartmentPosition)
         private readonly edpRepository: Repository<EmployeeDepartmentPosition>,
     ) { }
@@ -55,54 +57,17 @@ export class AuthController {
     }
 
     /**
-     * 부서 기반으로 JWT 토큰 및 userType 생성
+     * 부서 기반으로 userType 결정
      */
-    private async createTokenAndUserType(employee: {
-        id: string;
-        employeeNumber: string;
-        name?: string;
-        email?: string;
-    }): Promise<{ token: string; userType: 'internal' | 'external' }> {
-        const isExternal = await this.isExternalDepartment(employee.id);
-        const userType = isExternal ? 'external' : 'internal';
-
-        const jwtPayload = {
-            sub: employee.id,
-            type: userType,
-        };
-
-        let token: string;
-        if (isExternal) {
-            const secret = this.configService.get<string>('EXTERNAL_JWT_SECRET');
-            if (!secret) {
-                this.logger.error('EXTERNAL_JWT_SECRET 환경변수가 설정되지 않았습니다.');
-                throw new BadRequestException('인증 설정 오류가 발생했습니다.');
-            }
-            const expiresIn = parseInt(
-                this.configService.get<string>('EXTERNAL_JWT_EXPIRES_IN') || '9000',
-                10,
-            );
-            token = this.jwtService.sign(jwtPayload, { secret, expiresIn });
-        } else {
-            const secret = this.configService.get<string>('INNER_SECRET');
-            if (!secret) {
-                this.logger.error('INNER_SECRET 환경변수가 설정되지 않았습니다.');
-                throw new BadRequestException('인증 설정 오류가 발생했습니다.');
-            }
-            const expiresIn = parseInt(
-                this.configService.get<string>('JWT_EXPIRES_IN') || '86400',
-                10,
-            );
-            token = this.jwtService.sign(jwtPayload, { secret, expiresIn });
-        }
-
-        return { token, userType };
+    private async resolveUserType(employeeId: string): Promise<'internal' | 'external'> {
+        const isExternal = await this.isExternalDepartment(employeeId);
+        return isExternal ? 'external' : 'internal';
     }
 
     /**
      * SSO 로그인
      *
-     * SSO를 통해 로그인하고 JWT 토큰을 발급합니다.
+     * SSO를 통해 로그인하고 DMS-API JWT 토큰을 발급합니다.
      */
     @Post('login')
     @AuditAction({
@@ -110,8 +75,8 @@ export class AuthController {
         targetType: TargetType.USER,
     })
     @ApiOperation({
-        summary: 'SSO 로그인',
-        description: 'SSO를 통해 로그인하고 JWT 토큰을 발급합니다.',
+        summary: 'SSO 로그인-DMS-API JWT 토큰 발급',
+        description: 'SSO를 통해 로그인하고 DMS-API JWT 토큰을 발급합니다.',
     })
     async login(@Body() dto: LoginRequestDto): Promise<LoginResponseDto> {
         try {
@@ -129,12 +94,26 @@ export class AuthController {
                 withDetail: true,
             });
 
-            // 부서 기반 JWT 토큰 생성 (external/internal)
-            const { token, userType } = await this.createTokenAndUserType(employee);
+            // 부서 기반 userType 결정
+            const userType = await this.resolveUserType(employee.id);
+
+            // 액세스 토큰 생성 (JWT, 30분)
+            const { accessToken, expiresIn } = this.refreshTokenService.createAccessToken(
+                employee.id,
+                userType,
+            );
+
+            // 리프레시 토큰 생성 (opaque, DB 저장)
+            const { refreshToken } = await this.refreshTokenService.createRefreshToken(
+                employee.id,
+                userType,
+            );
 
             return {
                 success: true,
-                token,
+                accessToken,
+                refreshToken,
+                token: accessToken, // 하위 호환 (deprecated)
                 user: {
                     id: employee.id,
                     employeeNumber: employee.employeeNumber,
@@ -142,6 +121,7 @@ export class AuthController {
                     email: employee.email,
                 },
                 userType,
+                expiresIn,
             };
         } catch (error: any) {
             if (error instanceof UnauthorizedException) {
@@ -173,19 +153,31 @@ export class AuthController {
     ): Promise<LogoutResponseDto> {
         this.logger.log(`로그아웃: userId=${user.id}, type=${user.type}`);
 
-        // 외부 사용자 토큰은 블랙리스트에 추가 (로그아웃 후 재사용 방지)
-        if (user.type === UserType.EXTERNAL) {
-            const accessToken = req['accessToken'] as string;
-            if (accessToken) {
-                // 토큰 만료 시간 계산 (EXTERNAL_JWT_EXPIRES_IN 기준)
+        // 1. 액세스 토큰 블랙리스트에 추가 (로그아웃 후 재사용 방지)
+        const accessToken = req['accessToken'] as string;
+        if (accessToken) {
+            const payload = this.jwtService.decode(accessToken) as { exp?: number } | null;
+            let expiresAt: Date;
+            if (payload?.exp) {
+                expiresAt = new Date(payload.exp * 1000);
+            } else {
                 const expiresInSec = parseInt(
-                    this.configService.get<string>('EXTERNAL_JWT_EXPIRES_IN') || '9000',
+                    this.configService.get<string>('ACCESS_TOKEN_EXPIRES_IN') || '1800',
                     10,
                 );
-                const expiresAt = new Date(Date.now() + expiresInSec * 1000);
-                this.tokenBlacklistService.addToBlacklist(accessToken, user.id, 'logout', expiresAt);
+                expiresAt = new Date(Date.now() + expiresInSec * 1000);
             }
+            await this.tokenBlacklistService.addToBlacklist(
+                accessToken,
+                user.id,
+                user.type ?? 'internal',
+                'logout',
+                expiresAt,
+            );
         }
+
+        // 2. 해당 사용자의 모든 활성 리프레시 토큰 무효화
+        await this.refreshTokenService.revokeAllForUser(user.id);
 
         return {
             success: true,
@@ -194,57 +186,32 @@ export class AuthController {
     }
 
     /**
-     * SSO 토큰 갱신
+     * DMS 토큰 갱신
      *
-     * SSO 리프레시 토큰을 사용하여 새로운 토큰을 발급받습니다.
+     * DMS 리프레시 토큰을 사용하여 새로운 액세스 토큰과 리프레시 토큰을 발급받습니다.
+     * 토큰 로테이션: 기존 리프레시 토큰은 사용됨(used) 처리되고 새 리프레시 토큰이 발급됩니다.
      */
     @Post('refresh-token')
     @ApiOperation({
-        summary: 'SSO 토큰 갱신',
-        description: 'SSO 리프레시 토큰을 사용하여 새로운 액세스 토큰과 JWT 토큰을 발급받습니다.',
+        summary: 'DMS 토큰 갱신',
+        description: 'DMS 리프레시 토큰을 사용하여 새로운 액세스 토큰과 리프레시 토큰을 발급받습니다. 토큰 로테이션이 적용됩니다.',
     })
     async refreshToken(@Body() dto: RefreshTokenRequestDto): Promise<RefreshTokenResponseDto> {
-        try {
-            // SSO 토큰 갱신
-            const ssoResponse = await this.ssoService.refreshToken(dto.refreshToken);
+        const { accessToken, refreshToken, expiresIn } =
+            await this.refreshTokenService.rotateRefreshToken(dto.refreshToken);
 
-            // SSO 응답에서 직원 번호 추출
-            if (!ssoResponse.employeeNumber) {
-                throw new UnauthorizedException('SSO 토큰 갱신 응답에 직원 번호가 없습니다.');
-            }
-
-            // SSO를 통해 직원 상세 정보 조회
-            const employee = await this.ssoService.getEmployee({
-                employeeNumber: ssoResponse.employeeNumber,
-                withDetail: true,
-            });
-
-            // 부서 기반 JWT 토큰 생성 (external/internal) - login과 동일
-            const { token, userType } = await this.createTokenAndUserType(employee);
-
-            return {
-                success: true,
-                token,
-                user: {
-                    id: employee.id,
-                    employeeNumber: employee.employeeNumber,
-                    name: employee.name,
-                    email: employee.email,
-                },
-                userType,
-            };
-        } catch (error: any) {
-            if (error instanceof UnauthorizedException) {
-                throw error;
-            }
-            throw new UnauthorizedException(`토큰 갱신 실패: ${error.message || '알 수 없는 오류'}`);
-        }
+        return {
+            success: true,
+            accessToken,
+            refreshToken,
+            expiresIn,
+        };
     }
 
     /**
-     * JWT 토큰 생성
+     * DMS-API JWT 토큰 생성
      *
-     * 만료시간 없이 유효한 JWT 토큰을 생성합니다.
+     * 만료시간 2개월로 유효한 DMS-API JWT 토큰을 생성합니다.
      */
     @Post('generate-token')
     @AuditAction({
@@ -253,7 +220,7 @@ export class AuthController {
     })
     @ApiOperation({
         summary: 'JWT 토큰 생성',
-        description: '만료시간 없이 유효한 JWT 토큰을 생성합니다.',
+        description: '만료시간 2개월로 유효한 JWT 토큰을 생성합니다.',
     })
     async generateToken(@Body() dto: GenerateTokenRequestDto): Promise<GenerateTokenResponseDto> {
         try {
@@ -269,9 +236,14 @@ export class AuthController {
                 type: 'internal',
             };
 
-            // 만료시간 없이 토큰 생성
-            const token = this.jwtService.sign(jwtPayload);
+            // 만료시간 2개월로 토큰 생성
+            const expiresIn = 60 * 60 * 24 * 60; // 2개월 (초)
+            const token = this.jwtService.sign(jwtPayload, {
+                secret: this.configService.get<string>('INNER_SECRET'),
+                expiresIn,
+            });
 
+            const expiresAt = new Date(Date.now() + expiresIn * 1000);
             return {
                 success: true,
                 token,
@@ -280,7 +252,7 @@ export class AuthController {
                     name: dto.name,
                     email: dto.email,
                     issuedAt: new Date(),
-                    expiresAt: undefined, // 만료시간 없음
+                    expiresAt,
                 },
                 usage: `Authorization: Bearer ${token}`,
             };
@@ -291,14 +263,14 @@ export class AuthController {
 
     /**
      * 
-     * JWT 토큰 검증
+     * DMS-API JWT 토큰 검증
      *
-     * JWT 토큰의 유효성을 검증하고 payload를 반환합니다.
+     * DMS-API JWT 토큰의 유효성을 검증하고 payload를 반환합니다.
      */
     @Post('verify-token')
     @ApiOperation({
-        summary: 'JWT 토큰 검증',
-        description: 'JWT 토큰의 유효성을 검증하고 payload를 반환합니다.',
+        summary: 'DMS-API JWT 토큰 검증',
+        description: 'DMS-API JWT 토큰의 유효성을 검증하고 payload를 반환합니다.',
     })
     async verifyToken(@Body() dto: VerifyTokenRequestDto): Promise<VerifyTokenResponseDto> {
         try {
@@ -364,7 +336,7 @@ export class AuthController {
         targetType: TargetType.SYSTEM,
     })
     @ApiOperation({
-        summary: '조직 데이터 마이그레이션',
+        summary: '조직 데이터 마이그레이션-테스트용',
         description: 'SSO에서 모든 조직 데이터를 가져와 로컬 DB에 저장합니다. (부서, 직원, 직급, 직책 등)',
     })
     async migrateOrganization(@Body() dto: MigrateOrganizationRequestDto): Promise<MigrateOrganizationResponseDto> {

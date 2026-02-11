@@ -57,14 +57,12 @@ export class UnifiedJwtAuthGuard extends BaseJwtAuthGuard {
   }
 
   /**
-   * 외부 토큰인 경우에만 블랙리스트 확인
+   * 내부/외부 토큰 모두 블랙리스트 확인
    */
   protected async preVerifyChecks(token: string): Promise<void> {
-    const payload = this.jwtService.decode(token) as { type?: string } | null;
-    if (payload && payload.type === 'external') {
-      if (this.tokenBlacklistService.isBlacklisted(token)) {
-        throw new UnauthorizedException('만료된 토큰입니다. 다시 로그인하세요.');
-      }
+    const isBlacklisted = await this.tokenBlacklistService.isBlacklisted(token);
+    if (isBlacklisted) {
+      throw new UnauthorizedException('만료된 토큰입니다. 다시 로그인하세요.');
     }
   }
 

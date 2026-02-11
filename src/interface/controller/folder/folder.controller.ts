@@ -49,12 +49,13 @@ import { AuditAction } from '../../../common/decorators';
 import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
 import { TargetType } from '../../../domain/audit/enums/common.enum';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { NasAvailabilityGuard } from '../../../common/guards/nas-availability.guard';
 /**
  * 폴더 컨트롤러
  * 폴더 생성, 조회, 관리 API
  */
 @ApiTags('210.폴더')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, NasAvailabilityGuard)
 @Controller('v1/folders')
 export class FolderController {
   private readonly logger = new Logger(FolderController.name);

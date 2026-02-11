@@ -13,7 +13,6 @@ export * from './user.orm-entity';
 
 // Audit Log Entities
 export * from './audit-log.orm-entity';
-export * from './security-log.orm-entity';
 export * from './file-history.orm-entity';
 export * from './system-event.orm-entity';
 

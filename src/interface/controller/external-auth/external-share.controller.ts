@@ -42,8 +42,8 @@ import { TargetType } from '../../../domain/audit/enums/common.enum';
  *
  * 비즈니스 로직 (접근 검증 + 파일 다운로드)은 ExternalShareAccessService에서 처리
  */
-@ApiTags('710.외부접근')
-@Controller('v1/ext/shares')
+@ApiTags('710.파일 외부공유 접근')
+@Controller('v1/file-shares-requests')
 @ApiBearerAuth()
 @UseGuards(ExternalJwtAuthGuard)
 export class ExternalShareController {
@@ -54,7 +54,7 @@ export class ExternalShareController {
   /**
    * 나에게 공유된 파일 목록
    */
-  @Get()
+  @Get('me')
   @ApiGetMyShares()
   async getMyShares(
     @User() user: { id: string },

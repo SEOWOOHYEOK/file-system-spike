@@ -12,6 +12,9 @@ import { Injectable, Inject, OnModuleInit, Logger } from '@nestjs/common';
 import { pipeline } from 'stream/promises';
 import { v4 as uuidv4 } from 'uuid';
 
+import { NasStatusCacheService } from '../../infra/storage/nas/nas-status-cache.service';
+import { isNasConnectionError } from './shared/nas-error.helper';
+
 import {
   JOB_QUEUE_PORT,
 } from '../../domain/queue/ports/job-queue.port';
@@ -73,6 +76,7 @@ export class CacheRestoreWorker implements OnModuleInit {
     private readonly cacheStorage: ICacheStoragePort,
     @Inject(NAS_STORAGE_PORT)
     private readonly nasStorage: INasStoragePort,
+    private readonly nasStatusCache: NasStatusCacheService,
     private readonly fileNasStorageDomainService: FileNasStorageDomainService,
     private readonly fileCacheStorageDomainService: FileCacheStorageDomainService,
   ) {}
@@ -192,6 +196,13 @@ export class CacheRestoreWorker implements OnModuleInit {
         `[CACHE_RESTORE] 복사실패 | file=${shortFileId}...`,
         error,
       );
+
+      // NAS 연결 에러 감지 시 캐시 상태를 unhealthy로 전환
+      if (isNasConnectionError(error)) {
+        this.nasStatusCache.markUnhealthy(
+          error instanceof Error ? error.message : 'NAS connection error',
+        );
+      }
 
       // 불완전 파일 정리 시도
       try {

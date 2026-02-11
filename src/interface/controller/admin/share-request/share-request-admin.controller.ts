@@ -47,8 +47,8 @@ import { TargetType } from '../../../../domain/audit/enums/common.enum';
 /**
  * 공유 요청 관리 컨트롤러 (관리자용)
  */
-@ApiTags('520.관리자-공유요청')
-@Controller('v1/admin/share-requests')
+@ApiTags('807.관리자-파일 공유요청 현황 및 관리')
+@Controller('v1/admin/file-shares-requests')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)
 @ApiExtraModels(ShareRequestResponseDto)

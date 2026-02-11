@@ -20,7 +20,7 @@ import {
 /**
  * 통합 타임라인 관리 컨트롤러 (관리자용)
  */
-@ApiTags('530.관리자-타임라인')
+@ApiTags('806.관리자 - audit log 확인')
 @Controller('v1/admin/timeline')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)

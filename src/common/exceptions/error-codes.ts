@@ -153,6 +153,13 @@ export const ErrorCodes = {
     defaultMessage: '반려 처리에 실패했습니다.',
   },
 
+  SHARE_INVALID_APPROVER: {
+    code: 2018,
+    internalCode: 'SHARE_INVALID_APPROVER',
+    httpStatus: 422,
+    defaultMessage: '유효하지 않은 승인 대상자입니다. 매니저 이상 역할의 활성 사용자만 지정할 수 있습니다.',
+  },
+
   // ─── External Share/Auth 도메인 (2100~2199) ───
 
   EXT_AUTH_ACCOUNT_LOCKED: {
@@ -381,6 +388,34 @@ export const ErrorCodes = {
     defaultMessage: '인증 설정 오류가 발생했습니다.',
   },
 
+  AUTH_INVALID_REFRESH_TOKEN: {
+    code: 3010,
+    internalCode: 'AUTH_INVALID_REFRESH_TOKEN',
+    httpStatus: 401,
+    defaultMessage: '유효하지 않은 리프레시 토큰입니다.',
+  },
+
+  AUTH_REFRESH_TOKEN_EXPIRED: {
+    code: 3011,
+    internalCode: 'AUTH_REFRESH_TOKEN_EXPIRED',
+    httpStatus: 401,
+    defaultMessage: '리프레시 토큰이 만료되었습니다. 다시 로그인하세요.',
+  },
+
+  AUTH_TOKEN_REUSE_DETECTED: {
+    code: 3012,
+    internalCode: 'AUTH_TOKEN_REUSE_DETECTED',
+    httpStatus: 401,
+    defaultMessage: '보안 위협이 감지되었습니다. 다시 로그인하세요.',
+  },
+
+  AUTH_TOKEN_REVOKED: {
+    code: 3013,
+    internalCode: 'AUTH_TOKEN_REVOKED',
+    httpStatus: 401,
+    defaultMessage: '토큰이 무효화되었습니다.',
+  },
+
   // ─── Folder 도메인 (4000~4999) ───
 
   FOLDER_NOT_FOUND: {
@@ -569,6 +604,14 @@ export const ErrorCodes = {
   },
 
   // ─── System/Other (9900~9999) ───
+
+  NAS_UNAVAILABLE: {
+    code: 9900,
+    internalCode: 'NAS_UNAVAILABLE',
+    httpStatus: 503,
+    defaultMessage: 'NAS 스토리지에 연결할 수 없습니다. 잠시 후 다시 시도해주세요.',
+  },
+
   UNKNOWN_ERROR: {
     code: 9999,
     internalCode: 'UNKNOWN_ERROR',

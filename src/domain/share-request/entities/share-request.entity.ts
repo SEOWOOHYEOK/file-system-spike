@@ -20,6 +20,7 @@ export class ShareRequest {
   startAt: Date;
   endAt: Date;
   reason: string;
+  designatedApproverId: string;
   approverId?: string;
   decidedAt?: Date;
   decisionComment?: string;

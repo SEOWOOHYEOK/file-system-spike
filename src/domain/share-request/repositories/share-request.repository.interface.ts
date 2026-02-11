@@ -14,8 +14,10 @@ export interface ShareRequestFilter {
   fileId?: string;
   /** 대상 사용자 ID 필터 */
   targetUserId?: string;
-  /** 승인자 ID 필터 */
+  /** 승인자 ID 필터 (실제 승인/반려 처리자) */
   approverId?: string;
+  /** 지정 승인자 ID 필터 (승인 담당자) */
+  designatedApproverId?: string;
   /** 요청일 시작 (requestedAt >= requestedAtFrom) */
   requestedAtFrom?: Date;
   /** 요청일 종료 (requestedAt <= requestedAtTo) */

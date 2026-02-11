@@ -10,7 +10,7 @@ import { ErrorMessageService } from '../../../../common/error-message/error-mess
  * - PATCH /v1/admin/error-messages/:code      - 특정 코드의 커스텀 메시지 수정
  * - POST  /v1/admin/error-messages/reload     - 캐시 즉시 갱신
  */
-@ApiTags('500.관리자')
+@ApiTags('902.프로젝트 관리자 -에러 메시지 관리')
 @Controller('v1/admin/error-messages')
 export class ErrorMessageAdminController {
   constructor(

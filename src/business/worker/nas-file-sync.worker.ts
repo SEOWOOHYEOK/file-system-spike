@@ -10,6 +10,9 @@ import {
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 import type { IDistributedLockPort } from '../../domain/queue/ports/distributed-lock.port';
 
+import { NasStatusCacheService } from '../../infra/storage/nas/nas-status-cache.service';
+import { isNasConnectionError } from './shared/nas-error.helper';
+
 // Action Handlers
 import { FileUploadHandler } from './handlers/file-upload.handler';
 import { FileRenameHandler } from './handlers/file-rename.handler';
@@ -187,6 +190,7 @@ export class NasSyncWorker implements OnModuleInit {
     private readonly jobQueue: IJobQueuePort,
     @Inject(DISTRIBUTED_LOCK_PORT)
     private readonly distributedLock: IDistributedLockPort,
+    private readonly nasStatusCache: NasStatusCacheService,
     // Action Handlers
     private readonly uploadHandler: FileUploadHandler,
     private readonly renameHandler: FileRenameHandler,
@@ -220,6 +224,16 @@ export class NasSyncWorker implements OnModuleInit {
     const jobStartTime = Date.now();
     const shortFileId = fileId.substring(0, 8);
 
+    // NAS 가용성 사전 체크 - unhealthy이면 재시도 대기
+    if (!this.nasStatusCache.isAvailable()) {
+      const { lastError } = this.nasStatusCache.getStatus();
+      this.logger.warn(
+        `[PARALLEL] ⛔ NAS 불가 | file=${shortFileId}... | action=${action} | ` +
+        `사유: ${lastError ?? 'unknown'} | Bull 재시도로 전환`,
+      );
+      throw new Error(`NAS_UNAVAILABLE: NAS 스토리지 연결 불가 - 재시도 대기`);
+    }
+
     this.logger.log(
       `[PARALLEL] 📥 작업시작 | file=${shortFileId}... | action=${action} | jobId=${job.id}`,
     );
@@ -241,27 +255,40 @@ export class NasSyncWorker implements OnModuleInit {
 
         const actionStartTime = Date.now();
 
-        switch (action) {
-          case 'upload':
-            await this.uploadHandler.execute(job as Job<NasFileUploadJobData>);
-            break;
-          case 'rename':
-            await this.renameHandler.execute(job as Job<NasFileRenameJobData>);
-            break;
-          case 'move':
-            await this.moveHandler.execute(job as Job<NasFileMoveJobData>);
-            break;
-          case 'trash':
-            await this.trashHandler.execute(job as Job<NasFileTrashJobData>);
-            break;
-          case 'restore':
-            await this.restoreHandler.execute(job as Job<NasFileRestoreJobData>);
-            break;
-          case 'purge':
-            await this.purgeHandler.execute(job as Job<NasFilePurgeJobData>);
-            break;
-          default:
-            this.logger.warn(`알 수 없는 액션: ${action}`);
+        try {
+          switch (action) {
+            case 'upload':
+              await this.uploadHandler.execute(job as Job<NasFileUploadJobData>);
+              break;
+            case 'rename':
+              await this.renameHandler.execute(job as Job<NasFileRenameJobData>);
+              break;
+            case 'move':
+              await this.moveHandler.execute(job as Job<NasFileMoveJobData>);
+              break;
+            case 'trash':
+              await this.trashHandler.execute(job as Job<NasFileTrashJobData>);
+              break;
+            case 'restore':
+              await this.restoreHandler.execute(job as Job<NasFileRestoreJobData>);
+              break;
+            case 'purge':
+              await this.purgeHandler.execute(job as Job<NasFilePurgeJobData>);
+              break;
+            default:
+              this.logger.warn(`알 수 없는 액션: ${action}`);
+          }
+        } catch (error) {
+          // NAS 연결 에러 감지 시 캐시 상태를 unhealthy로 전환
+          if (isNasConnectionError(error)) {
+            this.nasStatusCache.markUnhealthy(
+              error instanceof Error ? error.message : 'NAS connection error',
+            );
+            this.logger.error(
+              `[PARALLEL] ⛔ NAS 연결에러 감지 → unhealthy 전환 | file=${shortFileId}... | action=${action}`,
+            );
+          }
+          throw error;
         }
 
         const actionDuration = Date.now() - actionStartTime;

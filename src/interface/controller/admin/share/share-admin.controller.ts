@@ -37,7 +37,7 @@ import { TargetType } from '../../../../domain/audit/enums/common.enum';
 /**
  * 공유 관리 컨트롤러 (관리자용)
  */
-@ApiTags('510.관리자-공유')
+@ApiTags('805.관리자 - 파일 공유 관리')
 @Controller('v1/admin/shares')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard)

@@ -10,7 +10,7 @@
  */
 import { Controller, Get, Put, Query, Body } from '@nestjs/common';
 import { ApiTags } from '@nestjs/swagger';
-import { ObservabilityService } from '../../../business/admin/observability.service';
+import { ObservabilityService } from '../../../../business/admin/observability.service';
 import {
   ObservabilityCurrentDto,
   ObservabilityHistoryQueryDto,
@@ -25,7 +25,7 @@ import {
   ApiObservabilitySettingsUpdate,
 } from './observability.swagger';
 
-@ApiTags('500.관리자')
+@ApiTags('803.관리자 - NAS 서버 모니터링 관리')
 @Controller('v1/admin/observability')
 export class ObservabilityController {
   constructor(

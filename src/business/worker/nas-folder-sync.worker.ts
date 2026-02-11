@@ -10,6 +10,9 @@ import {
 import type { IJobQueuePort } from '../../domain/queue/ports/job-queue.port';
 import type { IDistributedLockPort } from '../../domain/queue/ports/distributed-lock.port';
 
+import { NasStatusCacheService } from '../../infra/storage/nas/nas-status-cache.service';
+import { isNasConnectionError } from './shared/nas-error.helper';
+
 // Action Handlers
 import { FolderMkdirHandler } from './handlers/folder-mkdir.handler';
 import { FolderRenameHandler } from './handlers/folder-rename.handler';
@@ -157,6 +160,7 @@ export class NasFolderSyncWorker implements OnModuleInit {
     private readonly jobQueue: IJobQueuePort,
     @Inject(DISTRIBUTED_LOCK_PORT)
     private readonly distributedLock: IDistributedLockPort,
+    private readonly nasStatusCache: NasStatusCacheService,
     // Action Handlers
     private readonly mkdirHandler: FolderMkdirHandler,
     private readonly renameHandler: FolderRenameHandler,
@@ -190,6 +194,16 @@ export class NasFolderSyncWorker implements OnModuleInit {
     const jobStartTime = Date.now();
     const shortFolderId = folderId.substring(0, 8);
 
+    // NAS 가용성 사전 체크 - unhealthy이면 재시도 대기
+    if (!this.nasStatusCache.isAvailable()) {
+      const { lastError } = this.nasStatusCache.getStatus();
+      this.logger.warn(
+        `[PARALLEL] ⛔ NAS 불가 | folder=${shortFolderId}... | action=${action} | ` +
+        `사유: ${lastError ?? 'unknown'} | Bull 재시도로 전환`,
+      );
+      throw new Error(`NAS_UNAVAILABLE: NAS 스토리지 연결 불가 - 재시도 대기`);
+    }
+
     this.logger.log(
       `[PARALLEL] 📥 작업시작 | folder=${shortFolderId}... | action=${action} | jobId=${job.id}`,
     );
@@ -211,27 +225,40 @@ export class NasFolderSyncWorker implements OnModuleInit {
 
         const actionStartTime = Date.now();
 
-        switch (action) {
-          case 'mkdir':
-            await this.mkdirHandler.execute(job as Job<NasFolderMkdirJobData>);
-            break;
-          case 'rename':
-            await this.renameHandler.execute(job as Job<NasFolderRenameJobData>);
-            break;
-          case 'move':
-            await this.moveHandler.execute(job as Job<NasFolderMoveJobData>);
-            break;
-          case 'trash':
-            await this.trashHandler.execute(job as Job<NasFolderTrashJobData>);
-            break;
-          case 'restore':
-            await this.restoreHandler.execute(job as Job<NasFolderRestoreJobData>);
-            break;
-          case 'purge':
-            await this.purgeHandler.execute(job as Job<NasFolderPurgeJobData>);
-            break;
-          default:
-            this.logger.warn(`알 수 없는 액션: ${action}`);
+        try {
+          switch (action) {
+            case 'mkdir':
+              await this.mkdirHandler.execute(job as Job<NasFolderMkdirJobData>);
+              break;
+            case 'rename':
+              await this.renameHandler.execute(job as Job<NasFolderRenameJobData>);
+              break;
+            case 'move':
+              await this.moveHandler.execute(job as Job<NasFolderMoveJobData>);
+              break;
+            case 'trash':
+              await this.trashHandler.execute(job as Job<NasFolderTrashJobData>);
+              break;
+            case 'restore':
+              await this.restoreHandler.execute(job as Job<NasFolderRestoreJobData>);
+              break;
+            case 'purge':
+              await this.purgeHandler.execute(job as Job<NasFolderPurgeJobData>);
+              break;
+            default:
+              this.logger.warn(`알 수 없는 액션: ${action}`);
+          }
+        } catch (error) {
+          // NAS 연결 에러 감지 시 캐시 상태를 unhealthy로 전환
+          if (isNasConnectionError(error)) {
+            this.nasStatusCache.markUnhealthy(
+              error instanceof Error ? error.message : 'NAS connection error',
+            );
+            this.logger.error(
+              `[PARALLEL] ⛔ NAS 연결에러 감지 → unhealthy 전환 | folder=${shortFolderId}... | action=${action}`,
+            );
+          }
+          throw error;
         }
 
         const actionDuration = Date.now() - actionStartTime;

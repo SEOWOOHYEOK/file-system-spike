@@ -6,8 +6,8 @@ import { ApiProperty } from '@nestjs/swagger';
  */
 export class RefreshTokenRequestDto {
     @ApiProperty({
-        description: 'SSO 리프레시 토큰',
-        example: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...',
+        description: 'DMS 리프레시 토큰',
+        example: 'opaque-refresh-token-string',
     })
     @IsString()
     @IsNotEmpty()
@@ -21,23 +21,12 @@ export class RefreshTokenResponseDto {
     @ApiProperty({ description: '성공 여부' })
     success: boolean;
 
-    @ApiProperty({ description: '새로운 JWT 토큰' })
-    token: string;
+    @ApiProperty({ description: '새로운 JWT 액세스 토큰' })
+    accessToken: string;
 
-    @ApiProperty({ description: '사용자 정보' })
-    user: {
-        id: string;
-        employeeNumber: string;
-        name?: string;
-        email?: string;
-    };
+    @ApiProperty({ description: '새로운 리프레시 토큰 (로테이션)' })
+    refreshToken: string;
 
-    @ApiProperty({ description: '사용자 타입 (내부/외부)', enum: ['internal', 'external'] })
-    userType: 'internal' | 'external';
-
-    // @ApiProperty({ description: '새로운 SSO 토큰 정보' })
-    // ssoToken: {
-    //     accessToken: string;
-    //     refreshToken?: string;
-    // };
+    @ApiProperty({ description: '액세스 토큰 만료 시간 (초)' })
+    expiresIn: number;
 }

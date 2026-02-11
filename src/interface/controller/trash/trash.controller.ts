@@ -9,6 +9,7 @@ import {
   HttpCode,
   HttpStatus,
   Logger,
+  UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { TrashService } from '../../../business/trash/trash.service';
@@ -27,6 +28,7 @@ import { AuditAction } from '../../../common/decorators';
 import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
 import { TargetType } from '../../../domain/audit/enums/common.enum';
 import { RequestContext } from '../../../common/context/request-context';
+import { NasAvailabilityGuard } from '../../../common/guards/nas-availability.guard';
 
 
 /**
@@ -35,6 +37,7 @@ import { RequestContext } from '../../../common/context/request-context';
  * 설계 문서: 060-1.휴지통_처리_FLOW.md
  */
 @ApiTags('220.휴지통')
+@UseGuards(NasAvailabilityGuard)
 @Controller('v1/trash')
 export class TrashController {
   private readonly logger = new Logger(TrashController.name);

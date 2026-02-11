@@ -4,6 +4,7 @@
  */
 import { Injectable, Logger } from '@nestjs/common';
 import { NasHealthCheckService } from '../../infra/storage/nas/nas-health-check.service';
+import { NasStatusCacheService } from '../../infra/storage/nas/nas-status-cache.service';
 import { NasHealthHistoryDomainService } from '../../domain/nas-health-history/service/nas-health-history-domain.service';
 import { SystemConfigDomainService } from '../../domain/system-config/service/system-config-domain.service';
 import { NasHealthStatus } from '../../domain/nas-health-history/entities/nas-health-history.entity';
@@ -12,7 +13,7 @@ import {
   ObservabilityHistoryResponseDto,
   ObservabilitySettingsResponseDto,
   UpdateObservabilitySettingsDto,
-} from '../../interface/controller/admin/dto/observability.dto';
+} from '../../interface/controller/admin/observability/dto/observability.dto';
 
 export const CONFIG_KEYS = {
   INTERVAL_MINUTES: 'nas.health_check.interval_minutes',
@@ -32,12 +33,19 @@ export class ObservabilityService {
 
   constructor(
     private readonly nasHealthCheckService: NasHealthCheckService,
+    private readonly nasStatusCache: NasStatusCacheService,
     private readonly historyService: NasHealthHistoryDomainService,
     private readonly configService: SystemConfigDomainService,
   ) {}
 
   async getCurrent(): Promise<ObservabilityCurrentDto> {
     const result = await this.nasHealthCheckService.checkHealth();
+
+    // Ad-hoc 조회 시에도 캐시 갱신
+    this.nasStatusCache.updateFromHealthCheck({
+      status: result.status,
+      error: result.error,
+    });
 
     const dto: ObservabilityCurrentDto = {
       status: result.status,
@@ -127,6 +135,13 @@ export class ObservabilityService {
   async executeHealthCheckAndRecord(): Promise<void> {
     try {
       const result = await this.nasHealthCheckService.checkHealth();
+
+      // 인메모리 캐시 상태 갱신 (Guard/Worker가 참조)
+      this.nasStatusCache.updateFromHealthCheck({
+        status: result.status,
+        error: result.error,
+      });
+
       await this.historyService.이력기록({
         status: result.status as NasHealthStatus,
         responseTimeMs: result.responseTimeMs,
@@ -137,6 +152,10 @@ export class ObservabilityService {
       });
       this.logger.debug(`Health check recorded: ${result.status}`);
     } catch (error) {
+      // 체크 자체 실패 시 unhealthy로 전환
+      this.nasStatusCache.markUnhealthy(
+        error instanceof Error ? error.message : 'Health check failed',
+      );
       this.logger.error('Failed to execute health check:', error);
     }
   }

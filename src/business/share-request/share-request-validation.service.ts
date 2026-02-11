@@ -9,8 +9,10 @@ import { PublicShareDomainService } from '../../domain/external-share';
 import { FileDomainService } from '../../domain/file';
 import { ExternalUserDomainService } from '../../domain/external-share';
 import { DomainEmployeeService } from '../../integrations/migration/organization/services/employee.service';
+import { UserQueryService } from '../user/user-query.service';
 import { FileState } from '../../domain/file/type/file.type';
 import { ShareRequestStatus } from '../../domain/share-request/type/share-request-status.enum';
+import { BusinessException, ErrorCodes } from '../../common/exceptions';
 
 /**
  * 중복 검증 결과
@@ -52,6 +54,7 @@ export class ShareRequestValidationService {
     private readonly fileDomainService: FileDomainService,
     private readonly externalUserDomainService: ExternalUserDomainService,
     private readonly employeeService: DomainEmployeeService,
+    private readonly userQueryService: UserQueryService,
   ) {}
 
   /**
@@ -228,6 +231,25 @@ export class ShareRequestValidationService {
     }
 
     return results;
+  }
+
+  /**
+   * 지정 승인자 검증
+   *
+   * 지정된 승인자가 유효한지 확인합니다:
+   * - 사용자 존재 여부
+   * - 활성 상태 여부
+   * - 매니저 이상 역할 보유 여부
+   *
+   * @throws BusinessException 승인자가 유효하지 않은 경우
+   */
+  async validateDesignatedApprover(designatedApproverId: string): Promise<void> {
+    const isApprover = await this.userQueryService.isApprover(designatedApproverId);
+    if (!isApprover) {
+      throw BusinessException.of(ErrorCodes.SHARE_INVALID_APPROVER, {
+        designatedApproverId,
+      });
+    }
   }
 
   /**

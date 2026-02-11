@@ -80,7 +80,10 @@ export class ShareRequestAdminDetailDto {
   @ApiProperty({ description: '공유 요청 사유' })
   reason: string;
 
-  @ApiProperty({ description: '승인자 ID', format: 'uuid', required: false })
+  @ApiProperty({ description: '지정 승인 대상자 ID', format: 'uuid' })
+  designatedApproverId: string;
+
+  @ApiProperty({ description: '실제 승인/반려 처리자 ID', format: 'uuid', required: false })
   approverId?: string;
 
   @ApiProperty({ description: '승인자 정보', required: false })
@@ -124,6 +127,7 @@ export class ShareRequestAdminDetailDto {
     dto.startAt = entity.startAt;
     dto.endAt = entity.endAt;
     dto.reason = entity.reason;
+    dto.designatedApproverId = entity.designatedApproverId;
     dto.approverId = entity.approverId;
     dto.decidedAt = entity.decidedAt;
     dto.decisionComment = entity.decisionComment;

@@ -18,6 +18,7 @@ import { LocalCacheAdapter } from './cache/local/local-cache.adapter';
 import { SeaweedFSCacheAdapter } from './cache/seaweedfs/seaweedfs-cache.adapter';
 import { NfsNasAdapter } from './nas/nfs-nas.adapter';
 import { NasClientProvider } from './nas/nas-client.provider';
+import { NasStatusCacheService } from './nas/nas-status-cache.service';
 import { FileLockManager } from './file-lock.manager';
 
 /**
@@ -59,6 +60,7 @@ export type CacheStorageType = 'local' | 'seaweedfs';
     // NAS 스토리지 Provider
     // ============================================
     NasClientProvider, // Provider로 등록해야 OnModuleInit이 호출됨
+    NasStatusCacheService,
     {
       provide: NAS_STORAGE_PORT,
       useFactory: (nasClientProvider: NasClientProvider, lockManager: FileLockManager) => {
@@ -69,7 +71,7 @@ export type CacheStorageType = 'local' | 'seaweedfs';
       inject: [NasClientProvider, FileLockManager],
     },
   ],
-  exports: [CACHE_STORAGE_PORT, NAS_STORAGE_PORT, FileLockManager],
+  exports: [CACHE_STORAGE_PORT, NAS_STORAGE_PORT, FileLockManager, NasStatusCacheService],
 })
 export class StorageInfraModule {}
 

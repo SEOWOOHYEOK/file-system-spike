@@ -1,4 +1,4 @@
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsDateString,
   IsEnum,
@@ -12,7 +12,6 @@ import {
 import { Type } from 'class-transformer';
 import { AuditAction } from '../../../../domain/audit/enums/audit-action.enum';
 import { FileChangeType } from '../../../../domain/audit/enums/file-change.enum';
-import { SecurityEventType, Severity } from '../../../../domain/audit/enums/security-event.enum';
 import { LogResult, TargetType, UserType } from '../../../../domain/audit/enums/common.enum';
 
 /**
@@ -108,65 +107,6 @@ export class AuditLogQueryDto {
 }
 
 /**
- * 보안 로그 필터 Query DTO
- */
-export class SecurityLogQueryDto {
-  @ApiPropertyOptional({
-    description: '페이지 번호',
-    default: 1,
-    minimum: 1,
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  page: number = 1;
-
-  @ApiPropertyOptional({
-    description: '페이지 크기',
-    default: 50,
-    minimum: 1,
-    maximum: 500,
-  })
-  @IsOptional()
-  @Type(() => Number)
-  @IsInt()
-  @Min(1)
-  @Max(500)
-  limit: number = 50;
-
-  @ApiPropertyOptional({ description: '보안 이벤트 타입', enum: SecurityEventType })
-  @IsOptional()
-  @IsEnum(SecurityEventType)
-  eventType?: SecurityEventType;
-
-  @ApiPropertyOptional({ description: '사용자 ID', format: 'uuid' })
-  @IsOptional()
-  @IsUUID()
-  userId?: string;
-
-  @ApiPropertyOptional({ description: 'IP 주소', example: '192.168.0.10' })
-  @IsOptional()
-  @IsIP()
-  ipAddress?: string;
-
-  @ApiPropertyOptional({ description: '심각도', enum: Severity })
-  @IsOptional()
-  @IsEnum(Severity)
-  severity?: Severity;
-
-  @ApiPropertyOptional({ description: '조회 시작일 (ISO 8601)' })
-  @IsOptional()
-  @IsDateString()
-  startDate?: string;
-
-  @ApiPropertyOptional({ description: '조회 종료일 (ISO 8601)' })
-  @IsOptional()
-  @IsDateString()
-  endDate?: string;
-}
-
-/**
  * 파일 이력 필터 Query DTO
  */
 export class FileHistoryQueryDto {
@@ -220,28 +160,3 @@ export class FileHistoryQueryDto {
   endDate?: string;
 }
 
-/**
- * 로그인 실패 횟수 Query DTO
- */
-export class LoginFailureQueryDto {
-  @ApiPropertyOptional({
-    description: '조회 시작 시간 (ISO 8601)',
-  })
-  @IsOptional()
-  @IsDateString()
-  since?: string;
-}
-
-/**
- * 로그인 실패 집계 응답 DTO
- */
-export class LoginFailureCountResponseDto {
-  @ApiProperty({ description: 'IP 주소' })
-  ipAddress: string;
-
-  @ApiProperty({ description: '집계 시작 시간 (ISO 8601)' })
-  since: string;
-
-  @ApiProperty({ description: '로그인 실패 횟수' })
-  failureCount: number;
-}

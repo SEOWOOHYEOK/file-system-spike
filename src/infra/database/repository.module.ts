@@ -18,7 +18,6 @@ import {
   UploadSessionOrmEntity,
   UploadPartOrmEntity,
   AuditLogOrmEntity,
-  SecurityLogOrmEntity,
   FileHistoryOrmEntity,
   SystemEventOrmEntity,
   UserOrmEntity,
@@ -36,7 +35,6 @@ import {
   UploadSessionRepository,
   UploadPartRepository,
   AuditLogRepository,
-  SecurityLogRepository,
   FileHistoryRepository,
   SystemEventRepository,
   UserRepository,
@@ -66,9 +64,6 @@ import {
 import {
   AUDIT_LOG_REPOSITORY,
 } from '../../domain/audit/repositories/audit-log.repository.interface';
-import {
-  SECURITY_LOG_REPOSITORY,
-} from '../../domain/audit/repositories/security-log.repository.interface';
 import {
   FILE_HISTORY_REPOSITORY,
 } from '../../domain/audit/repositories/file-history.repository.interface';
@@ -116,7 +111,6 @@ const entities = [
   UploadSessionOrmEntity,
   UploadPartOrmEntity,
   AuditLogOrmEntity,
-  SecurityLogOrmEntity,
   FileHistoryOrmEntity,
   SystemEventOrmEntity,
   UserOrmEntity,
@@ -183,11 +177,6 @@ const entities = [
       provide: AUDIT_LOG_REPOSITORY,
       useClass: AuditLogRepository,
     },
-    // Security Log Repository
-    {
-      provide: SECURITY_LOG_REPOSITORY,
-      useClass: SecurityLogRepository,
-    },
     // File History Repository
     {
       provide: FILE_HISTORY_REPOSITORY,
@@ -240,7 +229,6 @@ const entities = [
     UPLOAD_SESSION_REPOSITORY,
     UPLOAD_PART_REPOSITORY,
     AUDIT_LOG_REPOSITORY,
-    SECURITY_LOG_REPOSITORY,
     FILE_HISTORY_REPOSITORY,
     SYSTEM_EVENT_REPOSITORY,
     USER_REPOSITORY,

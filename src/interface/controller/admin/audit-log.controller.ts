@@ -10,11 +10,9 @@ import {
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
 import { AuditLogService } from '../../../business/audit/audit-log.service';
-import { SecurityLogService } from '../../../business/audit/security-log.service';
 import { FileHistoryService } from '../../../business/audit/file-history.service';
 import { TargetType } from '../../../domain/audit/enums/common.enum';
 import { AuditLog } from '../../../domain/audit/entities/audit-log.entity';
-import { SecurityLog } from '../../../domain/audit/entities/security-log.entity';
 import { FileHistory } from '../../../domain/audit/entities/file-history.entity';
 import type { PaginatedResult } from '../../../domain/audit/repositories/audit-log.repository.interface';
 import {
@@ -23,9 +21,6 @@ import {
   ApiGetAuditLogsByUser,
   ApiGetAuditLogsByTarget,
   ApiGetAuditLogsBySession,
-  ApiGetSecurityLogs,
-  ApiGetSecurityLogsByUser,
-  ApiGetLoginFailuresByIp,
   ApiGetFileHistories,
   ApiGetFileHistoryByFile,
   ApiGetFileHistoryByVersion,
@@ -35,24 +30,20 @@ import {
   AuditLogQueryDto,
   FileHistoryQueryDto,
   LimitQueryDto,
-  LoginFailureCountResponseDto,
-  LoginFailureQueryDto,
-  SecurityLogQueryDto,
 } from './dto';
 
 /**
  * 관리자 감사 로그 조회 API
  *
- * 감사 로그, 보안 로그, 파일 이력 조회
+ * 감사 로그, 파일 이력 조회
  */
-@ApiTags('Admin - Audit Logs')
+@ApiTags('806.관리자 - audit log 확인')
 @ApiBearerAuth()
 @Controller('admin/audit-logs')
 @UseGuards(JwtAuthGuard)
 export class AuditLogController {
   constructor(
     private readonly auditLogService: AuditLogService,
-    private readonly securityLogService: SecurityLogService,
     private readonly fileHistoryService: FileHistoryService,
   ) {}
 
@@ -112,51 +103,6 @@ export class AuditLogController {
     @Param('sessionId') sessionId: string,
   ): Promise<AuditLog[]> {
     return this.auditLogService.findBySessionId(sessionId);
-  }
-
-  // ========== 보안 로그 조회 ==========
-
-  @Get('security')
-  @ApiGetSecurityLogs()
-  async getSecurityLogs(
-    @Query() query: SecurityLogQueryDto,
-  ): Promise<PaginatedResult<SecurityLog>> {
-    return this.securityLogService.findByFilter(
-      {
-        eventType: query.eventType,
-        userId: query.userId,
-        ipAddress: query.ipAddress,
-        severity: query.severity,
-        startDate: query.startDate ? new Date(query.startDate) : undefined,
-        endDate: query.endDate ? new Date(query.endDate) : undefined,
-      },
-      { page: query.page, limit: query.limit },
-    );
-  }
-
-  @Get('security/user/:userId')
-  @ApiGetSecurityLogsByUser()
-  async getSecurityLogsByUser(
-    @Param('userId', ParseUUIDPipe) userId: string,
-    @Query() query: LimitQueryDto,
-  ): Promise<SecurityLog[]> {
-    return this.securityLogService.findByUserId(userId, query.limit);
-  }
-
-  @Get('security/login-failures/ip/:ipAddress')
-  @ApiGetLoginFailuresByIp()
-  async getLoginFailuresByIp(
-    @Param('ipAddress') ipAddress: string,
-    @Query() query: LoginFailureQueryDto,
-  ): Promise<LoginFailureCountResponseDto> {
-    const sinceDate = query.since
-      ? new Date(query.since)
-      : new Date(Date.now() - 24 * 60 * 60 * 1000); // 기본 24시간
-    const count = await this.securityLogService.countLoginFailuresByIp(
-      ipAddress,
-      sinceDate,
-    );
-    return { ipAddress, since: sinceDate.toISOString(), failureCount: count };
   }
 
   // ========== 파일 이력 조회 ==========

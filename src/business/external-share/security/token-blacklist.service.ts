@@ -1,130 +1,128 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { Cron } from '@nestjs/schedule';
+import * as crypto from 'crypto';
+import { TokenBlacklistOrmEntity } from '../../../infra/database/entities/token-blacklist.orm-entity';
 
 /**
- * 블랙리스트 토큰 정보
+ * 블랙리스트 토큰 reason 타입
  */
-interface BlacklistedToken {
-  token: string;
-  userId: string;
-  reason: 'logout' | 'password_change' | 'account_deactivated' | 'admin_revoke';
-  blacklistedAt: Date;
-  expiresAt: Date; // 토큰의 원래 만료 시간
-}
+export type BlacklistReason =
+  | 'logout'
+  | 'password_change'
+  | 'account_deactivated'
+  | 'admin_revoke';
 
 /**
  * TokenBlacklistService
  *
- * JWT 토큰 블랙리스트를 관리합니다.
+ * JWT 토큰 블랙리스트를 DB에 저장하고 관리합니다.
  *
  * 용도:
- * - 로그아웃 시 토큰 무효화
+ * - 로그아웃 시 토큰 무효화 (internal/external 모두)
  * - 비밀번호 변경 시 기존 토큰 무효화
  * - 계정 비활성화 시 토큰 무효화
  * - 관리자 강제 로그아웃
  *
- * ⚠️ 주의: 현재 메모리 기반 구현입니다.
- * 프로덕션 환경에서는 Redis 등 분산 캐시 사용을 권장합니다.
+ * 보안: 토큰 원문 대신 SHA-256 해시를 저장합니다.
  */
 @Injectable()
 export class TokenBlacklistService {
   private readonly logger = new Logger(TokenBlacklistService.name);
 
-  // 메모리 저장소 (프로덕션에서는 Redis 권장)
-  private readonly blacklist = new Map<string, BlacklistedToken>();
+  constructor(
+    @InjectRepository(TokenBlacklistOrmEntity)
+    private readonly repo: Repository<TokenBlacklistOrmEntity>,
+  ) {}
 
-  // 만료된 토큰 정리 주기 (5분)
-  private readonly CLEANUP_INTERVAL_MS = 5 * 60 * 1000;
-
-  constructor() {
-    // 주기적으로 만료된 토큰 정리
-    setInterval(() => this.cleanupExpiredTokens(), this.CLEANUP_INTERVAL_MS);
+  private hashToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
   }
 
   /**
    * 토큰을 블랙리스트에 추가
    */
-  addToBlacklist(
+  async addToBlacklist(
     token: string,
     userId: string,
-    reason: BlacklistedToken['reason'],
+    userType: string,
+    reason: BlacklistReason,
     tokenExpiresAt: Date,
-  ): void {
-    this.blacklist.set(token, {
-      token,
+  ): Promise<void> {
+    const tokenHash = this.hashToken(token);
+
+    const existing = await this.repo.findOne({ where: { tokenHash } });
+    if (existing) {
+      this.logger.debug(`Token already blacklisted: userId=${userId}`);
+      return;
+    }
+
+    await this.repo.save({
+      tokenHash,
       userId,
+      userType,
       reason,
-      blacklistedAt: new Date(),
       expiresAt: tokenExpiresAt,
     });
 
-    this.logger.log(
-      `Token blacklisted: userId=${userId}, reason=${reason}`,
-    );
+    this.logger.log(`Token blacklisted: userId=${userId}, reason=${reason}`);
   }
 
   /**
    * 토큰이 블랙리스트에 있는지 확인
+   * expires_at >= now 인 레코드만 유효 (만료된 토큰은 이미 무효화됨)
    */
-  isBlacklisted(token: string): boolean {
-    return this.blacklist.has(token);
-  }
-
-  /**
-   * 특정 사용자의 모든 토큰을 블랙리스트에 추가
-   * (비밀번호 변경, 계정 비활성화 시 사용)
-   */
-  revokeAllUserTokens(
-    userId: string,
-    reason: BlacklistedToken['reason'],
-  ): void {
-    // 이 방식은 토큰을 알아야 하므로, 실제로는 사용자 ID 기반 차단이 더 효율적
-    // 가드에서 사용자 ID로 차단 여부를 확인하는 방식으로 구현
-    this.logger.log(
-      `All tokens revoked for user: userId=${userId}, reason=${reason}`,
-    );
-  }
-
-  /**
-   * 블랙리스트에서 토큰 정보 조회
-   */
-  getBlacklistInfo(token: string): BlacklistedToken | undefined {
-    return this.blacklist.get(token);
-  }
-
-  /**
-   * 만료된 토큰 정리 (메모리 관리)
-   */
-  private cleanupExpiredTokens(): void {
+  async isBlacklisted(token: string): Promise<boolean> {
+    const tokenHash = this.hashToken(token);
     const now = new Date();
-    let cleanedCount = 0;
 
-    this.blacklist.forEach((info, token) => {
-      if (info.expiresAt < now) {
-        this.blacklist.delete(token);
-        cleanedCount++;
-      }
-    });
+    const active = await this.repo
+      .createQueryBuilder('tb')
+      .where('tb.token_hash = :hash', { hash: tokenHash })
+      .andWhere('tb.expires_at >= :now', { now })
+      .getOne();
 
-    if (cleanedCount > 0) {
-      this.logger.debug(`Cleaned up ${cleanedCount} expired blacklisted tokens`);
+    return !!active;
+  }
+
+  /**
+   * 만료된 블랙리스트 레코드 삭제 (배치 정리)
+   */
+  @Cron('0 */5 * * * *') // 5분마다
+  async cleanupExpiredTokens(): Promise<void> {
+    const result = await this.repo
+      .createQueryBuilder()
+      .delete()
+      .from(TokenBlacklistOrmEntity)
+      .where('expires_at < :now', { now: new Date() })
+      .execute();
+
+    if (result.affected && result.affected > 0) {
+      this.logger.debug(`Cleaned up ${result.affected} expired blacklisted tokens`);
     }
   }
 
   /**
    * 블랙리스트 통계 (관리자용)
    */
-  getStats(): {
+  async getStats(): Promise<{
     totalBlacklisted: number;
     byReason: Record<string, number>;
-  } {
-    const byReason: Record<string, number> = {};
+  }> {
+    const now = new Date();
+    const rows = await this.repo
+      .createQueryBuilder('tb')
+      .where('tb.expires_at >= :now', { now })
+      .getMany();
 
-    this.blacklist.forEach((info) => {
-      byReason[info.reason] = (byReason[info.reason] || 0) + 1;
+    const byReason: Record<string, number> = {};
+    rows.forEach((r) => {
+      byReason[r.reason] = (byReason[r.reason] || 0) + 1;
     });
 
     return {
-      totalBlacklisted: this.blacklist.size,
+      totalBlacklisted: rows.length,
       byReason,
     };
   }

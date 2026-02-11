@@ -12,7 +12,7 @@ import {
 } from './dto/recent-activity.dto';
 import { PaginatedResponseDto } from '../../common/dto/pagination.dto';
 
-@ApiTags('330.사용자 활동 내역 조회 API')
+@ApiTags('330.사용자 최근 활동 내역 조회')
 @UseGuards(JwtAuthGuard)
 @Controller('v1/users/audit-log')
 export class UserAuditLogController {

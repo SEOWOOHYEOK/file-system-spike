@@ -9,7 +9,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiQuery, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { UserService } from '../../../../business/user/user.service';
 import { UserSyncService, SyncResult } from '../../../../business/user/user-sync.service';
 import { UserQueryService } from '../../../../business/user/user-query.service';
@@ -17,17 +17,23 @@ import { User } from '../../../../domain/user/entities/user.entity';
 import { AssignRoleDto } from '../../../../domain/user/dto/assign-role.dto';
 import { UserFilterQueryDto } from './dto/user-admin-query.dto';
 import { UserWithEmployeeResponseDto, UserWithRoleResponseDto } from './dto/user-admin-response.dto';
-import { EmployeeStatus } from '../../../../integrations/migration/organization/entities/employee.entity';
 import { AuditAction } from '../../../../common/decorators/audit-action.decorator';
 import { AuditAction as AuditActionEnum } from '../../../../domain/audit/enums/audit-action.enum';
 import { TargetType } from '../../../../domain/audit/enums/common.enum';
+import {
+  ApiFindAllUsers,
+  ApiFindUserById,
+  ApiAssignRole,
+  ApiRemoveRole,
+  ApiSyncUsers,
+} from './user-admin.swagger';
 
 /**
  * User 관리 Admin API 컨트롤러
  *
  * 관리자 전용: User 목록 조회, Role 부여/제거, Employee 동기화
  */
-@ApiTags('100.Admin - User 관리')
+@ApiTags('810.관리자 - 사용자 역할 부여 관리')
 @ApiBearerAuth()
 @Controller('v1/admin/users')
 export class UserAdminController {
@@ -42,16 +48,7 @@ export class UserAdminController {
    * GET /admin/users?employeeName=홍길동&employeeNumber=EMP001&status=재직중
    */
   @Get()
-  @ApiOperation({ summary: '전체 User 목록 조회 (Employee 정보 포함)' })
-  @ApiQuery({ name: 'employeeName', required: false, description: '이름 (부분 일치)' })
-  @ApiQuery({ name: 'employeeNumber', required: false, description: '사번 (부분 일치)' })
-  @ApiQuery({
-    name: 'status',
-    required: false,
-    enum: EmployeeStatus,
-    description: '재직 상태',
-  })
-  @ApiResponse({ status: 200, description: 'User + Employee 목록 반환' })
+  @ApiFindAllUsers()
   async findAll(
     @Query() filter: UserFilterQueryDto,
   ): Promise<UserWithEmployeeResponseDto[]> {
@@ -63,9 +60,7 @@ export class UserAdminController {
    * GET /admin/users/:id
    */
   @Get(':id')
-  @ApiOperation({ summary: '특정 User 조회 (Role 포함)' })
-  @ApiResponse({ status: 200, description: 'User 정보 반환' })
-  @ApiResponse({ status: 404, description: 'User를 찾을 수 없음' })
+  @ApiFindUserById()
   async findById(@Param('id') id: string): Promise<UserWithRoleResponseDto> {
     const { user, role } = await this.userService.findByIdWithRole(id);
 
@@ -94,10 +89,7 @@ export class UserAdminController {
     targetType: TargetType.USER,
     targetIdParam: 'id',
   })
-  @ApiOperation({ summary: 'User에게 Role 부여' })
-  @ApiResponse({ status: 200, description: 'Role 부여 완료' })
-  @ApiResponse({ status: 404, description: 'User 또는 Role을 찾을 수 없음' })
-  @ApiResponse({ status: 400, description: '비활성 User에게 Role 부여 불가' })
+  @ApiAssignRole()
   async assignRole(
     @Param('id') id: string,
     @Body() dto: AssignRoleDto,
@@ -115,9 +107,7 @@ export class UserAdminController {
     targetType: TargetType.USER,
     targetIdParam: 'id',
   })
-  @ApiOperation({ summary: 'User의 Role 제거' })
-  @ApiResponse({ status: 200, description: 'Role 제거 완료' })
-  @ApiResponse({ status: 404, description: 'User를 찾을 수 없음' })
+  @ApiRemoveRole()
   async removeRole(@Param('id') id: string): Promise<User> {
     return this.userService.removeRole(id);
   }
@@ -133,8 +123,7 @@ export class UserAdminController {
     action: AuditActionEnum.USER_SYNC,
     targetType: TargetType.SYSTEM,
   })
-  @ApiOperation({ summary: 'Employee → User 동기화 실행' })
-  @ApiResponse({ status: 200, description: '동기화 결과 반환' })
+  @ApiSyncUsers()
   async syncUsers(): Promise<SyncResult> {
     return this.userSyncService.syncEmployeesToUsers();
   }
