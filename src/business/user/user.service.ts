@@ -6,6 +6,7 @@ import { BusinessException, ErrorCodes } from '../../common/exceptions';
 import { User } from '../../domain/user/entities/user.entity';
 import { Role } from '../../domain/role/entities/role.entity';
 import { RoleNameEnum } from '../../domain/role/role-name.enum';
+import { PermissionEnum } from '../../domain/role/permission.enum';
 import { UserDomainService } from '../../domain/user';
 import { RoleDomainService } from '../../domain/role';
 
@@ -163,5 +164,46 @@ export class UserService {
     );
 
     return { user, role };
+  }
+
+  /**
+   * 특정 권한을 보유한 활성 사용자 목록 조회
+   *
+   * Role → Permission 관계를 통해 해당 permission code를 가진 Role을 찾고,
+   * 그 Role에 속한 활성 User 목록을 반환합니다.
+   */
+  async findUsersByPermission(permission: PermissionEnum): Promise<User[]> {
+    // 1. 모든 Role 조회
+    const allRoles = await this.roleDomainService.전체조회();
+
+    // 2. 해당 permission을 가진 Role 필터
+    const matchingRoleIds = allRoles
+      .filter((role) => role.permissions.some((p) => p.code === permission))
+      .map((role) => role.id);
+
+    if (matchingRoleIds.length === 0) {
+      return [];
+    }
+
+    // 3. 활성 사용자 중 해당 Role을 가진 사용자 필터
+    const activeUsers = await this.userDomainService.활성전체조회();
+    return activeUsers.filter(
+      (user) => user.roleId && matchingRoleIds.includes(user.roleId),
+    );
+  }
+
+  /**
+   * GUEST 역할의 권한 목록 조회
+   *
+   * 외부 사용자(EXTERNAL)는 User 테이블에 없으므로
+   * PermissionsGuard에서 GUEST 역할의 권한으로 대체 체크할 때 사용
+   */
+  async getGuestRolePermissions(): Promise<PermissionEnum[]> {
+    const guestRole = await this.roleDomainService.이름조회(RoleNameEnum.GUEST);
+    if (!guestRole) {
+      this.logger.warn('[getGuestRolePermissions] GUEST 역할을 찾을 수 없음');
+      return [];
+    }
+    return guestRole.permissions.map((p) => p.code as PermissionEnum);
   }
 }

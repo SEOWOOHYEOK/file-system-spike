@@ -13,6 +13,7 @@ import { AuditModule } from './audit/audit.module';
 import { SyncEventBusinessModule } from './sync-event/sync-event.module';
 import { FavoriteBusinessModule } from './favorite/favorite.module';
 import { AuthModule } from './auth/auth.module';
+import { FileActionRequestModule } from './file-action-request/file-action-request.module';
 
 /**
  * 비즈니스 레이어 통합 모듈
@@ -44,6 +45,7 @@ const workerModules = appMode !== 'api'
     AuditModule,
     SyncEventBusinessModule,
     FavoriteBusinessModule,
+    FileActionRequestModule,
   ],
   exports: [
     AuthModule,
@@ -59,6 +61,7 @@ const workerModules = appMode !== 'api'
     AuditModule,
     SyncEventBusinessModule,
     FavoriteBusinessModule,
+    FileActionRequestModule,
   ],
 })
 export class BusinessModule {}
