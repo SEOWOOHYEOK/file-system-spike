@@ -603,6 +603,78 @@ export const ErrorCodes = {
     defaultMessage: '파일을 찾을 수 없습니다.',
   },
 
+  // ─── FileActionRequest 도메인 (10000~10099) ───
+
+  FILE_ACTION_REQUEST_NOT_FOUND: {
+    code: 10001,
+    internalCode: 'FILE_ACTION_REQUEST_NOT_FOUND',
+    httpStatus: 404,
+    defaultMessage: '파일 작업 요청을 찾을 수 없습니다.',
+  },
+
+  FILE_ACTION_REQUEST_DUPLICATE: {
+    code: 10002,
+    internalCode: 'FILE_ACTION_REQUEST_DUPLICATE',
+    httpStatus: 409,
+    defaultMessage: '해당 파일에 대해 이미 처리 대기 중인 요청이 있습니다.',
+  },
+
+  FILE_ACTION_REQUEST_NOT_APPROVABLE: {
+    code: 10003,
+    internalCode: 'FILE_ACTION_REQUEST_NOT_APPROVABLE',
+    httpStatus: 400,
+    defaultMessage: '승인할 수 없는 상태의 요청입니다.',
+  },
+
+  FILE_ACTION_REQUEST_NOT_REJECTABLE: {
+    code: 10004,
+    internalCode: 'FILE_ACTION_REQUEST_NOT_REJECTABLE',
+    httpStatus: 400,
+    defaultMessage: '반려할 수 없는 상태의 요청입니다.',
+  },
+
+  FILE_ACTION_REQUEST_NOT_CANCELLABLE: {
+    code: 10005,
+    internalCode: 'FILE_ACTION_REQUEST_NOT_CANCELLABLE',
+    httpStatus: 400,
+    defaultMessage: '취소할 수 없는 상태의 요청입니다.',
+  },
+
+  FILE_ACTION_REQUEST_NOT_OWNER: {
+    code: 10006,
+    internalCode: 'FILE_ACTION_REQUEST_NOT_OWNER',
+    httpStatus: 403,
+    defaultMessage: '본인의 요청만 취소할 수 있습니다.',
+  },
+
+  FILE_ACTION_REQUEST_INVALIDATED: {
+    code: 10007,
+    internalCode: 'FILE_ACTION_REQUEST_INVALIDATED',
+    httpStatus: 409,
+    defaultMessage: '파일 상태가 변경되어 요청을 실행할 수 없습니다.',
+  },
+
+  FILE_ACTION_REQUEST_EXECUTION_FAILED: {
+    code: 10008,
+    internalCode: 'FILE_ACTION_REQUEST_EXECUTION_FAILED',
+    httpStatus: 500,
+    defaultMessage: '파일 작업 실행 중 오류가 발생했습니다.',
+  },
+
+  FILE_ACTION_REQUEST_INVALID_APPROVER: {
+    code: 10009,
+    internalCode: 'FILE_ACTION_REQUEST_INVALID_APPROVER',
+    httpStatus: 400,
+    defaultMessage: '지정된 승인자가 승인 권한을 보유하고 있지 않습니다.',
+  },
+
+  FILE_ACTION_REQUEST_SOME_NOT_FOUND: {
+    code: 10010,
+    internalCode: 'FILE_ACTION_REQUEST_SOME_NOT_FOUND',
+    httpStatus: 404,
+    defaultMessage: '일부 요청을 찾을 수 없습니다.',
+  },
+
   // ─── System/Other (9900~9999) ───
 
   NAS_UNAVAILABLE: {
