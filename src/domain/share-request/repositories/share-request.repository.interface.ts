@@ -10,6 +10,8 @@ export interface ShareRequestFilter {
   status?: ShareRequestStatus;
   /** 요청자 ID 필터 */
   requesterId?: string;
+  /** 요청자 ID 제외 필터 (본인이 요청한 건 제외용) */
+  excludeRequesterId?: string;
   /** 파일 ID 필터 */
   fileId?: string;
   /** 대상 사용자 ID 필터 */

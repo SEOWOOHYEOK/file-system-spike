@@ -23,6 +23,12 @@ import {
   FileDetail,
   EnrichedShareTarget,
   EnrichedShareRequest,
+  ShareRequestBrief,
+  GroupSummary,
+  FileGroupItem,
+  TargetGroupItem,
+  FileGroupListResult,
+  TargetGroupListResult,
 } from './types/share-request-query.types';
 
 /**
@@ -404,6 +410,408 @@ export class ShareRequestQueryService {
         mimeType: file.mimeType,
       },
     };
+  }
+
+  // ── Q-3: 파일별 전체 목록 ──
+
+  /**
+   * 파일별 그룹 목록 조회 (Q-3 API)
+   *
+   * 모든 공유 요청을 파일 기준으로 그룹핑하여 조회합니다.
+   * 각 파일에 대해 관련 요청 목록과 상태별 요약 통계를 포함합니다.
+   *
+   * @param options 필터 및 페이지네이션 옵션
+   * @returns 파일별 그룹 목록 및 전체 건수
+   */
+  async getFileGroupList(options: {
+    status?: string;
+    q?: string;
+    page: number;
+    pageSize: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  }): Promise<FileGroupListResult> {
+    // 1. 전체 ShareRequest 조회 (상태 필터 적용)
+    const filter: ShareRequestFilter = {};
+    if (options.status) {
+      filter.status = options.status as ShareRequestStatus;
+    }
+
+    const allRequests = await this.shareRequestDomainService.필터조회(filter, {
+      page: 1,
+      pageSize: 10000, // 전체 조회
+    });
+
+    // 2. 모든 요청에서 fileId별로 그룹핑
+    const fileGroupMap = new Map<string, ShareRequest[]>();
+    for (const request of allRequests.items) {
+      for (const fileId of request.fileIds) {
+        if (!fileGroupMap.has(fileId)) {
+          fileGroupMap.set(fileId, []);
+        }
+        fileGroupMap.get(fileId)!.push(request);
+      }
+    }
+
+    // 3. 파일 정보 배치 조회
+    const allFileIds = [...fileGroupMap.keys()];
+    const fileMap = await this.batchLoadFiles(allFileIds);
+
+    // 4. 검색어 필터링 (파일명)
+    let filteredFileIds = allFileIds;
+    if (options.q) {
+      const searchLower = options.q.toLowerCase();
+      filteredFileIds = allFileIds.filter((fileId) => {
+        const file = fileMap.get(fileId);
+        return file && file.name.toLowerCase().includes(searchLower);
+      });
+    }
+
+    // 5. 사용자 정보 배치 조회
+    const allUserIds = new Set<string>();
+    for (const fileId of filteredFileIds) {
+      const requests = fileGroupMap.get(fileId) || [];
+      for (const req of requests) {
+        allUserIds.add(req.requesterId);
+        if (req.approverId) allUserIds.add(req.approverId);
+        for (const target of req.targets) {
+          allUserIds.add(target.userId);
+        }
+      }
+    }
+    const userMap = await this.batchLoadUsers([...allUserIds]);
+
+    // 6. PublicShare 정보 매핑 (승인된 요청의 다운로드/조회 횟수)
+    const publicShareMap = await this.loadPublicShareStats(allRequests.items);
+
+    // 7. FileGroupItem 생성
+    const groupItems: FileGroupItem[] = [];
+    for (const fileId of filteredFileIds) {
+      const file = fileMap.get(fileId);
+      if (!file) continue;
+
+      const requests = fileGroupMap.get(fileId) || [];
+      const brief = this.toShareRequestBriefs(requests, userMap, publicShareMap);
+      const summary = this.calculateGroupSummary(requests, publicShareMap);
+      const latestRequestedAt = this.getLatestRequestedAt(requests);
+
+      groupItems.push({
+        file: {
+          id: file.id,
+          name: file.name,
+          path: '', // path를 FileDetail에 추가하거나 빈 문자열
+          mimeType: file.mimeType,
+        },
+        summary,
+        latestRequestedAt,
+        requests: brief,
+      });
+    }
+
+    // 8. 정렬
+    const sortBy = options.sortBy || 'latestRequestedAt';
+    const sortOrder = options.sortOrder || 'desc';
+    groupItems.sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === 'fileName') {
+        comparison = a.file.name.localeCompare(b.file.name);
+      } else if (sortBy === 'requestCount') {
+        comparison = a.summary.totalRequestCount - b.summary.totalRequestCount;
+      } else {
+        // latestRequestedAt (기본)
+        comparison = new Date(a.latestRequestedAt).getTime() - new Date(b.latestRequestedAt).getTime();
+      }
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    // 9. 페이지네이션 적용 (그룹 단위)
+    const totalItems = groupItems.length;
+    const startIndex = (options.page - 1) * options.pageSize;
+    const endIndex = startIndex + options.pageSize;
+    const paginatedItems = groupItems.slice(startIndex, endIndex);
+
+    return {
+      items: paginatedItems,
+      totalItems,
+    };
+  }
+
+  // ── Q-4: 대상자별 전체 목록 ──
+
+  /**
+   * 대상자별 그룹 목록 조회 (Q-4 API)
+   *
+   * 모든 공유 요청을 대상자 기준으로 그룹핑하여 조회합니다.
+   * 각 대상자에 대해 관련 요청 목록과 상태별 요약 통계를 포함합니다.
+   *
+   * @param options 필터 및 페이지네이션 옵션
+   * @returns 대상자별 그룹 목록 및 전체 건수
+   */
+  async getTargetGroupList(options: {
+    status?: string;
+    q?: string;
+    page: number;
+    pageSize: number;
+    sortBy?: string;
+    sortOrder?: 'asc' | 'desc';
+  }): Promise<TargetGroupListResult> {
+    // 1. 전체 ShareRequest 조회 (상태 필터 적용)
+    const filter: ShareRequestFilter = {};
+    if (options.status) {
+      filter.status = options.status as ShareRequestStatus;
+    }
+
+    const allRequests = await this.shareRequestDomainService.필터조회(filter, {
+      page: 1,
+      pageSize: 10000,
+    });
+
+    // 2. 모든 요청에서 대상자별로 그룹핑
+    const targetGroupMap = new Map<string, ShareRequest[]>();
+    for (const request of allRequests.items) {
+      for (const target of request.targets) {
+        if (!targetGroupMap.has(target.userId)) {
+          targetGroupMap.set(target.userId, []);
+        }
+        targetGroupMap.get(target.userId)!.push(request);
+      }
+    }
+
+    // 3. 사용자 정보 배치 조회 (대상자 + 요청자 + 승인자)
+    const allUserIds = new Set<string>();
+    for (const [targetId, requests] of targetGroupMap) {
+      allUserIds.add(targetId);
+      for (const req of requests) {
+        allUserIds.add(req.requesterId);
+        if (req.approverId) allUserIds.add(req.approverId);
+        for (const t of req.targets) {
+          allUserIds.add(t.userId);
+        }
+      }
+    }
+    const userMap = await this.batchLoadUsers([...allUserIds]);
+
+    // 4. 검색어 필터링 (대상자 이름/이메일)
+    let filteredTargetIds = [...targetGroupMap.keys()];
+    if (options.q) {
+      const searchLower = options.q.toLowerCase();
+      filteredTargetIds = filteredTargetIds.filter((targetId) => {
+        const user = userMap.get(targetId);
+        if (!user) return false;
+        return (
+          user.name.toLowerCase().includes(searchLower) ||
+          user.email.toLowerCase().includes(searchLower)
+        );
+      });
+    }
+
+    // 5. PublicShare 정보 매핑
+    const publicShareMap = await this.loadPublicShareStats(allRequests.items);
+
+    // 6. TargetGroupItem 생성
+    const groupItems: TargetGroupItem[] = [];
+    for (const targetId of filteredTargetIds) {
+      const targetUser = userMap.get(targetId);
+      if (!targetUser) continue;
+
+      const requests = targetGroupMap.get(targetId) || [];
+      const brief = this.toShareRequestBriefs(requests, userMap, publicShareMap);
+      const summary = this.calculateGroupSummary(requests, publicShareMap);
+      const latestRequestedAt = this.getLatestRequestedAt(requests);
+
+      groupItems.push({
+        target: targetUser,
+        summary,
+        latestRequestedAt,
+        requests: brief,
+      });
+    }
+
+    // 7. 정렬
+    const sortBy = options.sortBy || 'latestRequestedAt';
+    const sortOrder = options.sortOrder || 'desc';
+    groupItems.sort((a, b) => {
+      let comparison = 0;
+      if (sortBy === 'targetName') {
+        comparison = a.target.name.localeCompare(b.target.name);
+      } else if (sortBy === 'requestCount') {
+        comparison = a.summary.totalRequestCount - b.summary.totalRequestCount;
+      } else {
+        comparison = new Date(a.latestRequestedAt).getTime() - new Date(b.latestRequestedAt).getTime();
+      }
+      return sortOrder === 'asc' ? comparison : -comparison;
+    });
+
+    // 8. 페이지네이션 적용 (대상자 단위)
+    const totalItems = groupItems.length;
+    const startIndex = (options.page - 1) * options.pageSize;
+    const endIndex = startIndex + options.pageSize;
+    const paginatedItems = groupItems.slice(startIndex, endIndex);
+
+    return {
+      items: paginatedItems,
+      totalItems,
+    };
+  }
+
+  // ── Q-3/Q-4 공통 헬퍼 ──
+
+  /**
+   * ShareRequest 배열을 ShareRequestBrief 배열로 변환
+   */
+  private toShareRequestBriefs(
+    requests: ShareRequest[],
+    userMap: Map<string, UserDetail>,
+    publicShareMap: Map<string, { currentDownloadCount: number; currentViewCount: number }>,
+  ): ShareRequestBrief[] {
+    return requests.map((req) => {
+      const requester = userMap.get(req.requesterId) as InternalUserDetail;
+      const targets = req.targets
+        .map((t) => userMap.get(t.userId))
+        .filter((u): u is UserDetail => u != null);
+      const approver = req.approverId
+        ? (userMap.get(req.approverId) as InternalUserDetail | undefined)
+        : undefined;
+
+      // 승인된 요청의 PublicShare 통계 집계
+      let currentDownloadCount: number | undefined;
+      let currentViewCount: number | undefined;
+      if (req.status === ShareRequestStatus.APPROVED && req.publicShareIds?.length > 0) {
+        currentDownloadCount = 0;
+        currentViewCount = 0;
+        for (const psId of req.publicShareIds) {
+          const stats = publicShareMap.get(psId);
+          if (stats) {
+            currentDownloadCount += stats.currentDownloadCount;
+            currentViewCount += stats.currentViewCount;
+          }
+        }
+      }
+
+      return {
+        id: req.id,
+        status: req.status,
+        requester,
+        targets,
+        permission: req.permission.type,
+        maxDownloads: req.permission.maxDownloads,
+        currentDownloadCount,
+        currentViewCount,
+        startAt: req.startAt,
+        endAt: req.endAt,
+        requestedAt: req.requestedAt,
+        reason: req.reason,
+        approver,
+        decidedAt: req.decidedAt,
+      } as ShareRequestBrief;
+    });
+  }
+
+  /**
+   * 그룹 요약 정보 계산
+   */
+  private calculateGroupSummary(
+    requests: ShareRequest[],
+    publicShareMap: Map<string, { currentDownloadCount: number; currentViewCount: number }>,
+  ): GroupSummary {
+    let activeShareCount = 0;
+
+    const statusCounts = {
+      pendingCount: 0,
+      approvedCount: 0,
+      rejectedCount: 0,
+      canceledCount: 0,
+    };
+
+    for (const req of requests) {
+      switch (req.status) {
+        case ShareRequestStatus.PENDING:
+          statusCounts.pendingCount++;
+          break;
+        case ShareRequestStatus.APPROVED:
+          statusCounts.approvedCount++;
+          // 승인된 요청의 활성 공유 수
+          if (req.publicShareIds?.length > 0) {
+            activeShareCount += req.publicShareIds.filter((id) => publicShareMap.has(id)).length;
+          }
+          break;
+        case ShareRequestStatus.REJECTED:
+          statusCounts.rejectedCount++;
+          break;
+        case ShareRequestStatus.CANCELED:
+          statusCounts.canceledCount++;
+          break;
+      }
+    }
+
+    return {
+      totalRequestCount: requests.length,
+      ...statusCounts,
+      activeShareCount,
+    };
+  }
+
+  /**
+   * 가장 최근 요청일 조회
+   */
+  private getLatestRequestedAt(requests: ShareRequest[]): Date {
+    if (requests.length === 0) return new Date();
+    return requests.reduce((latest, req) => {
+      const reqDate = new Date(req.requestedAt);
+      return reqDate > latest ? reqDate : latest;
+    }, new Date(0));
+  }
+
+  /**
+   * PublicShare 통계 정보 배치 로드
+   * 승인된 요청의 publicShareIds로부터 다운로드/조회 횟수를 조회
+   */
+  private async loadPublicShareStats(
+    requests: ShareRequest[],
+  ): Promise<Map<string, { currentDownloadCount: number; currentViewCount: number }>> {
+    const map = new Map<string, { currentDownloadCount: number; currentViewCount: number }>();
+
+    // 모든 publicShareIds 수집
+    const allPublicShareIds = new Set<string>();
+    for (const req of requests) {
+      if (req.status === ShareRequestStatus.APPROVED && req.publicShareIds?.length > 0) {
+        for (const psId of req.publicShareIds) {
+          allPublicShareIds.add(psId);
+        }
+      }
+    }
+
+    if (allPublicShareIds.size === 0) return map;
+
+    // PublicShare 배치 조회
+    const results = await Promise.all(
+      [...allPublicShareIds].map(async (psId) => {
+        try {
+          const share = await this.publicShareDomainService.조회(psId);
+          if (share && share.isValid()) {
+            return {
+              id: psId,
+              currentDownloadCount: share.currentDownloadCount,
+              currentViewCount: share.currentViewCount,
+            };
+          }
+        } catch {
+          // 공유가 삭제된 경우 무시
+        }
+        return null;
+      }),
+    );
+
+    for (const result of results) {
+      if (result) {
+        map.set(result.id, {
+          currentDownloadCount: result.currentDownloadCount,
+          currentViewCount: result.currentViewCount,
+        });
+      }
+    }
+
+    return map;
   }
 
   // ── Enrichment 메서드 ──

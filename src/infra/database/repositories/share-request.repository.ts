@@ -60,6 +60,13 @@ export class ShareRequestRepository implements IShareRequestRepository {
       });
     }
 
+    // 요청자 ID 제외 필터 (본인이 요청한 건 제외)
+    if (filter.excludeRequesterId) {
+      queryBuilder.andWhere('sr.requester_id != :excludeRequesterId', {
+        excludeRequesterId: filter.excludeRequesterId,
+      });
+    }
+
     // 파일 ID 필터 (UUID 배열에 포함되는지 확인)
     if (filter.fileId) {
       queryBuilder.andWhere('sr.file_ids @> ARRAY[:fileId]::uuid[]', {

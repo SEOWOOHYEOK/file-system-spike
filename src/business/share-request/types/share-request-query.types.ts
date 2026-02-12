@@ -225,3 +225,108 @@ export interface SharesByFileResult {
     mimeType: string;
   };
 }
+
+// ── Q-3, Q-4: 그룹 목록 타입 ──
+
+/**
+ * 요청 간략 정보 (그룹 목록의 중첩 아이템)
+ * - ShareRequest의 핵심 정보만 포함한 경량 구조
+ * - 승인된 요청의 경우 PublicShare의 다운로드/조회 횟수 포함
+ */
+export interface ShareRequestBrief {
+  /** 요청 ID */
+  id: string;
+  /** 요청 상태 */
+  status: string;
+  /** 요청자 정보 */
+  requester: InternalUserDetail;
+  /** 대상자 목록 */
+  targets: UserDetail[];
+  /** 권한: VIEW | DOWNLOAD */
+  permission: string;
+  /** 최대 다운로드 허용 횟수 */
+  maxDownloads?: number;
+  /** 현재 다운로드 횟수 (승인 후 활성 공유에서) */
+  currentDownloadCount?: number;
+  /** 현재 열람 횟수 (승인 후 활성 공유에서) */
+  currentViewCount?: number;
+  /** 공유 시작일 */
+  startAt: Date;
+  /** 공유 종료일 */
+  endAt: Date;
+  /** 요청일 */
+  requestedAt: Date;
+  /** 요청 사유 */
+  reason: string;
+  /** 승인/반려 처리자 */
+  approver?: InternalUserDetail;
+  /** 결정일시 */
+  decidedAt?: Date;
+}
+
+/**
+ * 그룹 요약 정보 (파일별/대상자별 공통)
+ */
+export interface GroupSummary {
+  /** 전체 요청 건수 */
+  totalRequestCount: number;
+  /** 대기 중 요청 건수 */
+  pendingCount: number;
+  /** 승인된 요청 건수 */
+  approvedCount: number;
+  /** 반려된 요청 건수 */
+  rejectedCount: number;
+  /** 취소된 요청 건수 */
+  canceledCount: number;
+  /** 현재 활성 공유 수 */
+  activeShareCount: number;
+}
+
+/**
+ * 파일별 그룹 아이템 (Q-3 API)
+ */
+export interface FileGroupItem {
+  /** 파일 정보 */
+  file: {
+    id: string;
+    name: string;
+    path: string;
+    mimeType: string;
+  };
+  /** 요약 통계 */
+  summary: GroupSummary;
+  /** 가장 최근 요청일 */
+  latestRequestedAt: Date;
+  /** 관련 요청 목록 */
+  requests: ShareRequestBrief[];
+}
+
+/**
+ * 대상자별 그룹 아이템 (Q-4 API)
+ */
+export interface TargetGroupItem {
+  /** 대상자 정보 */
+  target: UserDetail;
+  /** 요약 통계 */
+  summary: GroupSummary;
+  /** 가장 최근 요청일 */
+  latestRequestedAt: Date;
+  /** 관련 요청 목록 */
+  requests: ShareRequestBrief[];
+}
+
+/**
+ * 파일별 그룹 목록 결과 (Q-3 API 응답)
+ */
+export interface FileGroupListResult {
+  items: FileGroupItem[];
+  totalItems: number;
+}
+
+/**
+ * 대상자별 그룹 목록 결과 (Q-4 API 응답)
+ */
+export interface TargetGroupListResult {
+  items: TargetGroupItem[];
+  totalItems: number;
+}

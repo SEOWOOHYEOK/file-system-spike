@@ -1,5 +1,6 @@
 import { IsString, IsNotEmpty, IsEmail } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
+import { RoleNameEnum } from '../../../../domain/role/role-name.enum';
 
 /**
  * 로그인 요청 DTO
@@ -47,10 +48,10 @@ export class LoginResponseDto {
         employeeNumber: string;
         name?: string;
         email?: string;
+        userType: 'internal' | 'external';
+        role: RoleNameEnum;
+        roleDescription?: string;
     };
-
-    @ApiProperty({ description: '사용자 타입 (내부/외부)', enum: ['internal', 'external'] })
-    userType: 'internal' | 'external';
 
     @ApiProperty({ description: '액세스 토큰 만료 시간 (초)' })
     expiresIn: number;

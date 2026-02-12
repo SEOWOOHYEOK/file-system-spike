@@ -20,6 +20,8 @@ import { User } from '../../../common/decorators/user.decorator';
 import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
 import { TargetType, UserType } from '../../../domain/audit/enums/common.enum';
 import { UnifiedJwtAuthGuard } from '../../../common/guards';
+import { UserService } from '../../../business/user/user.service';
+import { RoleNameEnum, RoleDescriptions } from '../../../domain/role/role-name.enum';
 
 /**
  * 인증 컨트롤러
@@ -38,6 +40,7 @@ export class AuthController {
         private readonly organizationMigrationService: OrganizationMigrationService,
         private readonly tokenBlacklistService: TokenBlacklistService,
         private readonly refreshTokenService: RefreshTokenService,
+        private readonly userService: UserService,
         @InjectRepository(EmployeeDepartmentPosition)
         private readonly edpRepository: Repository<EmployeeDepartmentPosition>,
     ) { }
@@ -65,6 +68,52 @@ export class AuthController {
     }
 
     /**
+     * 사용자의 Role 정보 조회
+     *
+     * - 내부 사용자: users 테이블에서 Role 조회 (없으면 기본 USER 역할 자동 할당)
+     * - 외부 사용자: GUEST 역할
+     * - 조회 실패 시: USER 역할 (기본값)
+     */
+    private async resolveUserRole(
+        employeeId: string,
+        userType: 'internal' | 'external',
+    ): Promise<{ role: RoleNameEnum; roleDescription: string }> {
+        // 외부 사용자는 GUEST 역할
+        if (userType === 'external') {
+            return {
+                role: RoleNameEnum.GUEST,
+                roleDescription: RoleDescriptions[RoleNameEnum.GUEST],
+            };
+        }
+
+        try {
+            const { role } = await this.userService.findByIdWithRole(employeeId);
+
+            if (role?.name && Object.values(RoleNameEnum).includes(role.name as RoleNameEnum)) {
+                const roleName = role.name as RoleNameEnum;
+                return {
+                    role: roleName,
+                    roleDescription: RoleDescriptions[roleName],
+                };
+            }
+
+            // Role이 없거나 알 수 없는 경우 기본 USER
+            return {
+                role: RoleNameEnum.USER,
+                roleDescription: RoleDescriptions[RoleNameEnum.USER],
+            };
+        } catch (error) {
+            this.logger.warn(
+                `[resolveUserRole] Role 조회 실패 - employeeId: ${employeeId}, error: ${error.message}. 기본 USER 역할 적용`,
+            );
+            return {
+                role: RoleNameEnum.USER,
+                roleDescription: RoleDescriptions[RoleNameEnum.USER],
+            };
+        }
+    }
+
+    /**
      * SSO 로그인
      *
      * SSO를 통해 로그인하고 DMS-API JWT 토큰을 발급합니다.
@@ -78,7 +127,7 @@ export class AuthController {
             userId: res.user.id,
             userName: res.user.name,
             userEmail: res.user.email,
-            userType: res.userType === 'external' ? UserType.EXTERNAL : UserType.INTERNAL,
+            userType: res.user.userType === 'external' ? UserType.EXTERNAL : UserType.INTERNAL,
         }),
         extractTargetIdFromResponse: (res) => res.user.id,
     })
@@ -105,6 +154,9 @@ export class AuthController {
             // 부서 기반 userType 결정
             const userType = await this.resolveUserType(employee.id);
 
+            // 사용자 Role 조회
+            const { role, roleDescription } = await this.resolveUserRole(employee.id, userType);
+
             // 액세스 토큰 생성 (JWT, 30분)
             const { accessToken, expiresIn } = this.refreshTokenService.createAccessToken(
                 employee.id,
@@ -127,8 +179,10 @@ export class AuthController {
                     employeeNumber: employee.employeeNumber,
                     name: employee.name,
                     email: employee.email,
+                    userType,
+                    role,
+                    roleDescription,
                 },
-                userType,
                 expiresIn,
             };
         } catch (error: any) {

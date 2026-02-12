@@ -30,6 +30,9 @@ import {
   BulkDecisionResponseDto,
   SharesByTargetResponseDto,
   SharesByFileResponseDto,
+  GroupListQueryDto,
+  FileGroupListResponseDto,
+  TargetGroupListResponseDto,
 } from './dto';
 import {
   ApiGetShareRequestSummary,
@@ -41,6 +44,8 @@ import {
   ApiBulkRejectShareRequests,
   ApiGetSharesByTarget,
   ApiGetSharesByFile,
+  ApiGetFileGroupList,
+  ApiGetTargetGroupList,
 } from './share-request-admin.swagger';
 import { ShareRequestResponseDto } from '../../share-request/dto/share-request-response.dto';
 import { AuditAction } from '../../../../common/decorators';
@@ -112,6 +117,46 @@ export class ShareRequestAdminController {
       pageSize: query.pageSize,
       totalItems,
     });
+  }
+
+  /**
+   * Q-3: 파일별 전체 목록 조회
+   */
+  @Get('files')
+  @ApiGetFileGroupList()
+  async getFileGroupList(
+    @Query() query: GroupListQueryDto,
+  ): Promise<FileGroupListResponseDto> {
+    const result = await this.queryService.getFileGroupList({
+      status: query.status,
+      q: query.q,
+      page: query.page,
+      pageSize: query.pageSize,
+      sortBy: query.sortBy,
+      sortOrder: query.sortOrder,
+    });
+
+    return FileGroupListResponseDto.fromResult(result, query.page, query.pageSize);
+  }
+
+  /**
+   * Q-4: 대상자별 전체 목록 조회
+   */
+  @Get('targets')
+  @ApiGetTargetGroupList()
+  async getTargetGroupList(
+    @Query() query: GroupListQueryDto,
+  ): Promise<TargetGroupListResponseDto> {
+    const result = await this.queryService.getTargetGroupList({
+      status: query.status,
+      q: query.q,
+      page: query.page,
+      pageSize: query.pageSize,
+      sortBy: query.sortBy,
+      sortOrder: query.sortOrder,
+    });
+
+    return TargetGroupListResponseDto.fromResult(result, query.page, query.pageSize);
   }
 
   /**

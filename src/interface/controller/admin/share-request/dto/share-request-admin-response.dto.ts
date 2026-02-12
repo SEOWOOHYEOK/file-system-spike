@@ -10,6 +10,12 @@ import type {
   SharesByFileResult,
   FileDetail,
   EnrichedShareRequest,
+  ShareRequestBrief,
+  GroupSummary,
+  FileGroupItem,
+  TargetGroupItem,
+  FileGroupListResult,
+  TargetGroupListResult,
 } from '../../../../../business/share-request/types/share-request-query.types';
 import { PaginatedResponseDto } from '../../../../common/dto';
 import { createPaginationInfo } from '../../../../../common/types/pagination';
@@ -299,6 +305,189 @@ export class SharesByFileResponseDto extends PaginatedResponseDto<ShareItemResul
     dto.file = result.file;
     dto.summary = result.summary;
     const info = createPaginationInfo(pagination.page, pagination.pageSize, pagination.totalItems);
+    Object.assign(dto, info);
+    return dto;
+  }
+}
+
+// ── Q-3, Q-4: 그룹 목록 응답 DTO ──
+
+/**
+ * 요청 간략 정보 DTO (그룹 목록의 중첩 아이템)
+ */
+export class ShareRequestBriefDto {
+  @ApiProperty({ description: '요청 ID', format: 'uuid' })
+  id: string;
+
+  @ApiProperty({ description: '요청 상태', enum: ShareRequestStatus })
+  status: string;
+
+  @ApiProperty({ description: '요청자 정보' })
+  requester: InternalUserDetail;
+
+  @ApiProperty({ description: '대상자 목록', type: 'array' })
+  targets: UserDetail[];
+
+  @ApiProperty({ description: '권한: VIEW | DOWNLOAD' })
+  permission: string;
+
+  @ApiProperty({ description: '최대 다운로드 허용 횟수', required: false })
+  maxDownloads?: number;
+
+  @ApiProperty({ description: '현재 다운로드 횟수 (승인 후 활성 공유)', required: false })
+  currentDownloadCount?: number;
+
+  @ApiProperty({ description: '현재 열람 횟수 (승인 후 활성 공유)', required: false })
+  currentViewCount?: number;
+
+  @ApiProperty({ description: '공유 시작일', format: 'date-time' })
+  startAt: Date;
+
+  @ApiProperty({ description: '공유 종료일', format: 'date-time' })
+  endAt: Date;
+
+  @ApiProperty({ description: '요청일', format: 'date-time' })
+  requestedAt: Date;
+
+  @ApiProperty({ description: '요청 사유' })
+  reason: string;
+
+  @ApiProperty({ description: '승인/반려 처리자', required: false })
+  approver?: InternalUserDetail;
+
+  @ApiProperty({ description: '결정일시', format: 'date-time', required: false })
+  decidedAt?: Date;
+
+  static fromBrief(brief: ShareRequestBrief): ShareRequestBriefDto {
+    const dto = new ShareRequestBriefDto();
+    Object.assign(dto, brief);
+    return dto;
+  }
+}
+
+/**
+ * 그룹 요약 정보 DTO (파일별/대상자별 공통)
+ */
+export class GroupSummaryDto {
+  @ApiProperty({ description: '전체 요청 건수', example: 10 })
+  totalRequestCount: number;
+
+  @ApiProperty({ description: '대기 중 요청 건수', example: 3 })
+  pendingCount: number;
+
+  @ApiProperty({ description: '승인된 요청 건수', example: 5 })
+  approvedCount: number;
+
+  @ApiProperty({ description: '반려된 요청 건수', example: 1 })
+  rejectedCount: number;
+
+  @ApiProperty({ description: '취소된 요청 건수', example: 1 })
+  canceledCount: number;
+
+  @ApiProperty({ description: '현재 활성 공유 수', example: 4 })
+  activeShareCount: number;
+}
+
+/**
+ * 파일별 그룹 아이템 DTO (Q-3)
+ */
+export class FileGroupItemDto {
+  @ApiProperty({
+    description: '파일 정보',
+    example: {
+      id: '550e8400-e29b-41d4-a716-446655440001',
+      name: '보고서.pdf',
+      path: '/folder1',
+      mimeType: 'application/pdf',
+    },
+  })
+  file: {
+    id: string;
+    name: string;
+    path: string;
+    mimeType: string;
+  };
+
+  @ApiProperty({ description: '요약 통계', type: GroupSummaryDto })
+  summary: GroupSummaryDto;
+
+  @ApiProperty({ description: '가장 최근 요청일', format: 'date-time' })
+  latestRequestedAt: Date;
+
+  @ApiProperty({ description: '관련 요청 목록', type: [ShareRequestBriefDto] })
+  requests: ShareRequestBriefDto[];
+
+  static fromItem(item: FileGroupItem): FileGroupItemDto {
+    const dto = new FileGroupItemDto();
+    dto.file = item.file;
+    dto.summary = item.summary;
+    dto.latestRequestedAt = item.latestRequestedAt;
+    dto.requests = item.requests.map(ShareRequestBriefDto.fromBrief);
+    return dto;
+  }
+}
+
+/**
+ * 대상자별 그룹 아이템 DTO (Q-4)
+ */
+export class TargetGroupItemDto {
+  @ApiProperty({ description: '대상자 정보' })
+  target: UserDetail;
+
+  @ApiProperty({ description: '요약 통계', type: GroupSummaryDto })
+  summary: GroupSummaryDto;
+
+  @ApiProperty({ description: '가장 최근 요청일', format: 'date-time' })
+  latestRequestedAt: Date;
+
+  @ApiProperty({ description: '관련 요청 목록', type: [ShareRequestBriefDto] })
+  requests: ShareRequestBriefDto[];
+
+  static fromItem(item: TargetGroupItem): TargetGroupItemDto {
+    const dto = new TargetGroupItemDto();
+    dto.target = item.target;
+    dto.summary = item.summary;
+    dto.latestRequestedAt = item.latestRequestedAt;
+    dto.requests = item.requests.map(ShareRequestBriefDto.fromBrief);
+    return dto;
+  }
+}
+
+/**
+ * 파일별 그룹 목록 응답 DTO (Q-3)
+ */
+export class FileGroupListResponseDto extends PaginatedResponseDto<FileGroupItemDto> {
+  @ApiProperty({ description: '파일별 그룹 목록', type: [FileGroupItemDto] })
+  items: FileGroupItemDto[] = [];
+
+  static fromResult(
+    result: FileGroupListResult,
+    page: number,
+    pageSize: number,
+  ): FileGroupListResponseDto {
+    const dto = new FileGroupListResponseDto();
+    dto.items = result.items.map(FileGroupItemDto.fromItem);
+    const info = createPaginationInfo(page, pageSize, result.totalItems);
+    Object.assign(dto, info);
+    return dto;
+  }
+}
+
+/**
+ * 대상자별 그룹 목록 응답 DTO (Q-4)
+ */
+export class TargetGroupListResponseDto extends PaginatedResponseDto<TargetGroupItemDto> {
+  @ApiProperty({ description: '대상자별 그룹 목록', type: [TargetGroupItemDto] })
+  items: TargetGroupItemDto[] = [];
+
+  static fromResult(
+    result: TargetGroupListResult,
+    page: number,
+    pageSize: number,
+  ): TargetGroupListResponseDto {
+    const dto = new TargetGroupListResponseDto();
+    dto.items = result.items.map(TargetGroupItemDto.fromItem);
+    const info = createPaginationInfo(page, pageSize, result.totalItems);
     Object.assign(dto, info);
     return dto;
   }

@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import type { LoggerService } from '@nestjs/common';
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import { BusinessException } from './business.exception';
 import { ErrorMessageService } from '../error-message/error-message.service';
 import { ErrorCodes } from './error-codes';
@@ -23,6 +23,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   async catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
+    const requestInfo = `${request.method} ${request.url}`;
 
     if (exception instanceof BusinessException) {
       // --- New format: BusinessException ---
@@ -55,12 +57,36 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       const httpStatus = exception.getStatus();
       const exceptionResponse = exception.getResponse();
 
-      // Log for debugging
-      this.logger.warn(
-        `기존 HttpException: ${exception.message}`,
-        exception.stack,
-        'GlobalExceptionFilter',
-      );
+      // ValidationPipe 등에서 발생한 상세 유효성 검증 에러 로깅
+      if (typeof exceptionResponse === 'object' && exceptionResponse !== null) {
+        const resp = exceptionResponse as Record<string, unknown>;
+        const validationErrors = resp.message;
+
+        if (Array.isArray(validationErrors)) {
+          // ValidationPipe 에러: 각 필드별 실패 사유를 상세 로깅
+          this.logger.warn(
+            `[${requestInfo}] ValidationPipe 유효성 검증 실패 [${httpStatus}]: ` +
+            `${validationErrors.length}개 에러 → ${JSON.stringify(validationErrors)}` +
+            ` | query: ${JSON.stringify(request.query)}` +
+            ` | body: ${JSON.stringify(request.body)}` +
+            ` | params: ${JSON.stringify(request.params)}`,
+            exception.stack,
+            'GlobalExceptionFilter',
+          );
+        } else {
+          this.logger.warn(
+            `[${requestInfo}] 기존 HttpException [${httpStatus}]: ${exception.message} → 응답: ${JSON.stringify(exceptionResponse)}`,
+            exception.stack,
+            'GlobalExceptionFilter',
+          );
+        }
+      } else {
+        this.logger.warn(
+          `[${requestInfo}] 기존 HttpException [${httpStatus}]: ${exception.message}`,
+          exception.stack,
+          'GlobalExceptionFilter',
+        );
+      }
 
       // Pass-through the existing response format
       if (typeof exceptionResponse === 'string') {

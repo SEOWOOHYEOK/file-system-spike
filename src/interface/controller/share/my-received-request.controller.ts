@@ -65,6 +65,7 @@ export class MyReceivedRequestController {
   ): Promise<PaginatedResponseDto<ShareRequestResponseDto>> {
     const filter: ShareRequestFilter = {
       designatedApproverId: user.id,
+      excludeRequesterId: user.id,
       status: query.status ?? ShareRequestStatus.PENDING,
     };
 
