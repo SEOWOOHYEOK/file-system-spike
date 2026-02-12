@@ -10,7 +10,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { RoleService } from '../../../../business/role/role.service';
-import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
+import { UnifiedJwtAuthGuard } from '../../../../common/guards/unified-jwt-auth.guard';
 import { PermissionsGuard } from '../../../../business/role/guards/permissions.guard';
 import { RequirePermissions } from '../../../../business/role/decorators/require-permissions.decorator';
 import { PermissionEnum, PermissionDescriptions } from '../../../../domain/role/permission.enum';
@@ -82,7 +82,7 @@ function findCategory(code: string): string {
 @ApiTags('809.관리자 - 역할별 권한 매핑 관리')
 @ApiBearerAuth()
 @Controller('v1/admin/role-permissions')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard)
 @RequirePermissions(PermissionEnum.ROLE_READ)
 export class RolePermissionController {
   constructor(private readonly roleService: RoleService) {}

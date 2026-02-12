@@ -8,7 +8,7 @@ import {
   ParseIntPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { UnifiedJwtAuthGuard } from '../../../common/guards/unified-jwt-auth.guard';
 import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
 import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
 import { PermissionEnum } from '../../../domain/role/permission.enum';
@@ -43,7 +43,7 @@ import {
 @ApiTags('806.관리자 - audit log 확인')
 @ApiBearerAuth()
 @Controller('/v1/admin/audit-logs')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard)
 @RequirePermissions(PermissionEnum.AUDIT_READ)
 export class AuditLogController {
   constructor(

@@ -8,7 +8,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../../common/guards';
+import { UnifiedJwtAuthGuard } from '../../../common/guards';
 import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
 import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
 import { PermissionEnum } from '../../../domain/role/permission.enum';
@@ -36,7 +36,7 @@ import type { PaginationParams } from '../../../common/types/pagination';
 @ApiTags('701-A.내가 보낸 파일 공유 결제 요청 관리')
 @Controller('v1/file-shares-requests/my-sent-requests')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard)
 @RequirePermissions(PermissionEnum.FILE_SHARE_READ)
 export class MySentShareRequestController {
   constructor(

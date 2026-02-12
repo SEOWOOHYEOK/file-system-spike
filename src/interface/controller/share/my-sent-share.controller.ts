@@ -8,7 +8,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../../common/guards';
+import { UnifiedJwtAuthGuard } from '../../../common/guards';
 import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
 import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
 import { PermissionEnum } from '../../../domain/role/permission.enum';
@@ -39,7 +39,7 @@ import { createPaginatedResult } from '../../../common/types/pagination';
 @ApiTags('701-B.내 파일 공유 관리')
 @Controller('v1/file-shares/my-shares')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard)
 @RequirePermissions(PermissionEnum.FILE_SHARE_READ)
 export class MySentShareController {
   constructor(

@@ -10,7 +10,7 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiExtraModels } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../../common/guards';
+import { UnifiedJwtAuthGuard } from '../../../common/guards';
 import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
 import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
 import { PermissionEnum } from '../../../domain/role/permission.enum';
@@ -45,7 +45,7 @@ import { TargetType } from '../../../domain/audit/enums/common.enum';
 @ApiTags('702.내가 받은 파일 공유 결제 요청 관리(701-A)')
 @Controller('v1/file-shares-requests')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard)
 @RequirePermissions(PermissionEnum.FILE_SHARE_APPROVE)
 @ApiExtraModels(ShareRequestResponseDto)
 export class MyReceivedRequestController {

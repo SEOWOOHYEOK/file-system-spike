@@ -29,7 +29,7 @@ import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audi
 import { TargetType } from '../../../domain/audit/enums/common.enum';
 import { RequestContext } from '../../../common/context/request-context';
 import { NasAvailabilityGuard } from '../../../common/guards/nas-availability.guard';
-import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { UnifiedJwtAuthGuard } from '../../../common/guards/unified-jwt-auth.guard';
 import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
 import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
 import { PermissionEnum } from '../../../domain/role/permission.enum';
@@ -41,7 +41,7 @@ import { PermissionEnum } from '../../../domain/role/permission.enum';
  * 설계 문서: 060-1.휴지통_처리_FLOW.md
  */
 @ApiTags('220.휴지통')
-@UseGuards(JwtAuthGuard, PermissionsGuard, NasAvailabilityGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard, NasAvailabilityGuard)
 @RequirePermissions(PermissionEnum.TRASH_READ)
 @Controller('v1/trash')
 export class TrashController {

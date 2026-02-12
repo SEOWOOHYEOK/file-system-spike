@@ -3,7 +3,7 @@ import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { DepartmentQueryService } from '../../../../business/department/department-query.service';
 import { DepartmentHierarchyResponseDto } from './dto/department-hierarchy-response.dto';
 import { ApiGetDepartmentHierarchy } from './department-admin.swagger';
-import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
+import { UnifiedJwtAuthGuard } from '../../../../common/guards/unified-jwt-auth.guard';
 import { PermissionsGuard } from '../../../../business/role/guards/permissions.guard';
 import { RequirePermissions } from '../../../../business/role/decorators/require-permissions.decorator';
 import { PermissionEnum } from '../../../../domain/role/permission.enum';
@@ -17,7 +17,7 @@ import { PermissionEnum } from '../../../../domain/role/permission.enum';
 @ApiTags('820.관리자 - 부서 정보')
 @ApiBearerAuth()
 @Controller('v1/admin/departments')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard)
 @RequirePermissions(PermissionEnum.USER_READ)
 export class DepartmentAdminController {
   constructor(

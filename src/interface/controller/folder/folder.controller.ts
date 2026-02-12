@@ -48,7 +48,7 @@ import {
 import { AuditAction } from '../../../common/decorators';
 import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
 import { TargetType } from '../../../domain/audit/enums/common.enum';
-import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { UnifiedJwtAuthGuard } from '../../../common/guards/unified-jwt-auth.guard';
 import { NasAvailabilityGuard } from '../../../common/guards/nas-availability.guard';
 import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
 import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
@@ -61,7 +61,7 @@ import { ApiBearerAuth } from '@nestjs/swagger';
  */
 @ApiTags('210.폴더')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard, NasAvailabilityGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard, NasAvailabilityGuard)
 @RequirePermissions(PermissionEnum.FOLDER_READ)
 @Controller('v1/folders')
 export class FolderController {

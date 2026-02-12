@@ -3,7 +3,7 @@ import { ApiTags } from '@nestjs/swagger';
 import { AuditLogService } from '../../../business/audit/audit-log.service';
 import { AuditAction } from '../../../domain/audit/enums/audit-action.enum';
 import { RequestContext } from '../../../common/context/request-context';
-import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { UnifiedJwtAuthGuard } from '../../../common/guards/unified-jwt-auth.guard';
 import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
 import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
 import { PermissionEnum } from '../../../domain/role/permission.enum';
@@ -16,7 +16,7 @@ import {
 import { PaginatedResponseDto } from '../../common/dto/pagination.dto';
 
 @ApiTags('330.사용자 최근 활동 내역 조회')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard)
 @RequirePermissions(PermissionEnum.FILE_READ)
 @Controller('v1/users/audit-log')
 export class UserAuditLogController {

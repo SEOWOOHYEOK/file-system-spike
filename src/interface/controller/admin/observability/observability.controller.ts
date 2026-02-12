@@ -10,7 +10,7 @@
  */
 import { Controller, Get, Put, Query, Body, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
+import { UnifiedJwtAuthGuard } from '../../../../common/guards/unified-jwt-auth.guard';
 import { PermissionsGuard } from '../../../../business/role/guards/permissions.guard';
 import { RequirePermissions } from '../../../../business/role/decorators/require-permissions.decorator';
 import { PermissionEnum } from '../../../../domain/role/permission.enum';
@@ -32,7 +32,7 @@ import {
 @ApiTags('803.관리자 - NAS 서버 모니터링 관리')
 @ApiBearerAuth()
 @Controller('v1/admin/observability')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard)
 @RequirePermissions(PermissionEnum.SYSTEM_MONITOR)
 export class ObservabilityController {
   constructor(

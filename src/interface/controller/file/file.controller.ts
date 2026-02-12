@@ -46,7 +46,7 @@ import {
   ApiFileSyncStatus,
   ApiFileSyncProgress,
 } from './file.swagger';
-import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { UnifiedJwtAuthGuard } from '../../../common/guards/unified-jwt-auth.guard';
 import { NasAvailabilityGuard } from '../../../common/guards/nas-availability.guard';
 import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
 import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
@@ -72,7 +72,7 @@ import {
  */
 @ApiTags('200.파일')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard, NasAvailabilityGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard, NasAvailabilityGuard)
 @RequirePermissions(PermissionEnum.FILE_READ)
 @Controller('v1/files')
 export class FileController {

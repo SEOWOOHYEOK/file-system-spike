@@ -291,8 +291,13 @@ export class AuthController {
     })
     async verifyToken(@Body() dto: VerifyTokenRequestDto): Promise<VerifyTokenResponseDto> {
         try {
-            const secret =
-                this.configService.get<string>('INNER_SECRET');
+            // 토큰 디코드하여 type 확인 후 적절한 시크릿 선택
+            const decoded = this.jwtService.decode(dto.token) as { type?: string } | null;
+            const tokenType = decoded?.type;
+
+            const secret = tokenType === 'external'
+                ? this.configService.get<string>('EXTERNAL_JWT_SECRET')
+                : this.configService.get<string>('INNER_SECRET');
 
             if (!secret) {
                 throw new BadRequestException('JWT 시크릿이 설정되지 않았습니다.');

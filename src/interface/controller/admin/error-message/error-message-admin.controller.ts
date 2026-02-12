@@ -1,7 +1,7 @@
 import { Controller, Get, Patch, Post, Param, Body, ParseIntPipe, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiParam, ApiBody, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
 import { ErrorMessageService } from '../../../../common/error-message/error-message.service';
-import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
+import { UnifiedJwtAuthGuard } from '../../../../common/guards/unified-jwt-auth.guard';
 import { PermissionsGuard } from '../../../../business/role/guards/permissions.guard';
 import { RequirePermissions } from '../../../../business/role/decorators/require-permissions.decorator';
 import { PermissionEnum } from '../../../../domain/role/permission.enum';
@@ -16,7 +16,7 @@ import { PermissionEnum } from '../../../../domain/role/permission.enum';
  */
 @ApiTags('902.프로젝트 관리자 -에러 메시지 관리')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard)
 @RequirePermissions(PermissionEnum.SYSTEM_CONFIG)
 @Controller('v1/admin/error-messages')
 export class ErrorMessageAdminController {

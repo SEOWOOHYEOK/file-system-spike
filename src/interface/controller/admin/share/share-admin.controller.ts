@@ -8,7 +8,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiExtraModels } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../../../common/guards';
+import { UnifiedJwtAuthGuard } from '../../../../common/guards';
 import { PermissionsGuard } from '../../../../business/role/guards/permissions.guard';
 import { RequirePermissions } from '../../../../business/role/decorators/require-permissions.decorator';
 import { PermissionEnum } from '../../../../domain/role/permission.enum';
@@ -47,7 +47,7 @@ import { TargetType } from '../../../../domain/audit/enums/common.enum';
 @ApiTags('805.관리자 - 파일 공유 관리(701-B)')
 @Controller('v1/admin/shares')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard)
 @RequirePermissions(PermissionEnum.FILE_SHARE_READ)
 @ApiExtraModels(AdminShareListItemDto, SharedFileStatsDto, ShareFileInfoDto, ShareExternalUserInfoDto)
 export class ShareAdminController {

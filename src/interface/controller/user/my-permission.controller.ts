@@ -1,6 +1,6 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../../common/guards/jwt-auth.guard';
+import { UnifiedJwtAuthGuard } from '../../../common/guards/unified-jwt-auth.guard';
 import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
 import { UserService } from '../../../business/user/user.service';
 import { User } from '../../../common/decorators/user.decorator';
@@ -18,7 +18,7 @@ import { ErrorCodes } from '../../../common/exceptions/error-codes';
 @ApiTags('600.나의 권한 조회')
 @Controller('v1/users/me')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard)
 export class MyPermissionController {
   constructor(private readonly userService: UserService) {}
 

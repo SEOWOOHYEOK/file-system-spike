@@ -9,7 +9,7 @@ import {
   ParseUUIDPipe,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../../common/guards';
+import { UnifiedJwtAuthGuard } from '../../../common/guards';
 import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
 import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
 import { PermissionEnum } from '../../../domain/role/permission.enum';
@@ -42,7 +42,7 @@ import {
 @ApiTags('750.파일 작업 요청')
 @Controller('v1/file-action-requests')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard)
 export class FileActionRequestController {
   constructor(
     private readonly commandService: FileActionRequestCommandService,

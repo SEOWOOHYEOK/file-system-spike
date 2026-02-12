@@ -13,7 +13,7 @@ import { RoleService } from '../../../../business/role/role.service';
 import { CreateRoleDto } from '../../../../domain/role/dto/create-role.dto';
 import { RequirePermissions } from '../../../../business/role/decorators/require-permissions.decorator';
 import { PermissionEnum } from '../../../../domain/role/permission.enum';
-import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
+import { UnifiedJwtAuthGuard } from '../../../../common/guards/unified-jwt-auth.guard';
 import { PermissionsGuard } from '../../../../business/role/guards/permissions.guard';
 import {
   CreateRoleSwagger,
@@ -26,7 +26,7 @@ import {
 @ApiTags('901.프로젝트 관리자 - 역할 관리')
 @Controller('v1/roles')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard)
 export class RoleController {
   constructor(private readonly roleService: RoleService) {}
 

@@ -7,7 +7,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../../../common/guards';
+import { UnifiedJwtAuthGuard } from '../../../../common/guards';
 import { PermissionsGuard } from '../../../../business/role/guards/permissions.guard';
 import { RequirePermissions } from '../../../../business/role/decorators/require-permissions.decorator';
 import { PermissionEnum } from '../../../../domain/role/permission.enum';
@@ -26,7 +26,7 @@ import {
 @ApiTags('806.관리자 - audit log 확인')
 @Controller('v1/admin/timeline')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard)
 @RequirePermissions(PermissionEnum.AUDIT_READ)
 export class TimelineAdminController {
   constructor(

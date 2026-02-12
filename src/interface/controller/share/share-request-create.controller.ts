@@ -7,7 +7,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
-import { JwtAuthGuard } from '../../../common/guards';
+import { UnifiedJwtAuthGuard } from '../../../common/guards';
 import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
 import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
 import { PermissionEnum } from '../../../domain/role/permission.enum';
@@ -44,7 +44,7 @@ import { ApproverResponseDto } from '../share-request/dto/approver-response.dto'
 @ApiTags('700.파일 공유 요청 생성')
 @Controller('v1/file-shares-requests')
 @ApiBearerAuth()
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard)
 @RequirePermissions(PermissionEnum.FILE_SHARE_REQUEST)
 export class ShareRequestCreateController {
   constructor(

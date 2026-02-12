@@ -27,7 +27,7 @@ import {
   ApiRemoveRole,
   ApiSyncUsers,
 } from './user-admin.swagger';
-import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
+import { UnifiedJwtAuthGuard } from '../../../../common/guards/unified-jwt-auth.guard';
 import { PermissionsGuard } from '../../../../business/role/guards/permissions.guard';
 import { RequirePermissions } from '../../../../business/role/decorators/require-permissions.decorator';
 import { PermissionEnum } from '../../../../domain/role/permission.enum';
@@ -41,7 +41,7 @@ import { PermissionEnum } from '../../../../domain/role/permission.enum';
 @ApiTags('810.관리자 - 사용자 역할 부여 관리')
 @ApiBearerAuth()
 @Controller('v1/admin/users')
-@UseGuards(JwtAuthGuard, PermissionsGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard)
 @RequirePermissions(PermissionEnum.USER_READ)
 export class UserAdminController {
   constructor(
