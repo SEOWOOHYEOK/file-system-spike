@@ -74,7 +74,7 @@ export class FolderController {
    * POST /folders - 폴더 생성
    */
   @Post()
-  @RequirePermissions(PermissionEnum.FOLDER_WRITE)
+  @RequirePermissions(PermissionEnum.FOLDER_UPLOAD)
   @ApiFolderCreate()
   @HttpCode(HttpStatus.CREATED)
   @AuditAction({
@@ -206,7 +206,7 @@ export class FolderController {
    * POST /folders/:folderId/move - 폴더 이동
    */
   @Post(':folderId/move')
-  @RequirePermissions(PermissionEnum.FOLDER_WRITE)
+  @RequirePermissions(PermissionEnum.FOLDER_MOVE)
   @ApiFolderMove()
   @AuditAction({
     action: AuditActionEnum.FOLDER_MOVE,

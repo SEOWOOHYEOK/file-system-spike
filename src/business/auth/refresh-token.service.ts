@@ -55,7 +55,7 @@ export class RefreshTokenService {
       );
     }
     return parseInt(
-      this.configService.get<string>('REFRESH_TOKEN_EXPIRES_IN') || '1209600',
+      this.configService.get<string>('REFRESH_TOKEN_EXPIRES_IN') || '86400',
       10,
     );
   }
@@ -65,7 +65,7 @@ export class RefreshTokenService {
    */
   private getAccessExpiresIn(): number {
     return parseInt(
-      this.configService.get<string>('ACCESS_TOKEN_EXPIRES_IN') || '1800',
+      this.configService.get<string>('ACCESS_TOKEN_EXPIRES_IN') || '900',
       10,
     );
   }

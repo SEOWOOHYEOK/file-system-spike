@@ -18,7 +18,7 @@ import { ExternalShareController } from './controller/external-auth/external-sha
 
 
 // 내 정보 컨트롤러 (user 폴더에 위치)
-
+import { MyPermissionController } from './controller/user/my-permission.controller';
 
 // 모듈
 import { AdminModule } from './controller/admin/admin.module';
@@ -76,6 +76,7 @@ import { FileActionRequestController } from './controller/file-action-request/fi
     MySentShareController,           // 701번 - 내가 보낸 공유 관리
     MyReceivedRequestController,     // 702번 - 내가 받은 공유 요청 관리
     // 내 정보 컨트롤러
+    MyPermissionController,          // 600번 - 나의 권한 조회
     UserFavoriteController,
     UserAuditLogController,
     FileActionRequestController,

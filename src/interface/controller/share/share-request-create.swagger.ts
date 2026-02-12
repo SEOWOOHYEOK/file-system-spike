@@ -163,22 +163,25 @@ export const ApiCreateShareRequest = () =>
       description: `
 파일 공유를 요청합니다.
 
-### 권한 요구사항
-- \`FILE_SHARE_DIRECT\`: 즉시 승인 및 공유 생성
-- \`FILE_SHARE_REQUEST\`: 승인 대기 상태로 저장
+### 사전 확인
+- 공유 요청 전 \`GET /v1/users/me/permissions\` 를 호출하여 사용자 권한을 확인하세요.
+- \`FILE_SHARE_DIRECT\` 권한이 있으면 승인 대상자 선택 UI를 생략할 수 있습니다.
 
-### 권한 (permission)
+### 권한에 따른 동작
+| 권한 | designatedApproverId | 결과 |
+|------|---------------------|------|
+| \`FILE_SHARE_DIRECT\` | 생략 가능 (무시됨) | 즉시 승인 및 PublicShare 생성 |
+| \`FILE_SHARE_REQUEST\` | **필수** | PENDING 상태 저장 → 승인 대기 |
+
+### 공유 권한 (permission)
 - \`VIEW\`: 뷰어에서 파일 보기만 가능
 - \`DOWNLOAD\`: 파일 다운로드 가능 (maxDownloads 설정 가능)
-
-### 자동 승인
-- \`FILE_SHARE_DIRECT\` 권한이 있으면 즉시 승인되어 PublicShare가 생성됩니다.
-- 그 외의 경우 PENDING 상태로 저장되어 승인자 승인을 기다립니다.
 
 ### 주의사항
 - 동일한 파일을 같은 대상 사용자에게 중복 공유할 수 없습니다.
 - 시작일시는 종료일시보다 이전이어야 합니다.
 - 파일과 대상 사용자는 유효해야 합니다.
+- \`FILE_SHARE_REQUEST\` 권한만 있는 경우 \`designatedApproverId\`를 누락하면 403 에러가 발생합니다.
       `,
     }),
     ApiBody({

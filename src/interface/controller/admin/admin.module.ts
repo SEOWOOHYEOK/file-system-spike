@@ -6,6 +6,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { AdminController } from './admin.controller';
 import { AuditLogController } from './audit-log.controller';
 import { RoleController } from './role/role.controller';
+import { RolePermissionController } from './role-permission/role-permission.controller';
 import { ShareAdminController } from './share/share-admin.controller';
 import { ShareRequestAdminController } from './share-request/share-request-admin.controller';
 import { UserAdminController } from './user/user-admin.controller';
@@ -50,6 +51,7 @@ import { RepositoryModule } from '../../../infra/database/repository.module';
     AdminController,
     AuditLogController,
     RoleController,
+    RolePermissionController,
     ShareAdminController,
     ShareRequestAdminController,
     UserAdminController,

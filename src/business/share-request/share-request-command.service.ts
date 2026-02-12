@@ -25,7 +25,8 @@ export interface CreateShareRequestDto {
   startAt: Date;
   endAt: Date;
   reason: string;
-  designatedApproverId: string;
+  /** FILE_SHARE_DIRECT 권한이면 생략 가능 (자동 승인) */
+  designatedApproverId?: string;
 }
 
 /**
@@ -48,58 +49,22 @@ export class ShareRequestCommandService {
    * 공유 요청 생성 (R-1)
    *
    * 처리 플로우:
-   * 1. 파일 검증
-   * 2. 대상 사용자 검증
-   * 3. 날짜 검증 (startAt < endAt)
-   * 4. 중복 확인 → 충돌 시 409
-   * 5. 요청자 권한 확인 (FILE_SHARE_DIRECT 또는 FILE_SHARE_REQUEST)
-   * 6. ShareRequest 생성 (status=PENDING)
-   * 7. 자동 승인 분기:
+   * 1. 요청자 권한 확인 (FILE_SHARE_DIRECT 또는 FILE_SHARE_REQUEST)
+   * 2. 파일 검증
+   * 3. 대상 사용자 검증
+   * 4. 승인자 검증 (FILE_SHARE_REQUEST만 해당, FILE_SHARE_DIRECT는 생략)
+   * 5. 날짜 검증 (startAt < endAt)
+   * 6. 중복 확인 → 충돌 시 409
+   * 7. ShareRequest 생성
+   * 8. 자동 승인 분기:
    *    - FILE_SHARE_DIRECT 권한 있음 → 즉시 승인 및 PublicShare 생성
-   *    - 그 외 → PENDING 상태로 저장
+   *    - 그 외 → PENDING 상태로 저장 (승인 대기)
    */
   async createShareRequest(
     requesterId: string,
     dto: CreateShareRequestDto,
   ): Promise<ShareRequest> {
-    // Step 1: 파일 검증
-    await this.validationService.validateFiles(dto.fileIds);
-
-    // Step 2: 대상 사용자 검증
-    await this.validationService.validateTargets(dto.targets);
-
-    // Step 2.5: 지정 승인자 검증
-    await this.validationService.validateDesignatedApprover(dto.designatedApproverId);
-
-    // Step 3: 날짜 검증
-    if (dto.startAt >= dto.endAt) {
-      throw BusinessException.of(ErrorCodes.SHARE_INVALID_DATE_RANGE, {
-        startAt: dto.startAt,
-        endAt: dto.endAt,
-      });
-    }
-
-    // Step 4: 중복 확인
-    const conflicts = await this.validationService.checkDuplicates(
-      dto.fileIds,
-      dto.targets,
-    );
-    if (conflicts.length > 0) {
-      const conflict = conflicts[0];
-      if (conflict.conflictType === 'ACTIVE_SHARE_EXISTS') {
-        throw BusinessException.of(ErrorCodes.SHARE_ACTIVE_EXISTS, {
-          fileId: conflict.fileId,
-          targetUserId: conflict.targetUserId,
-        });
-      } else {
-        throw BusinessException.of(ErrorCodes.SHARE_PENDING_EXISTS, {
-          fileId: conflict.fileId,
-          targetUserId: conflict.targetUserId,
-        });
-      }
-    }
-
-    // Step 5: 요청자 권한 확인
+    // Step 1: 요청자 권한 확인 (가장 먼저 — 이후 분기에 활용)
     const { user, role } = await this.userService.findByIdWithRole(requesterId);
     if (!user.isActive) {
       throw BusinessException.of(ErrorCodes.SHARE_INACTIVE_USER, { requesterId });
@@ -119,7 +84,53 @@ export class ShareRequestCommandService {
       });
     }
 
-    // Step 6: ShareRequest 생성
+    // Step 2: 파일 검증
+    await this.validationService.validateFiles(dto.fileIds);
+
+    // Step 3: 대상 사용자 검증
+    await this.validationService.validateTargets(dto.targets);
+
+    // Step 4: 승인자 검증 (FILE_SHARE_DIRECT 권한이면 승인자 불필요 → 생략)
+    if (!hasDirectPermission) {
+      // FILE_SHARE_REQUEST만 있는 경우: 승인자 필수
+      if (!dto.designatedApproverId) {
+        throw BusinessException.of(ErrorCodes.SHARE_PERMISSION_DENIED, {
+          requesterId,
+          reason: 'FILE_SHARE_REQUEST 권한은 승인 대상자(designatedApproverId)를 지정해야 합니다.',
+        });
+      }
+      await this.validationService.validateDesignatedApprover(dto.designatedApproverId);
+    }
+
+    // Step 5: 날짜 검증
+    if (dto.startAt >= dto.endAt) {
+      throw BusinessException.of(ErrorCodes.SHARE_INVALID_DATE_RANGE, {
+        startAt: dto.startAt,
+        endAt: dto.endAt,
+      });
+    }
+
+    // Step 6: 중복 확인
+    const conflicts = await this.validationService.checkDuplicates(
+      dto.fileIds,
+      dto.targets,
+    );
+    if (conflicts.length > 0) {
+      const conflict = conflicts[0];
+      if (conflict.conflictType === 'ACTIVE_SHARE_EXISTS') {
+        throw BusinessException.of(ErrorCodes.SHARE_ACTIVE_EXISTS, {
+          fileId: conflict.fileId,
+          targetUserId: conflict.targetUserId,
+        });
+      } else {
+        throw BusinessException.of(ErrorCodes.SHARE_PENDING_EXISTS, {
+          fileId: conflict.fileId,
+          targetUserId: conflict.targetUserId,
+        });
+      }
+    }
+
+    // Step 7: ShareRequest 생성
     const shareRequest = new ShareRequest({
       id: uuidv4(),
       status: ShareRequestStatus.PENDING,
@@ -136,7 +147,7 @@ export class ShareRequestCommandService {
       requestedAt: new Date(),
     });
 
-    // Step 7: 자동 승인 분기
+    // Step 8: 자동 승인 분기
     if (hasDirectPermission) {
       // 자동 승인: 즉시 승인 및 PublicShare 생성
       return await this.autoApproveRequest(shareRequest, requesterId);

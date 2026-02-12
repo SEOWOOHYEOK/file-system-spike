@@ -30,6 +30,9 @@ const RolePermissions: Record<RoleNameEnum, PermissionEnum[]> = {
     PermissionEnum.FOLDER_READ,
     PermissionEnum.FOLDER_WRITE,
     PermissionEnum.FOLDER_DELETE,
+    PermissionEnum.FOLDER_MOVE,
+    PermissionEnum.FOLDER_DOWNLOAD,
+    PermissionEnum.FOLDER_UPLOAD,
 
     // File - 기본
     PermissionEnum.FILE_READ,

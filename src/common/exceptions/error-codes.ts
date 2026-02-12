@@ -573,6 +573,27 @@ export const ErrorCodes = {
     defaultMessage: '역할을 찾을 수 없습니다.',
   },
 
+  PERMISSION_NOT_FOUND: {
+    code: 7003,
+    internalCode: 'PERMISSION_NOT_FOUND',
+    httpStatus: 404,
+    defaultMessage: '권한을 찾을 수 없습니다.',
+  },
+
+  PERMISSION_ALREADY_ASSIGNED: {
+    code: 7004,
+    internalCode: 'PERMISSION_ALREADY_ASSIGNED',
+    httpStatus: 409,
+    defaultMessage: '이미 해당 역할에 부여된 권한입니다.',
+  },
+
+  PERMISSION_NOT_ASSIGNED: {
+    code: 7005,
+    internalCode: 'PERMISSION_NOT_ASSIGNED',
+    httpStatus: 404,
+    defaultMessage: '해당 역할에 부여되지 않은 권한입니다.',
+  },
+
   // ─── User 도메인 (8000~8999) ───
 
   USER_NOT_FOUND: {

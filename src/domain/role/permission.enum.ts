@@ -73,6 +73,9 @@ export enum PermissionEnum {
   FOLDER_READ = 'FOLDER_READ',
   FOLDER_WRITE = 'FOLDER_WRITE',
   FOLDER_DELETE = 'FOLDER_DELETE',
+  FOLDER_MOVE = 'FOLDER_MOVE',
+  FOLDER_DOWNLOAD = 'FOLDER_DOWNLOAD',
+  FOLDER_UPLOAD = 'FOLDER_UPLOAD',
 }
 
 
@@ -97,7 +100,7 @@ export const PermissionDescriptions: Record<PermissionEnum, string> = {
 
   // File Management
   [PermissionEnum.FILE_READ]: '파일 조회/검색',
-  [PermissionEnum.FILE_WRITE]: '파일 수정',
+  [PermissionEnum.FILE_WRITE]: '파일명 수정',
   [PermissionEnum.FILE_DELETE]: '파일 삭제',
   [PermissionEnum.FILE_UPLOAD]: '파일 업로드/상태 조회/취소/재시도',
   [PermissionEnum.FILE_DOWNLOAD]: '파일 다운로드/미리보기',
@@ -128,6 +131,9 @@ export const PermissionDescriptions: Record<PermissionEnum, string> = {
 
   // Folder Management
   [PermissionEnum.FOLDER_READ]: '폴더 조회/트리/즐겨찾기',
-  [PermissionEnum.FOLDER_WRITE]: '폴더 생성/이동/이름 변경',
+  [PermissionEnum.FOLDER_WRITE]: '폴더 이름 변경',
   [PermissionEnum.FOLDER_DELETE]: '폴더 삭제',
+  [PermissionEnum.FOLDER_MOVE]: '폴더 이동',
+  [PermissionEnum.FOLDER_DOWNLOAD]: '폴더 다운로드',
+  [PermissionEnum.FOLDER_UPLOAD]: '폴더 생성',
 };
