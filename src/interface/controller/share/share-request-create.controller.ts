@@ -13,6 +13,7 @@ import { RequirePermissions } from '../../../business/role/decorators/require-pe
 import { PermissionEnum } from '../../../domain/role/permission.enum';
 import { ShareTargetUserQueryService } from '../../../business/external-share/share-target-user-query.service';
 import { ShareRequestCommandService } from '../../../business/share-request/share-request-command.service';
+import { ShareRequestQueryService } from '../../../business/share-request/share-request-query.service';
 import { ShareRequestValidationService } from '../../../business/share-request/share-request-validation.service';
 import { UserQueryService } from '../../../business/user/user-query.service';
 import { User } from '../../../common/decorators/user.decorator';
@@ -49,6 +50,7 @@ export class ShareRequestCreateController {
   constructor(
     private readonly shareTargetUserQueryService: ShareTargetUserQueryService,
     private readonly shareRequestCommandService: ShareRequestCommandService,
+    private readonly shareRequestQueryService: ShareRequestQueryService,
     private readonly shareRequestValidationService: ShareRequestValidationService,
     private readonly userQueryService: UserQueryService,
   ) {}
@@ -110,6 +112,7 @@ export class ShareRequestCreateController {
       user.id,
       dto.toServiceDto(),
     );
-    return ShareRequestResponseDto.fromEntity(shareRequest);
+    const enriched = await this.shareRequestQueryService.enrichShareRequest(shareRequest);
+    return ShareRequestResponseDto.fromEnriched(enriched);
   }
 }

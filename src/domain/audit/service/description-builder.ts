@@ -393,6 +393,16 @@ const auditLogTemplates: Record<AuditAction, AuditLogTemplate> = {
   [AuditAction.FILE_ACTION_REQUEST_INVALIDATED]: ({ actor, targetName }) =>
     `'${targetName}' 파일 작업 요청이 상태 변경으로 무효화됨`,
 
+  // === 외부 사용자 공유 접근 ===
+  [AuditAction.EXTERNAL_SHARE_DETAIL]: ({ actor, targetName }) =>
+    `${actor}이 외부 공유 '${targetName}' 상세 정보를 조회함`,
+
+  [AuditAction.EXTERNAL_SHARE_ACCESS]: ({ actor, targetName }) =>
+    `${actor}이 외부 공유 '${targetName}' 파일 콘텐츠에 접근함`,
+
+  [AuditAction.EXTERNAL_SHARE_DOWNLOAD]: ({ actor, targetName }) =>
+    `${actor}이 외부 공유 '${targetName}' 파일을 다운로드함`,
+
   // === 보안 이벤트 (SecurityEvent 흡수) ===
   [AuditAction.LOGIN_SUCCESS]: ({ actor }) =>
     `${actor}이 로그인함`,

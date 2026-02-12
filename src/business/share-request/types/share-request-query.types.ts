@@ -1,9 +1,63 @@
+import type { ShareTarget } from '../../../domain/share-request/type/share-target.type';
+import type { ShareRequest } from '../../../domain/share-request/entities/share-request.entity';
+
 /**
  * ShareRequest Query Service 타입 정의
  *
  * Q-1: 대상자별 공유 현황 조회 API
  * Q-2: 파일별 공유 현황 조회 API
+ * Enrichment: ShareRequest에 파일/사용자 상세 정보를 첨부하기 위한 타입
  */
+
+// ── Enrichment 타입 ──
+
+/**
+ * 파일 상세 정보
+ * - ShareRequest의 fileIds에 대응하는 파일 메타데이터
+ */
+export interface FileDetail {
+  /** 파일 고유 ID */
+  id: string;
+  /** 파일명 (확장자 포함) */
+  name: string;
+  /** 파일 MIME 타입 (예: application/pdf, image/png) */
+  mimeType: string;
+  /** 파일 크기 (바이트) */
+  sizeBytes: number;
+}
+
+/**
+ * 사용자 상세 정보가 포함된 공유 대상
+ * - ShareTarget의 기본 정보에 사용자 상세 정보를 추가
+ */
+export interface EnrichedShareTarget {
+  /** 대상 타입 */
+  type: ShareTarget['type'];
+  /** 사용자 ID */
+  userId: string;
+  /** 대상 사용자 상세 정보 (조회 실패 시 undefined) */
+  userDetail?: UserDetail;
+}
+
+/**
+ * Enriched ShareRequest
+ * - ShareRequest 엔티티의 모든 필드 + 파일/사용자 상세 정보
+ * - 프론트엔드가 추가 API 호출 없이 화면을 렌더링할 수 있도록 구성
+ */
+export interface EnrichedShareRequest extends ShareRequest {
+  /** 공유 대상 파일 상세 정보 목록 (fileIds에 대응) */
+  files: FileDetail[];
+  /** 요청자 상세 정보 */
+  requesterDetail?: InternalUserDetail;
+  /** 사용자 상세 정보가 포함된 공유 대상 목록 */
+  enrichedTargets: EnrichedShareTarget[];
+  /** 지정 승인자 상세 정보 */
+  designatedApproverDetail?: InternalUserDetail;
+  /** 실제 승인/반려 처리자 상세 정보 */
+  approverDetail?: InternalUserDetail;
+}
+
+// ── 사용자 상세 정보 타입 ──
 
 /**
  * 내부 사용자 상세 정보

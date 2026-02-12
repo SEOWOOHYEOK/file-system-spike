@@ -8,6 +8,8 @@ import type {
   ShareItemResult,
   SharesByTargetResult,
   SharesByFileResult,
+  FileDetail,
+  EnrichedShareRequest,
 } from '../../../../../business/share-request/types/share-request-query.types';
 import { PaginatedResponseDto } from '../../../../common/dto';
 import { createPaginationInfo } from '../../../../../common/types/pagination';
@@ -52,6 +54,16 @@ export class ShareRequestAdminDetailDto {
   @ApiProperty({ description: '공유할 파일 ID 목록', type: [String] })
   fileIds: string[];
 
+  @ApiProperty({
+    description: '공유 파일 상세 정보 목록',
+    type: 'array',
+    required: false,
+    example: [
+      { id: '550e8400-e29b-41d4-a716-446655440010', name: '보고서.pdf', mimeType: 'application/pdf', sizeBytes: 1048576 },
+    ],
+  })
+  files?: FileDetail[];
+
   @ApiProperty({ description: '요청자 ID', format: 'uuid' })
   requesterId: string;
 
@@ -83,6 +95,9 @@ export class ShareRequestAdminDetailDto {
   @ApiProperty({ description: '지정 승인 대상자 ID', format: 'uuid' })
   designatedApproverId: string;
 
+  @ApiProperty({ description: '지정 승인자 상세 정보', required: false })
+  designatedApproverDetail?: InternalUserDetail;
+
   @ApiProperty({ description: '실제 승인/반려 처리자 ID', format: 'uuid', required: false })
   approverId?: string;
 
@@ -108,7 +123,7 @@ export class ShareRequestAdminDetailDto {
   updatedAt?: Date;
 
   /**
-   * ShareRequest 엔티티로부터 응답 DTO 생성
+   * ShareRequest 엔티티로부터 응답 DTO 생성 (하위 호환성 유지)
    */
   static fromEntity(entity: ShareRequest): ShareRequestAdminDetailDto {
     const dto = new ShareRequestAdminDetailDto();
@@ -135,6 +150,23 @@ export class ShareRequestAdminDetailDto {
     dto.publicShareIds = entity.publicShareIds;
     dto.requestedAt = entity.requestedAt;
     dto.updatedAt = entity.updatedAt;
+    return dto;
+  }
+
+  /**
+   * Enriched 데이터로부터 응답 DTO 생성 (파일/사용자 상세 정보 포함)
+   */
+  static fromEnriched(enriched: EnrichedShareRequest): ShareRequestAdminDetailDto {
+    const dto = ShareRequestAdminDetailDto.fromEntity(enriched);
+    dto.files = enriched.files;
+    dto.requester = enriched.requesterDetail;
+    dto.targets = enriched.enrichedTargets.map((t) => ({
+      type: t.type,
+      userId: t.userId,
+      userDetail: t.userDetail,
+    }));
+    dto.designatedApproverDetail = enriched.designatedApproverDetail;
+    dto.approver = enriched.approverDetail;
     return dto;
   }
 }

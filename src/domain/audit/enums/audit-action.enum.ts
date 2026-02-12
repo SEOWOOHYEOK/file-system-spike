@@ -84,6 +84,11 @@ export enum AuditAction {
   FILE_ACTION_REQUEST_BULK_REJECT = 'FILE_ACTION_REQUEST_BULK_REJECT', // 파일 작업 요청 일괄 반려
   FILE_ACTION_REQUEST_INVALIDATED = 'FILE_ACTION_REQUEST_INVALIDATED', // 파일 작업 요청 무효화
 
+  // 외부 사용자 공유 접근
+  EXTERNAL_SHARE_DETAIL = 'EXTERNAL_SHARE_DETAIL', // 외부 사용자 공유 상세 조회
+  EXTERNAL_SHARE_ACCESS = 'EXTERNAL_SHARE_ACCESS', // 외부 사용자 파일 콘텐츠 접근
+  EXTERNAL_SHARE_DOWNLOAD = 'EXTERNAL_SHARE_DOWNLOAD', // 외부 사용자 파일 다운로드
+
   // === 보안 이벤트 (SecurityEvent 흡수) ===
   LOGIN_SUCCESS = 'LOGIN_SUCCESS', // 로그인 성공
   LOGIN_FAILURE = 'LOGIN_FAILURE', // 로그인 실패
@@ -158,6 +163,10 @@ export const AuditActionDescription: Record<AuditAction, string> = {
   [AuditAction.FILE_ACTION_REQUEST_BULK_REJECT]: '파일 작업 요청 일괄 반려',
   [AuditAction.FILE_ACTION_REQUEST_INVALIDATED]: '파일 작업 요청 무효화',
 
+  [AuditAction.EXTERNAL_SHARE_DETAIL]: '외부 사용자 공유 상세 조회',
+  [AuditAction.EXTERNAL_SHARE_ACCESS]: '외부 사용자 파일 콘텐츠 접근',
+  [AuditAction.EXTERNAL_SHARE_DOWNLOAD]: '외부 사용자 파일 다운로드',
+
   [AuditAction.LOGIN_SUCCESS]: '로그인 성공',
   [AuditAction.LOGIN_FAILURE]: '로그인 실패',
   [AuditAction.LOGOUT]: '로그아웃',
@@ -180,6 +189,7 @@ export enum ActionCategory {
   ADMIN = 'admin',
   USER = 'user',
   SECURITY = 'security',
+  EXTERNAL = 'external',
 }
 
 /**
@@ -242,6 +252,10 @@ export const AuditActionCategory: Record<AuditAction, ActionCategory> = {
   [AuditAction.FILE_ACTION_REQUEST_BULK_APPROVE]: ActionCategory.ADMIN,
   [AuditAction.FILE_ACTION_REQUEST_BULK_REJECT]: ActionCategory.ADMIN,
   [AuditAction.FILE_ACTION_REQUEST_INVALIDATED]: ActionCategory.FILE,
+
+  [AuditAction.EXTERNAL_SHARE_DETAIL]: ActionCategory.EXTERNAL,
+  [AuditAction.EXTERNAL_SHARE_ACCESS]: ActionCategory.EXTERNAL,
+  [AuditAction.EXTERNAL_SHARE_DOWNLOAD]: ActionCategory.EXTERNAL,
 
   [AuditAction.LOGIN_SUCCESS]: ActionCategory.SECURITY,
   [AuditAction.LOGIN_FAILURE]: ActionCategory.SECURITY,

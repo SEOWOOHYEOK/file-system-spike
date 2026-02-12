@@ -72,6 +72,14 @@ export const ApiGetShareRequests = () =>
 ### 정렬
 - sort 파라미터: "필드명,방향" 형식 (예: "requestedAt,desc")
 - 기본 정렬: requestedAt 내림차순
+
+### Enriched 데이터
+각 항목에 파일/사용자 상세 정보가 포함됩니다:
+- \`files\`: 공유 파일 상세 (이름, MIME타입, 크기)
+- \`requesterDetail\`: 요청자 정보 (이름, 부서, 이메일)
+- \`targetDetails\`: 대상자 정보 (이름, 부서, 이메일)
+- \`designatedApproverDetail\`: 지정 승인자 정보
+- \`approverDetail\`: 실제 처리자 정보
       `,
     }),
     ApiQuery({ name: 'status', enum: ['PENDING', 'APPROVED', 'REJECTED', 'CANCELED'], required: true, description: '요청 상태 필터' }),
@@ -118,7 +126,7 @@ export const ApiGetShareRequestDetail = () =>
   applyDecorators(
     ApiOperation({
       summary: '공유 요청 상세 조회',
-      description: '특정 공유 요청의 상세 정보를 조회합니다. 관리자만 접근 가능합니다.',
+      description: '특정 공유 요청의 상세 정보를 조회합니다. 관리자만 접근 가능합니다. 파일 상세(이름, 타입, 크기), 요청자/대상자/승인자 정보(이름, 부서, 이메일)가 포함됩니다.',
     }),
     ApiParam({
       name: 'id',

@@ -20,6 +20,9 @@ import {
   ShareItemResult,
   SharesByTargetResult,
   SharesByFileResult,
+  FileDetail,
+  EnrichedShareTarget,
+  EnrichedShareRequest,
 } from './types/share-request-query.types';
 
 /**
@@ -402,6 +405,139 @@ export class ShareRequestQueryService {
       },
     };
   }
+
+  // ── Enrichment 메서드 ──
+
+  /**
+   * 단건 ShareRequest를 enrichment하여 파일/사용자 상세 정보를 첨부
+   *
+   * @param entity ShareRequest 도메인 엔티티
+   * @returns EnrichedShareRequest (파일, 요청자, 대상자, 승인자 상세 정보 포함)
+   */
+  async enrichShareRequest(entity: ShareRequest): Promise<EnrichedShareRequest> {
+    const [enriched] = await this.enrichShareRequests([entity]);
+    return enriched;
+  }
+
+  /**
+   * 복수 ShareRequest를 배치 enrichment (N+1 문제 방지)
+   *
+   * 모든 엔티티에서 고유 userId, fileId를 추출하여 한 번에 조회한 뒤 매핑합니다.
+   *
+   * @param entities ShareRequest 도메인 엔티티 배열
+   * @returns EnrichedShareRequest 배열
+   */
+  async enrichShareRequests(entities: ShareRequest[]): Promise<EnrichedShareRequest[]> {
+    if (entities.length === 0) return [];
+
+    // 1. 모든 고유 ID 추출
+    const allFileIds = new Set<string>();
+    const allUserIds = new Set<string>();
+
+    for (const entity of entities) {
+      for (const fileId of entity.fileIds) {
+        allFileIds.add(fileId);
+      }
+      allUserIds.add(entity.requesterId);
+      allUserIds.add(entity.designatedApproverId);
+      if (entity.approverId) {
+        allUserIds.add(entity.approverId);
+      }
+      for (const target of entity.targets) {
+        allUserIds.add(target.userId);
+      }
+    }
+
+    // 2. 배치 조회
+    const [fileMap, userMap] = await Promise.all([
+      this.batchLoadFiles([...allFileIds]),
+      this.batchLoadUsers([...allUserIds]),
+    ]);
+
+    // 3. 각 엔티티에 enrichment 데이터 매핑
+    return entities.map((entity) => {
+      const files: FileDetail[] = entity.fileIds
+        .map((fileId) => fileMap.get(fileId))
+        .filter((f): f is FileDetail => f != null);
+
+      const requesterDetail = userMap.get(entity.requesterId) as InternalUserDetail | undefined;
+
+      const enrichedTargets: EnrichedShareTarget[] = entity.targets.map((target) => ({
+        type: target.type,
+        userId: target.userId,
+        userDetail: userMap.get(target.userId),
+      }));
+
+      const designatedApproverDetail = userMap.get(entity.designatedApproverId) as InternalUserDetail | undefined;
+
+      const approverDetail = entity.approverId
+        ? (userMap.get(entity.approverId) as InternalUserDetail | undefined)
+        : undefined;
+
+      return Object.assign(Object.create(Object.getPrototypeOf(entity)), entity, {
+        files,
+        requesterDetail,
+        enrichedTargets,
+        designatedApproverDetail,
+        approverDetail,
+      }) as EnrichedShareRequest;
+    });
+  }
+
+  /**
+   * 파일 ID 목록으로부터 FileDetail 배치 조회
+   */
+  private async batchLoadFiles(fileIds: string[]): Promise<Map<string, FileDetail>> {
+    const map = new Map<string, FileDetail>();
+    const results = await Promise.all(
+      fileIds.map(async (fileId) => {
+        try {
+          const file = await this.fileDomainService.조회(fileId);
+          if (file) {
+            return {
+              id: file.id,
+              name: file.name,
+              mimeType: file.mimeType,
+              sizeBytes: file.sizeBytes,
+            } as FileDetail;
+          }
+        } catch {
+          // 파일이 삭제된 경우 등 — 무시
+        }
+        return null;
+      }),
+    );
+    for (let i = 0; i < fileIds.length; i++) {
+      if (results[i]) {
+        map.set(fileIds[i], results[i]!);
+      }
+    }
+    return map;
+  }
+
+  /**
+   * 사용자 ID 목록으로부터 UserDetail 배치 조회 (내부/외부 자동 판별)
+   */
+  private async batchLoadUsers(userIds: string[]): Promise<Map<string, UserDetail>> {
+    const map = new Map<string, UserDetail>();
+    const results = await Promise.all(
+      userIds.map(async (userId) => {
+        try {
+          return await this.getUserDetail(userId);
+        } catch {
+          return null;
+        }
+      }),
+    );
+    for (let i = 0; i < userIds.length; i++) {
+      if (results[i]) {
+        map.set(userIds[i], results[i]!);
+      }
+    }
+    return map;
+  }
+
+  // ── 사용자 상세 정보 조회 헬퍼 ──
 
   /**
    * 사용자 상세 정보 조회 (내부 또는 외부)

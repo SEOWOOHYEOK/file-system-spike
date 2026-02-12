@@ -73,6 +73,11 @@ export class ExternalShareController {
    */
   @Get(':shareId')
   @ApiGetShareDetail()
+  @AuditAction({
+    action: AuditActionEnum.EXTERNAL_SHARE_DETAIL,
+    targetType: TargetType.SHARE,
+    targetIdParam: 'shareId',
+  })
   async getShareDetail(
     @User() user: { id: string },
     @Param('shareId', ParseUUIDPipe) shareId: string,
@@ -92,7 +97,7 @@ export class ExternalShareController {
   @RequirePermissions(PermissionEnum.EXTERNAL_SHARE_VIEW)
   @ApiGetContent()
   @AuditAction({
-    action: AuditActionEnum.SHARE_ACCESS,
+    action: AuditActionEnum.EXTERNAL_SHARE_ACCESS,
     targetType: TargetType.SHARE,
     targetIdParam: 'shareId',
   })
@@ -199,7 +204,7 @@ export class ExternalShareController {
   @RequirePermissions(PermissionEnum.EXTERNAL_SHARE_DOWNLOAD)
   @ApiDownloadFile()
   @AuditAction({
-    action: AuditActionEnum.SHARE_DOWNLOAD,
+    action: AuditActionEnum.EXTERNAL_SHARE_DOWNLOAD,
     targetType: TargetType.SHARE,
     targetIdParam: 'shareId',
   })

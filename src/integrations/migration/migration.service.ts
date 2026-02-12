@@ -53,7 +53,8 @@ export class OrganizationMigrationService {
     /**
      * SSO에서 모든 조직 데이터를 가져와서 로컬 DB에 동기화한다
      *
-     * 두 단계로 나누어 실행:
+     * 세 단계로 나누어 실행:
+     * 0단계: 기존 테이블 데이터 전체 삭제 (FK 역순)
      * 1단계: Rank, Position, Department, Employee 마이그레이션 후 커밋
      * 2단계: EmployeeDepartmentPosition, EmployeeDepartmentPositionHistory 마이그레이션 후 커밋
      */
@@ -69,6 +70,9 @@ export class OrganizationMigrationService {
         };
     }> {
         this.logger.log('SSO 조직 데이터 마이그레이션 시작');
+
+        // 0. 기존 데이터 전체 삭제
+        await this.기존데이터를삭제한다();
 
         // 1. SSO에서 모든 데이터 가져오기
         const ssoData = await this.ssoService.exportAllData(params);
@@ -106,6 +110,51 @@ export class OrganizationMigrationService {
                 assignmentHistories: secondPhaseResult.historyResult.count,
             },
         };
+    }
+
+    /**
+     * 기존 조직 데이터를 모두 삭제한다
+     *
+     * FK 의존성 역순으로 삭제:
+     * 1. employee_department_position_history (Employee, Department, Position, Rank 참조)
+     * 2. employee_department_positions (Employee, Department, Position 참조)
+     * 3. employees-info (Rank 참조)
+     * 4. departments-info (자기참조)
+     * 5. positions
+     * 6. ranks
+     */
+    private async 기존데이터를삭제한다(): Promise<void> {
+        const queryRunner = this.dataSource.createQueryRunner();
+        await queryRunner.connect();
+        await queryRunner.startTransaction();
+
+        try {
+            this.logger.log('기존 조직 데이터 삭제 시작 (FK 역순)');
+
+            const tables = [
+                'employee_department_position_history',
+                'employee_department_positions',
+                'employees-info',
+                'departments-info',
+                'positions',
+                'ranks',
+            ];
+
+            for (const table of tables) {
+                const result = await queryRunner.query(`DELETE FROM "${table}"`);
+                const deletedCount = result?.[1] ?? result?.rowCount ?? 0;
+                this.logger.log(`  "${table}" 삭제 완료: ${deletedCount}건`);
+            }
+
+            await queryRunner.commitTransaction();
+            this.logger.log('✅ 기존 조직 데이터 삭제 완료');
+        } catch (error) {
+            await queryRunner.rollbackTransaction();
+            this.logger.error('기존 조직 데이터 삭제 실패', error);
+            throw error;
+        } finally {
+            await queryRunner.release();
+        }
     }
 
     /**
@@ -410,6 +459,131 @@ export class OrganizationMigrationService {
             }
         }
         return { count, failedEmployeeIds };
+    }
+
+    /**
+     * EXTERNAL_DEPARTMENT_ID에 해당하는 부서(및 하위 부서)의 조직 데이터만 마이그레이션한다
+     *
+     * SSO에서 전체 데이터를 가져온 후, 지정된 부서 ID와 그 하위 부서에 속하는
+     * 부서/직원/배치/발령 데이터만 필터링하여 저장합니다.
+     * Rank, Position은 참조 데이터이므로 전체를 마이그레이션합니다.
+     */
+    async 외부조직만마이그레이션한다(
+        externalDepartmentId: string,
+        params?: ExportAllDataRequest,
+    ): Promise<{
+        success: boolean;
+        statistics: {
+            ranks: number;
+            positions: number;
+            departments: number;
+            employees: number;
+            employeeDepartmentPositions: number;
+            assignmentHistories: number;
+        };
+    }> {
+        this.logger.log(`외부 조직 마이그레이션 시작 (대상 부서: ${externalDepartmentId})`);
+
+        // 1. SSO에서 모든 데이터 가져오기
+        const ssoData = await this.ssoService.exportAllData(params);
+        this.logger.log(
+            `SSO 데이터 조회 완료: 부서 ${ssoData.totalCounts.departments}개, 직원 ${ssoData.totalCounts.employees}명`,
+        );
+
+        // 2. 대상 부서 ID와 하위 부서 ID 집합 구하기
+        const targetDepartmentIds = this.하위부서ID를수집한다(externalDepartmentId, ssoData.departments);
+        this.logger.log(`필터 대상 부서: ${targetDepartmentIds.size}개 (대상 부서 + 하위 부서)`);
+
+        // 3. 필터링된 SSO 데이터 생성
+        const filteredDepartments = ssoData.departments.filter((d) => targetDepartmentIds.has(d.id));
+
+        const filteredEdps = ssoData.employeeDepartmentPositions.filter((edp) =>
+            targetDepartmentIds.has(edp.departmentId),
+        );
+
+        // 필터링된 부서에 속한 직원 ID 집합
+        const targetEmployeeIds = new Set(filteredEdps.map((edp) => edp.employeeId));
+        const filteredEmployees = ssoData.employees.filter((emp) => targetEmployeeIds.has(emp.id));
+
+        const filteredHistories = ssoData.assignmentHistories.filter((h) =>
+            targetDepartmentIds.has(h.departmentId),
+        );
+
+        this.logger.log(
+            `필터 결과: 부서 ${filteredDepartments.length}개, 직원 ${filteredEmployees.length}명, ` +
+            `배치 ${filteredEdps.length}개, 발령이력 ${filteredHistories.length}개`,
+        );
+
+        // 4. 필터링된 데이터로 ExportAllDataResponse 구성
+        const filteredSsoData: ExportAllDataResponse = {
+            departments: filteredDepartments,
+            employees: filteredEmployees,
+            positions: ssoData.positions,       // 참조 데이터 - 전체 유지
+            ranks: ssoData.ranks,               // 참조 데이터 - 전체 유지
+            employeeDepartmentPositions: filteredEdps,
+            assignmentHistories: filteredHistories,
+            totalCounts: {
+                departments: filteredDepartments.length,
+                employees: filteredEmployees.length,
+                positions: ssoData.positions.length,
+                ranks: ssoData.ranks.length,
+                employeeDepartmentPositions: filteredEdps.length,
+                assignmentHistories: filteredHistories.length,
+            },
+            exportedAt: ssoData.exportedAt,
+        };
+
+        // 5. 기존 마이그레이션 단계 실행
+        const firstPhaseResult = await this.기본정보마이그레이션한다(filteredSsoData);
+        const secondPhaseResult = await this.배치및발령데이터마이그레이션한다(filteredSsoData);
+
+        // 실패한 직원 정보 출력
+        const allFailedEmployeeIds = [
+            ...new Set([
+                ...secondPhaseResult.edpResult.failedEmployeeIds,
+                ...secondPhaseResult.historyResult.failedEmployeeIds,
+            ]),
+        ];
+        if (allFailedEmployeeIds.length > 0) {
+            this.실패한직원정보를출력한다(allFailedEmployeeIds, filteredSsoData.employees);
+        }
+
+        this.logger.log('✅ 외부 조직 마이그레이션 완료');
+
+        return {
+            success: true,
+            statistics: {
+                ranks: firstPhaseResult.rankCount,
+                positions: firstPhaseResult.positionCount,
+                departments: firstPhaseResult.departmentCount,
+                employees: firstPhaseResult.employeeCount,
+                employeeDepartmentPositions: secondPhaseResult.edpResult.count,
+                assignmentHistories: secondPhaseResult.historyResult.count,
+            },
+        };
+    }
+
+    /**
+     * 지정된 부서 ID와 그 하위 부서 ID를 재귀적으로 수집한다
+     */
+    private 하위부서ID를수집한다(
+        rootDepartmentId: string,
+        departments: ExportDepartmentDto[],
+    ): Set<string> {
+        const result = new Set<string>([rootDepartmentId]);
+        let changed = true;
+
+        while (changed) {
+            changed = false;
+            for (const dept of departments) {
+                if (dept.parentDepartmentId && result.has(dept.parentDepartmentId) && !result.has(dept.id)) {
+                    result.add(dept.id);
+                    changed = true;
+                }
+            }
+        }
+
+        return result;
     }
 
     /**

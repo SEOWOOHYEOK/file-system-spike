@@ -182,6 +182,13 @@ export const ApiCreateShareRequest = () =>
 - 시작일시는 종료일시보다 이전이어야 합니다.
 - 파일과 대상 사용자는 유효해야 합니다.
 - \`FILE_SHARE_REQUEST\` 권한만 있는 경우 \`designatedApproverId\`를 누락하면 403 에러가 발생합니다.
+
+### 응답 Enriched 데이터
+응답에 파일/사용자 상세 정보가 포함됩니다:
+- \`files\`: 공유 파일 상세 (이름, MIME타입, 크기)
+- \`requesterDetail\`: 요청자 정보 (이름, 부서, 이메일)
+- \`targetDetails\`: 대상자 정보 (이름, 부서, 이메일)
+- \`designatedApproverDetail\`: 지정 승인자 정보
       `,
     }),
     ApiBody({

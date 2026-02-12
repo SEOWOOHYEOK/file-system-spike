@@ -372,4 +372,47 @@ export class AuthController {
             throw new BadRequestException(`마이그레이션 실패: ${error.message}`);
         }
     }
+
+
+
+    /**
+     * 외부자 조직 데이터 마이그레이션
+     *
+     * SSO에서 EXTERNAL_DEPARTMENT_ID에 해당하는 부서(및 하위 부서)의
+     * 조직 데이터만 가져와 로컬 DB에 저장합니다.
+     */
+    @Post('migrate-external-organization')
+    @AuditAction({
+        action: AuditActionEnum.ORG_MIGRATION,
+        targetType: TargetType.SYSTEM,
+    })
+    @ApiOperation({
+        summary: '외부자 조직 데이터 마이그레이션-테스트용',
+        description:
+            'SSO에서 EXTERNAL_DEPARTMENT_ID에 해당하는 부서(및 하위 부서)의 조직 데이터만 가져와 로컬 DB에 저장합니다. (부서, 직원, 직급, 직책 등)',
+    })
+    async migrateExternalOrganization(@Body() dto: MigrateOrganizationRequestDto): Promise<MigrateOrganizationResponseDto> {
+        const externalDepartmentId = this.configService.get<string>('EXTERNAL_DEPARTMENT_ID');
+        if (!externalDepartmentId) {
+            throw new BadRequestException('EXTERNAL_DEPARTMENT_ID 환경변수가 설정되지 않았습니다.');
+        }
+
+        try {
+            const result = await this.organizationMigrationService.외부조직만마이그레이션한다(
+                externalDepartmentId,
+                {
+                    includeTerminated: dto.includeTerminated,
+                    includeInactiveDepartments: dto.includeInactiveDepartments,
+                },
+            );
+
+            return {
+                success: result.success,
+                statistics: result.statistics,
+            };
+        } catch (error: any) {
+            this.logger.error('외부자 조직 데이터 마이그레이션 실패', error);
+            throw new BadRequestException(`외부자 마이그레이션 실패: ${error.message}`);
+        }
+    }
 }

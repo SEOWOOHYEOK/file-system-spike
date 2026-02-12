@@ -207,9 +207,11 @@ export class ShareRequestAdminController {
     };
 
     const result = await this.queryService.getShareRequests(filter, pagination);
+    const enrichedItems = await this.queryService.enrichShareRequests(result.items);
 
-    return PaginatedResponseDto.from(result, (item) =>
-      ShareRequestResponseDto.fromEntity(item),
+    return PaginatedResponseDto.from(
+      { ...result, items: enrichedItems },
+      (item) => ShareRequestResponseDto.fromEnriched(item),
     );
   }
 
@@ -222,7 +224,8 @@ export class ShareRequestAdminController {
     @Param('id', ParseUUIDPipe) id: string,
   ): Promise<ShareRequestAdminDetailDto> {
     const shareRequest = await this.queryService.getShareRequestDetail(id);
-    return ShareRequestAdminDetailDto.fromEntity(shareRequest);
+    const enriched = await this.queryService.enrichShareRequest(shareRequest);
+    return ShareRequestAdminDetailDto.fromEnriched(enriched);
   }
 
   /**
@@ -246,7 +249,8 @@ export class ShareRequestAdminController {
       user.id,
       body.comment,
     );
-    return ShareRequestResponseDto.fromEntity(approvedRequest);
+    const enriched = await this.queryService.enrichShareRequest(approvedRequest);
+    return ShareRequestResponseDto.fromEnriched(enriched);
   }
 
   /**
@@ -270,6 +274,7 @@ export class ShareRequestAdminController {
       user.id,
       body.comment,
     );
-    return ShareRequestResponseDto.fromEntity(rejectedRequest);
+    const enriched = await this.queryService.enrichShareRequest(rejectedRequest);
+    return ShareRequestResponseDto.fromEnriched(enriched);
   }
 }

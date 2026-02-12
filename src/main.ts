@@ -60,6 +60,7 @@ async function bootstrap() {
       },
       'bearer', // Security scheme name - @ApiBearerAuth()와 매칭
     )
+    .addSecurityRequirements('bearer') // 모든 엔드포인트에 전역 Bearer Auth 적용
     .build();
 
   const document = SwaggerModule.createDocument(app, config);

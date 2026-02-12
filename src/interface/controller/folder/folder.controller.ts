@@ -53,11 +53,14 @@ import { NasAvailabilityGuard } from '../../../common/guards/nas-availability.gu
 import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
 import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
 import { PermissionEnum } from '../../../domain/role/permission.enum';
+import { ApiBearerAuth } from '@nestjs/swagger';
+
 /**
  * 폴더 컨트롤러
  * 폴더 생성, 조회, 관리 API
  */
 @ApiTags('210.폴더')
+@ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard, NasAvailabilityGuard)
 @RequirePermissions(PermissionEnum.FOLDER_READ)
 @Controller('v1/folders')

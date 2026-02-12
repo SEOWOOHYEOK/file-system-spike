@@ -191,7 +191,8 @@ export class MySentShareController {
     try {
       const shareRequest =
         await this.shareRequestCommandService.cancelRequest(id, user.id);
-      return ShareRequestResponseDto.fromEntity(shareRequest);
+      const enriched = await this.shareRequestQueryService.enrichShareRequest(shareRequest);
+      return ShareRequestResponseDto.fromEnriched(enriched);
     } catch (e) {
       if (
         e instanceof BusinessException &&
