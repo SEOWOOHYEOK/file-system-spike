@@ -11,6 +11,7 @@ import { AuthController } from './controller/auth/auth.controller';
 import { TrashController } from './controller/trash/trash.controller';
 import { ShareRequestCreateController } from './controller/share/share-request-create.controller';
 import { MySentShareController } from './controller/share/my-sent-share.controller';
+import { MySentShareRequestController } from './controller/share/my-sent-share-request.controller';
 import { MyReceivedRequestController } from './controller/share/my-received-request.controller';
 
 // 외부 사용자 컨트롤러
@@ -72,7 +73,8 @@ import { FileActionRequestController } from './controller/file-action-request/fi
     // 파일 공유 컨트롤러 (700, 701, 702)
     // 중요: 정적/구체적 라우트가 와일드카드(:id, :shareId)보다 먼저 등록되어야 함
     ShareRequestCreateController,    // 700번 - 공유 요청 생성 (approvers, users 등 정적 라우트)
-    MySentShareController,           // 701번 - 내가 보낸 공유 관리 (my-sent 정적 prefix)
+    MySentShareRequestController,     // 701-A번 - 내가 보낸 결제 요청 관리 (my-sent-requests 정적 prefix)
+    MySentShareController,           // 701-B번 - 내가 보낸 공유 관리 (my-shares 정적 prefix)
     MyReceivedRequestController,     // 702번 - 내가 받은 공유 요청 관리 (received 정적 라우트)
     ExternalShareController,         // 710번 - 외부공유 접근 (me 정적 라우트 + :shareId 와일드카드) ← 반드시 마지막
     // 내 정보 컨트롤러

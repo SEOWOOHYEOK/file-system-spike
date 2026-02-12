@@ -11,12 +11,12 @@ import {
 } from '@nestjs/swagger';
 import {
   AdminShareDetailResponseDto,
+  AdminShareListItemDto,
   ShareBlockResponseDto,
   BulkBlockResponseDto,
   BulkUnblockResponseDto,
   SharedFileStatsDto,
 } from './dto';
-import { PublicShareListItemDto } from '../../share/dto';
 
 /**
  * 전체 공유 현황 조회 API 문서
@@ -24,23 +24,37 @@ import { PublicShareListItemDto } from '../../share/dto';
 export const ApiGetAllPublicShares = () =>
   applyDecorators(
     ApiOperation({
-      summary: '전체 공유 현황 조회',
+      summary: '전체 공유 현황 조회 (필터링 지원)',
       description: `
-관리자가 시스템 내 전체 공유 현황을 페이지네이션으로 조회합니다.
+관리자가 시스템 내 전체 공유 현황을 필터링 + 페이지네이션으로 조회합니다.
+
+### 필터 조건 (모두 선택 사항, 부분 일치 검색)
+- \`ownerName\`: 공유자 이름
+- \`ownerDepartment\`: 공유자 부서
+- \`recipientName\`: 공유받은 사람 이름
+- \`recipientDepartment\`: 공유받은 사람 부서
+- \`fileName\`: 파일명
 
 ### 정렬
-- \`sortBy\`: 정렬 기준 필드 (기본값: createdAt)
+- \`sortBy\`: 정렬 기준 필드 (createdAt, fileName, ownerName, recipientName, isBlocked / 기본값: createdAt)
 - \`sortOrder\`: 정렬 순서 (asc/desc, 기본값: desc)
 
 ### 반환 정보
-- 공유 ID, 파일 ID, 소유자 ID, 외부 사용자 ID
+- 공유 ID, 소유자(공유자) ID, **공유자 이름, 공유자 부서**
+- **파일 정보**: 파일명, 파일크기, MIME 타입, 생성자 ID
+- **외부 사용자 정보**: 이름, 소속(회사), 부서
 - 권한, 뷰/다운로드 횟수, 차단/취소 상태
       `,
     }),
     ApiQuery({ name: 'page', type: Number, required: false, description: '페이지 번호 (기본값: 1)', example: 1 }),
     ApiQuery({ name: 'pageSize', type: Number, required: false, description: '페이지 크기 (기본값: 20)', example: 20 }),
-    ApiQuery({ name: 'sortBy', type: String, required: false, description: '정렬 기준 필드', example: 'createdAt' }),
+    ApiQuery({ name: 'sortBy', type: String, required: false, description: '정렬 기준 필드 (createdAt, fileName, ownerName, recipientName, isBlocked)', example: 'createdAt' }),
     ApiQuery({ name: 'sortOrder', enum: ['asc', 'desc'], required: false, description: '정렬 순서' }),
+    ApiQuery({ name: 'ownerName', type: String, required: false, description: '공유자 이름 (부분 일치)', example: '홍길동' }),
+    ApiQuery({ name: 'ownerDepartment', type: String, required: false, description: '공유자 부서 (부분 일치)', example: '개발팀' }),
+    ApiQuery({ name: 'recipientName', type: String, required: false, description: '공유받은 사람 이름 (부분 일치)', example: '김철수' }),
+    ApiQuery({ name: 'recipientDepartment', type: String, required: false, description: '공유받은 사람 부서 (부분 일치)', example: '협력업체A' }),
+    ApiQuery({ name: 'fileName', type: String, required: false, description: '파일명 (부분 일치)', example: '설계문서' }),
     ApiResponse({
       status: 200,
       description: '전체 공유 현황 조회 성공',
@@ -49,7 +63,7 @@ export const ApiGetAllPublicShares = () =>
         properties: {
           items: {
             type: 'array',
-            items: { $ref: '#/components/schemas/PublicShareListItemDto' },
+            items: { $ref: '#/components/schemas/AdminShareListItemDto' },
           },
           page: { type: 'integer', example: 1 },
           pageSize: { type: 'integer', example: 20 },
@@ -71,7 +85,15 @@ export const ApiGetPublicShareByIdAdmin = () =>
   applyDecorators(
     ApiOperation({
       summary: '공유 상세 조회',
-      description: '특정 공유의 상세 정보를 조회합니다. 관리자만 접근 가능합니다.',
+      description: `
+특정 공유의 상세 정보를 조회합니다. 관리자만 접근 가능합니다.
+
+### 반환 정보
+- 공유 기본 정보 (ID, 소유자, 권한, 뷰/다운로드 횟수 등)
+- **파일 정보**: 파일명, 파일크기, MIME 타입, 생성자 ID
+- **외부 사용자 정보**: 이름, 소속(회사), 부서
+- 차단/취소 상태
+      `,
     }),
     ApiParam({
       name: 'id',

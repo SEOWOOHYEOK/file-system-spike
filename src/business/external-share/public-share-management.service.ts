@@ -203,10 +203,10 @@ export class PublicShareManagementService {
   }
 
   /**
-   * 공유 상세 조회
+   * 공유 상세 조회 (파일/외부사용자 메타데이터 포함)
    */
   async getPublicShareById(shareId: string): Promise<PublicShare> {
-    const share = await this.shareRepositoryService.조회(shareId);
+    const share = await this.shareDomainService.findByIdWithFile(shareId);
     if (!share) {
       throw BusinessException.of(ErrorCodes.PUBLIC_SHARE_NOT_FOUND, { shareId });
     }
@@ -214,9 +214,11 @@ export class PublicShareManagementService {
   }
 
   /**
-   * 특정 파일의 공유 목록
+   * 특정 파일의 공유 목록 (파일/외부사용자 메타데이터 포함)
    */
   async getSharesByFileId(fileId: string): Promise<PublicShare[]> {
-    return this.shareRepositoryService.파일별조회(fileId);
+    const shares = await this.shareRepositoryService.파일별조회(fileId);
+    await this.shareDomainService.enrichShares(shares);
+    return shares;
   }
 }

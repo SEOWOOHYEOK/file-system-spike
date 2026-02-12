@@ -13,6 +13,7 @@ import { PermissionsGuard } from '../../../../business/role/guards/permissions.g
 import { RequirePermissions } from '../../../../business/role/decorators/require-permissions.decorator';
 import { PermissionEnum } from '../../../../domain/role/permission.enum';
 import { PublicShareManagementService } from '../../../../business/external-share/public-share-management.service';
+import { AdminShareQueryService } from '../../../../business/external-share/admin-share-query.service';
 import { User } from '../../../../common/decorators/user.decorator';
 import {
   ApiGetAllPublicShares,
@@ -26,13 +27,16 @@ import {
 } from './share-admin.swagger';
 import {
   AdminShareDetailResponseDto,
+  AdminShareListItemDto,
   ShareBlockResponseDto,
   BulkBlockResponseDto,
   BulkUnblockResponseDto,
   SharedFileStatsDto,
+  ShareFileInfoDto,
+  ShareExternalUserInfoDto,
 } from './dto/share-admin-response.dto';
-import { PublicShareListItemDto } from '../../share/dto/public-share-response.dto';
-import { PaginationQueryDto, PaginatedResponseDto} from '../../../common/dto';
+import { PaginatedResponseDto} from '../../../common/dto';
+import { AdminShareFilterQueryDto } from './dto/share-admin-filter-query.dto';
 import { AuditAction } from '../../../../common/decorators';
 import { AuditAction as AuditActionEnum } from '../../../../domain/audit/enums/audit-action.enum';
 import { TargetType } from '../../../../domain/audit/enums/common.enum';
@@ -40,27 +44,29 @@ import { TargetType } from '../../../../domain/audit/enums/common.enum';
 /**
  * 공유 관리 컨트롤러 (관리자용)
  */
-@ApiTags('805.관리자 - 파일 공유 관리')
+@ApiTags('805.관리자 - 파일 공유 관리(701-B)')
 @Controller('v1/admin/shares')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @RequirePermissions(PermissionEnum.FILE_SHARE_READ)
-@ApiExtraModels(PublicShareListItemDto, SharedFileStatsDto)
+@ApiExtraModels(AdminShareListItemDto, SharedFileStatsDto, ShareFileInfoDto, ShareExternalUserInfoDto)
 export class ShareAdminController {
   constructor(
     private readonly shareService: PublicShareManagementService,
+    private readonly adminShareQueryService: AdminShareQueryService,
   ) {}
 
 
   /**
-   * 전체 공유 현황 조회
+   * 전체 공유 현황 조회 (필터링 + 파일정보 + 소유자정보 + 외부사용자 정보 포함)
    */
   @Get()
   @ApiGetAllPublicShares()
   async getAllPublicShares(
-    @Query() query: PaginationQueryDto,
-  ): Promise<PaginatedResponseDto<PublicShareListItemDto>> {
-    return this.shareService.getAllPublicShares(query);
+    @Query() query: AdminShareFilterQueryDto,
+  ): Promise<PaginatedResponseDto<AdminShareListItemDto>> {
+    const result = await this.adminShareQueryService.findAllWithFilters(query);
+    return PaginatedResponseDto.from(result, AdminShareListItemDto.fromEntity);
   }
 
   /**

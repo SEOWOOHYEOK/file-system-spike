@@ -3,6 +3,8 @@
 /node_modules
 /build
 /cache
+/nas_local
+/queue
 /.cursor/plans
 
 # Logs

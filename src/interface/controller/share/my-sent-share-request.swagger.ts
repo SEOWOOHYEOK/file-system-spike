@@ -1,6 +1,6 @@
 /**
- * MySentShare Controller Swagger 데코레이터
- * 701-B.내가 보낸 공유 관리 API 문서
+ * MySentShareRequest Controller Swagger 데코레이터
+ * 701-A.내가 보낸 결제 요청 관리 API 문서
  */
 import { applyDecorators } from '@nestjs/common';
 import {
@@ -9,31 +9,30 @@ import {
   ApiParam,
   ApiQuery,
 } from '@nestjs/swagger';
-import {
-  PublicShareResponseDto,
-  RevokeShareResponseDto,
-} from './dto/public-share-response.dto';
+import { ShareRequestResponseDto } from '../share-request/dto/share-request-response.dto';
 import { MySentShareItemDto } from './dto/my-sent-share-item.dto';
 
 /**
- * 공유 목록 조회 API 문서
+ * 결제 요청 목록 API 문서
  */
-export const ApiGetMySentShareList = () =>
+export const ApiGetMySentShareRequests = () =>
   applyDecorators(
     ApiOperation({
-      summary: '내 공유 목록',
+      summary: '내가 보낸 결제 요청 목록',
       description: `
-내가 보낸 공유(PublicShare) 목록을 조회합니다.
+내가 보낸 결제 요청(ShareRequest) 목록을 조회합니다.
 
 ### 상태 필터 (status)
-- **ACTIVE**: 공유 중
-- **REVOKED**: 철회됨
-- 미지정 시: 전체 조회
+- **PENDING**: 대기 중
+- **APPROVED**: 승인됨
+- **REJECTED**: 거부됨
+- **CANCELED**: 취소됨
+- 미지정 시: 모든 상태 조회
       `,
     }),
     ApiQuery({
       name: 'status',
-      enum: ['ACTIVE', 'REVOKED'],
+      enum: ['PENDING', 'APPROVED', 'REJECTED', 'CANCELED'],
       required: false,
       description: '상태 필터',
     }),
@@ -65,7 +64,7 @@ export const ApiGetMySentShareList = () =>
     }),
     ApiResponse({
       status: 200,
-      description: '공유 목록 조회 성공',
+      description: '결제 요청 목록 조회 성공',
       schema: {
         type: 'object',
         properties: {
@@ -86,63 +85,39 @@ export const ApiGetMySentShareList = () =>
   );
 
 /**
- * 공유 상세 조회 API 문서
+ * 결제 요청 취소 API 문서
  */
-export const ApiGetMySentShareDetail = () =>
+export const ApiCancelMySentShareRequest = () =>
   applyDecorators(
     ApiOperation({
-      summary: '공유 상세 조회',
-      description: '특정 공유(PublicShare)의 상세 정보를 조회합니다.',
-    }),
-    ApiParam({
-      name: 'id',
-      type: String,
-      description: '공유 ID (UUID)',
-      example: '550e8400-e29b-41d4-a716-446655440003',
-    }),
-    ApiResponse({
-      status: 200,
-      description: '공유 상세 조회 성공',
-      type: PublicShareResponseDto,
-    }),
-    ApiResponse({ status: 401, description: '인증 필요' }),
-    ApiResponse({ status: 404, description: '공유를 찾을 수 없음' }),
-  );
-
-/**
- * 공유 철회 API 문서
- */
-export const ApiRevokeMySentShare = () =>
-  applyDecorators(
-    ApiOperation({
-      summary: '공유 철회',
+      summary: '결제 요청 취소',
       description: `
-ACTIVE 상태의 공유(PublicShare)를 철회합니다.
+PENDING 상태의 결제 요청(ShareRequest)을 취소합니다.
 
 ### 주의사항
-- ACTIVE 상태의 PublicShare만 철회 가능
-- 본인이 소유한 공유만 철회 가능
+- PENDING 상태의 ShareRequest만 취소 가능
+- 본인이 요청한 항목만 취소 가능
       `,
     }),
     ApiParam({
       name: 'id',
       type: String,
-      description: '철회할 공유 ID (PublicShare UUID)',
+      description: '취소할 결제 요청 ID (UUID)',
       example: '550e8400-e29b-41d4-a716-446655440003',
     }),
     ApiResponse({
       status: 200,
-      description: '공유 철회 성공',
-      type: RevokeShareResponseDto,
+      description: '결제 요청 취소 성공',
+      type: ShareRequestResponseDto,
     }),
     ApiResponse({
       status: 400,
-      description: '철회할 수 없는 상태 (이미 철회됨)',
+      description: '취소할 수 없는 상태 (이미 승인/거부/취소됨)',
     }),
     ApiResponse({ status: 401, description: '인증 필요' }),
     ApiResponse({
       status: 403,
-      description: '본인이 소유한 공유만 철회 가능',
+      description: '본인이 요청한 결제만 취소 가능',
     }),
-    ApiResponse({ status: 404, description: '공유를 찾을 수 없음' }),
+    ApiResponse({ status: 404, description: '결제 요청을 찾을 수 없음' }),
   );

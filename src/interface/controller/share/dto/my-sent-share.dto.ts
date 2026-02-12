@@ -1,44 +1,19 @@
-import { IsOptional, IsEnum, IsIn } from 'class-validator';
+import { IsOptional, IsIn } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { PaginationQueryDto } from '../../../common/dto/pagination.dto';
-import { ShareRequestStatus } from '../../../../domain/share-request/type/share-request-status.enum';
 
 /**
- * 내가 보낸 공유 상태 필터
- * - ShareRequest: PENDING, APPROVED, REJECTED, CANCELED
- * - PublicShare: ACTIVE, REVOKED
- */
-export const MY_SENT_SHARE_STATUS = {
-  ...ShareRequestStatus,
-  ACTIVE: 'ACTIVE',
-  REVOKED: 'REVOKED',
-} as const;
-
-export type MySentShareStatus =
-  | ShareRequestStatus
-  | (typeof MY_SENT_SHARE_STATUS)['ACTIVE']
-  | (typeof MY_SENT_SHARE_STATUS)['REVOKED'];
-
-const ALL_STATUSES: string[] = [
-  ShareRequestStatus.PENDING,
-  ShareRequestStatus.APPROVED,
-  ShareRequestStatus.REJECTED,
-  ShareRequestStatus.CANCELED,
-  'ACTIVE',
-  'REVOKED',
-];
-
-/**
- * 내가 보낸 공유 통합 목록 조회 쿼리 DTO
+ * 내가 보낸 공유(PublicShare) 목록 조회 쿼리 DTO
+ * PublicShare 상태만 허용: ACTIVE, REVOKED
  */
 export class MySentShareQueryDto extends PaginationQueryDto {
   @ApiProperty({
-    description: '상태 필터 (ShareRequest: PENDING, APPROVED, REJECTED, CANCELED / PublicShare: ACTIVE, REVOKED)',
-    enum: ALL_STATUSES,
+    description: '상태 필터 (ACTIVE, REVOKED)',
+    enum: ['ACTIVE', 'REVOKED'],
     required: false,
-    example: ShareRequestStatus.PENDING,
+    example: 'ACTIVE',
   })
   @IsOptional()
-  @IsIn(ALL_STATUSES, { message: '올바른 상태가 아닙니다.' })
-  status?: MySentShareStatus;
+  @IsIn(['ACTIVE', 'REVOKED'], { message: '올바른 상태가 아닙니다.' })
+  status?: 'ACTIVE' | 'REVOKED';
 }

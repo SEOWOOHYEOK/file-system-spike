@@ -42,7 +42,7 @@ import {
  */
 @ApiTags('806.관리자 - audit log 확인')
 @ApiBearerAuth()
-@Controller('admin/audit-logs')
+@Controller('/v1/admin/audit-logs')
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @RequirePermissions(PermissionEnum.AUDIT_READ)
 export class AuditLogController {
@@ -53,6 +53,7 @@ export class AuditLogController {
 
   // ========== 감사 로그 조회 ==========
 
+  
   @Get()
   @ApiGetAuditLogs()
   async getAuditLogs(

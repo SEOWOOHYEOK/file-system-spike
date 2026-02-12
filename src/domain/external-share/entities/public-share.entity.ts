@@ -20,6 +20,16 @@ export class PublicShare {
   fileName: string;
   mimeType: string;
   fileSize: number;
+  fileCreatedBy: string;
+
+  // 소유자(공유자) 메타데이터 (조회 시점에 채워짐)
+  ownerName: string;
+  ownerDepartment: string;
+
+  // 외부 사용자 메타데이터 (조회 시점에 채워짐)
+  externalUserName: string;
+  externalUserCompany: string;
+  externalUserDepartment: string;
 
   // 뷰 제한
   maxViewCount?: number;

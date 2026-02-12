@@ -76,6 +76,33 @@ export class ExternalUserDomainService {
   }
 
   /**
+   * 여러 외부 사용자 일괄 조회 (ID 목록 기준)
+   * - N+1 방지를 위한 배치 조회
+   */
+  async 아이디목록조회(ids: string[]): Promise<ExternalUser[]> {
+    if (ids.length === 0) return [];
+
+    const externalDepartmentId = this.getExternalDepartmentId();
+
+    const positions = await this.edpRepository
+      .createQueryBuilder('edp')
+      .leftJoinAndSelect('edp.employee', 'employee')
+      .leftJoinAndSelect('edp.department', 'department')
+      .where('edp.departmentId = :externalDepartmentId', { externalDepartmentId })
+      .andWhere('edp.employeeId IN (:...ids)', { ids })
+      .getMany();
+
+    return positions
+      .filter((p) => p.employee)
+      .map((p) =>
+        this.mapToExternalUser(
+          p.employee!,
+          p.department?.departmentName ?? '',
+        ),
+      );
+  }
+
+  /**
    * 활성 외부 사용자 전체 조회 (페이지네이션)
    */
   async 활성전체조회(

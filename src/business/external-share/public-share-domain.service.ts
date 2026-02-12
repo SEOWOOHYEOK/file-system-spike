@@ -14,8 +14,10 @@ import type { PaginationParams, PaginatedResult } from '../../common/types/pagin
 import { FileDomainService } from '../../domain/file';
 import {
   PublicShareDomainService as PublicShareRepositoryService,
+  ExternalUserDomainService,
 } from '../../domain/external-share';
 import type { FileEntity } from '../../domain/file/entities/file.entity';
+import type { ExternalUser } from '../../domain/external-share/entities/external-user.entity';
 
 /**
  * 파일 검증 결과
@@ -32,6 +34,7 @@ export class PublicShareDomainService {
   constructor(
     private readonly shareRepositoryService: PublicShareRepositoryService,
     private readonly fileDomainService: FileDomainService,
+    private readonly externalUserDomainService: ExternalUserDomainService,
   ) {}
 
   // ============================================
@@ -40,18 +43,16 @@ export class PublicShareDomainService {
 
 
   /**
-   * ID로 공유 조회 + 파일 메타데이터 채움
+   * 전체 공유 조회 + 파일/외부사용자 메타데이터 채움
    */
   async findALLWithFile(pagination: PaginationParams): Promise<PaginatedResult<PublicShare>> {
     const result = await this.shareRepositoryService.전체조회(pagination);
-
-
-    await this.enrichSharesWithFileMetadata(result.items);
+    await this.enrichSharesWithAllMetadata(result.items);
     return result;
   }
 
   /**
-   * ID로 공유 조회 + 파일 메타데이터 채움
+   * ID로 공유 조회 + 파일/외부사용자 메타데이터 채움
    */
   async findByIdWithFile(id: string): Promise<PublicShare | null> {
     const share = await this.shareRepositoryService.조회(id);
@@ -59,12 +60,12 @@ export class PublicShareDomainService {
       return null;
     }
 
-    await this.enrichShareWithFileMetadata(share);
+    await this.enrichShareWithAllMetadata(share);
     return share;
   }
 
   /**
-   * 외부 사용자의 공유 목록 조회 + 파일 메타데이터 일괄 채움
+   * 외부 사용자의 공유 목록 조회 + 파일/외부사용자 메타데이터 일괄 채움
    */
   async findByExternalUserWithFiles(
     externalUserId: string,
@@ -75,14 +76,14 @@ export class PublicShareDomainService {
       pagination,
     );
 
-    // 배치로 파일 정보 조회 (N+1 방지)
-    await this.enrichSharesWithFileMetadata(result.items);
+    // 배치로 파일 + 외부사용자 정보 조회 (N+1 방지)
+    await this.enrichSharesWithAllMetadata(result.items);
 
     return result;
   }
 
   /**
-   * 소유자의 공유 목록 조회 + 파일 메타데이터 일괄 채움
+   * 소유자의 공유 목록 조회 + 파일/외부사용자 메타데이터 일괄 채움
    */
   async findByOwnerWithFiles(
     ownerId: string,
@@ -90,10 +91,17 @@ export class PublicShareDomainService {
   ): Promise<PaginatedResult<PublicShare>> {
     const result = await this.shareRepositoryService.소유자별조회(ownerId, pagination);
 
-    // 배치로 파일 정보 조회 (N+1 방지)
-    await this.enrichSharesWithFileMetadata(result.items);
+    // 배치로 파일 + 외부사용자 정보 조회 (N+1 방지)
+    await this.enrichSharesWithAllMetadata(result.items);
 
     return result;
+  }
+
+  /**
+   * 공유 목록에 파일/외부사용자 메타데이터 일괄 채움 (외부 호출용)
+   */
+  async enrichShares(shares: PublicShare[]): Promise<void> {
+    await this.enrichSharesWithAllMetadata(shares);
   }
 
   // ============================================
@@ -148,6 +156,29 @@ export class PublicShareDomainService {
   // ============================================
 
   /**
+   * 단일 share에 파일 + 외부사용자 메타데이터 채움
+   */
+  private async enrichShareWithAllMetadata(share: PublicShare): Promise<void> {
+    await Promise.all([
+      this.enrichShareWithFileMetadata(share),
+      this.enrichShareWithExternalUserInfo(share),
+    ]);
+  }
+
+  /**
+   * 여러 share에 파일 + 외부사용자 메타데이터 일괄 채움
+   */
+  private async enrichSharesWithAllMetadata(
+    shares: PublicShare[],
+  ): Promise<void> {
+    if (shares.length === 0) return;
+    await Promise.all([
+      this.enrichSharesWithFileMetadata(shares),
+      this.enrichSharesWithExternalUserInfo(shares),
+    ]);
+  }
+
+  /**
    * 단일 share에 파일 메타데이터 채움
    */
   private async enrichShareWithFileMetadata(share: PublicShare): Promise<void> {
@@ -156,6 +187,7 @@ export class PublicShareDomainService {
       share.fileName = file.name;
       share.mimeType = file.mimeType;
       share.fileSize = file.sizeBytes;
+      share.fileCreatedBy = file.createdBy;
     }
   }
 
@@ -186,6 +218,52 @@ export class PublicShareDomainService {
         share.fileName = file.name;
         share.mimeType = file.mimeType;
         share.fileSize = file.sizeBytes;
+        share.fileCreatedBy = file.createdBy;
+      }
+    }
+  }
+
+  /**
+   * 단일 share에 외부 사용자 메타데이터 채움
+   */
+  private async enrichShareWithExternalUserInfo(
+    share: PublicShare,
+  ): Promise<void> {
+    const user = await this.externalUserDomainService.조회(share.externalUserId);
+    if (user) {
+      share.externalUserName = user.name;
+      share.externalUserCompany = user.company ?? '';
+      share.externalUserDepartment = user.department ?? '';
+    }
+  }
+
+  /**
+   * 여러 share에 외부 사용자 메타데이터 일괄 채움 (배치 조회)
+   */
+  private async enrichSharesWithExternalUserInfo(
+    shares: PublicShare[],
+  ): Promise<void> {
+    if (shares.length === 0) return;
+
+    // 중복 제거된 externalUserId 목록 추출
+    const externalUserIds = [...new Set(shares.map((s) => s.externalUserId))];
+
+    // 배치로 외부 사용자 조회
+    const users = await this.externalUserDomainService.아이디목록조회(externalUserIds);
+
+    // externalUserId -> ExternalUser 맵 생성
+    const userMap = new Map<string, ExternalUser>();
+    for (const user of users) {
+      userMap.set(user.id, user);
+    }
+
+    // 각 share에 외부 사용자 메타데이터 채움
+    for (const share of shares) {
+      const user = userMap.get(share.externalUserId);
+      if (user) {
+        share.externalUserName = user.name;
+        share.externalUserCompany = user.company ?? '';
+        share.externalUserDepartment = user.department ?? '';
       }
     }
   }

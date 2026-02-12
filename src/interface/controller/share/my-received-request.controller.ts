@@ -42,7 +42,7 @@ import { TargetType } from '../../../domain/audit/enums/common.enum';
  *
  * designatedApproverId로 지정된 사용자가 자신에게 할당된 공유 요청을 조회/승인/반려합니다.
  */
-@ApiTags('702.내가 받은 파일 공유 요청 관리')
+@ApiTags('702.내가 받은 파일 공유 결제 요청 관리(701-A)')
 @Controller('v1/file-shares-requests')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
