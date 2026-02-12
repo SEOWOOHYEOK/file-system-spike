@@ -140,27 +140,18 @@ export class ShareRequestQueryService {
     );
 
     // 3. PublicShare 조회 (활성 공유)
-    // 내부 사용자인 경우 internalUserId로, 외부 사용자인 경우 externalUserId로 조회
-    let activeShares: PublicShare[] = [];
-    if (target.type === 'INTERNAL_USER') {
-      // 내부 사용자의 경우, 모든 공유를 조회하여 필터링
-      // TODO: Repository에 findByInternalUser 메서드 추가 시 최적화 가능
-      const allSharesResult = await this.publicShareDomainService.전체조회({
-        page: 1,
-        pageSize: 10000, // 큰 페이지 사이즈로 모든 공유 조회
-      });
-      activeShares = allSharesResult.items.filter(
-        (share) =>
-          share.internalUserId === targetUserId && share.isValid(),
-      );
-    } else {
-      // 외부 사용자의 경우, 외부사용자별조회 사용
-      const result = await this.publicShareDomainService.외부사용자별조회(
-        targetUserId,
-        { page: 1, pageSize: 10000 },
-      );
-      activeShares = result.items.filter((share) => share.isValid());
-    }
+    // 사용자 타입과 무관하게 internalUserId, externalUserId 모두 확인
+    // (공유 요청 생성 시점의 타입과 현재 getUserDetail 판별 결과가 다를 수 있으므로)
+    const allSharesResult = await this.publicShareDomainService.전체조회({
+      page: 1,
+      pageSize: 10000,
+    });
+    const activeShares = allSharesResult.items.filter(
+      (share) =>
+        (share.internalUserId === targetUserId ||
+          share.externalUserId === targetUserId) &&
+        share.isValid(),
+    );
 
     // 4. ShareItemResult로 변환
     const items: ShareItemResult[] = [];
@@ -239,7 +230,8 @@ export class ShareRequestQueryService {
       }
     }
 
-    // 5. 페이지네이션 적용
+    // 5. 전체 항목 수 기록 후 페이지네이션 적용
+    const totalItems = items.length;
     const { page, pageSize } = pagination;
     const startIndex = (page - 1) * pageSize;
     const endIndex = startIndex + pageSize;
@@ -261,6 +253,7 @@ export class ShareRequestQueryService {
 
     return {
       items: paginatedItems,
+      totalItems,
       summary,
       target,
     };
@@ -308,12 +301,13 @@ export class ShareRequestQueryService {
       const requester = await this.getInternalUserDetail(share.ownerId);
       if (!requester) continue;
 
-      // 대상 사용자 조회
+      // 대상 사용자 조회 (내부/외부 모두 시도)
       let target: UserDetail | null = null;
       if (share.internalUserId) {
-        target = await this.getInternalUserDetail(share.internalUserId);
-      } else if (share.externalUserId) {
-        target = await this.getExternalUserDetail(share.externalUserId);
+        target = await this.getUserDetail(share.internalUserId);
+      }
+      if (!target && share.externalUserId) {
+        target = await this.getUserDetail(share.externalUserId);
       }
       if (!target) continue;
 
@@ -380,7 +374,8 @@ export class ShareRequestQueryService {
       }
     }
 
-    // 5. 페이지네이션 적용
+    // 5. 전체 항목 수 기록 후 페이지네이션 적용
+    const totalItems = items.length;
     const { page, pageSize } = pagination;
     const startIndex = (page - 1) * pageSize;
     const endIndex = startIndex + pageSize;
@@ -402,6 +397,7 @@ export class ShareRequestQueryService {
 
     return {
       items: paginatedItems,
+      totalItems,
       summary,
       file: {
         id: file.id,

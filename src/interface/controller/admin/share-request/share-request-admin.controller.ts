@@ -18,7 +18,7 @@ import { ShareRequestCommandService } from '../../../../business/share-request/s
 import { ShareRequestQueryService } from '../../../../business/share-request/share-request-query.service';
 import type { PaginationParams } from '../../../../common/types/pagination';
 import { ShareRequestFilter } from '../../../../domain/share-request/repositories/share-request.repository.interface';
-import { PaginatedResponseDto } from '../../../common/dto';
+import { PaginatedResponseDto, PaginationQueryDto } from '../../../common/dto';
 import {
   ShareRequestAdminQueryDto,
   ApproveRequestDto,
@@ -84,17 +84,14 @@ export class ShareRequestAdminController {
   @ApiGetSharesByTarget()
   async getSharesByTarget(
     @Param('userId', ParseUUIDPipe) userId: string,
-    @Query() query: ShareRequestAdminQueryDto,
+    @Query() query: PaginationQueryDto,
   ): Promise<SharesByTargetResponseDto> {
     const result = await this.queryService.getSharesByTarget(userId, query);
-
-    const estimatedTotal = result.summary.activeShareCount + result.summary.pendingRequestCount;
-    const totalItems = Math.max(estimatedTotal, result.items.length);
 
     return SharesByTargetResponseDto.fromResult(result, {
       page: query.page,
       pageSize: query.pageSize,
-      totalItems,
+      totalItems: result.totalItems,
     });
   }
 
@@ -105,17 +102,14 @@ export class ShareRequestAdminController {
   @ApiGetSharesByFile()
   async getSharesByFile(
     @Param('fileId', ParseUUIDPipe) fileId: string,
-    @Query() query: ShareRequestAdminQueryDto,
+    @Query() query: PaginationQueryDto,
   ): Promise<SharesByFileResponseDto> {
     const result = await this.queryService.getSharesByFile(fileId, query);
-
-    const estimatedTotal = result.summary.activeShareCount + result.summary.pendingRequestCount;
-    const totalItems = Math.max(estimatedTotal, result.items.length);
 
     return SharesByFileResponseDto.fromResult(result, {
       page: query.page,
       pageSize: query.pageSize,
-      totalItems,
+      totalItems: result.totalItems,
     });
   }
 

@@ -174,8 +174,11 @@ export interface ShareItemResult {
  * - 특정 대상자에 대한 모든 공유 항목과 요약 통계를 포함
  */
 export interface SharesByTargetResult {
-  /** 해당 대상자에 대한 공유 항목 목록 */
+  /** 해당 대상자에 대한 공유 항목 목록 (페이지네이션 적용됨) */
   items: ShareItemResult[];
+
+  /** 페이지네이션 적용 전 전체 항목 수 */
+  totalItems: number;
 
   /** 요약 통계 정보 */
   summary: {
@@ -198,8 +201,11 @@ export interface SharesByTargetResult {
  * - 특정 파일에 대한 모든 공유 항목과 요약 통계를 포함
  */
 export interface SharesByFileResult {
-  /** 해당 파일에 대한 공유 항목 목록 */
+  /** 해당 파일에 대한 공유 항목 목록 (페이지네이션 적용됨) */
   items: ShareItemResult[];
+
+  /** 페이지네이션 적용 전 전체 항목 수 */
+  totalItems: number;
 
   /** 요약 통계 정보 */
   summary: {
