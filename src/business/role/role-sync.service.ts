@@ -58,7 +58,9 @@ const RolePermissions: Record<RoleNameEnum, PermissionEnum[]> = {
     PermissionEnum.FILE_SHARE_REQUEST,
     PermissionEnum.FILE_SHARE_APPROVE,
     PermissionEnum.SHARE_LOG_READ,
-    PermissionEnum.EXTERNAL_SHARE_ACCESS,
+    PermissionEnum.EXTERNAL_SHARE_READ,
+    PermissionEnum.EXTERNAL_SHARE_VIEW,
+    PermissionEnum.EXTERNAL_SHARE_DOWNLOAD,
   ],
 
   // ── User ─────────────────────────────────────────
@@ -82,13 +84,18 @@ const RolePermissions: Record<RoleNameEnum, PermissionEnum[]> = {
     // 공유 - 요청/조회만
     PermissionEnum.FILE_SHARE_READ,
     PermissionEnum.FILE_SHARE_REQUEST,
-    PermissionEnum.EXTERNAL_SHARE_ACCESS,
+    PermissionEnum.EXTERNAL_SHARE_READ,
+    PermissionEnum.EXTERNAL_SHARE_VIEW,
+    PermissionEnum.EXTERNAL_SHARE_DOWNLOAD,
   ],
 
   // ── Guest ────────────────────────────────────────
   // CSV 기준: 공유 파일 정보 조회/뷰어/다운로드/재요청만 가능
   [RoleNameEnum.GUEST]: [
-    PermissionEnum.EXTERNAL_SHARE_ACCESS,
+    // 외부 공유 접근
+    PermissionEnum.EXTERNAL_SHARE_READ,
+    PermissionEnum.EXTERNAL_SHARE_VIEW,
+    PermissionEnum.EXTERNAL_SHARE_DOWNLOAD,
   ],
 };
 

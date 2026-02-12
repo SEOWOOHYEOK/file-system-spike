@@ -5,9 +5,6 @@
 // 파일 도메인
 export * from './file';
 
-// 폴더 도메인
-export * from './folder';
-
 // 휴지통 도메인
 export * from './trash';
 

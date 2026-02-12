@@ -24,6 +24,8 @@ export interface IFileActionRequestRepository {
   countByStatus(): Promise<Record<FileActionRequestStatus, number>>;
   /** 같은 파일에 대한 PENDING 요청 조회 (중복 검사용) */
   findPendingByFileId(fileId: string): Promise<FileActionRequest | null>;
+  /** 여러 파일에 대한 PENDING 요청 일괄 조회 (파일 목록 조회 시 사용) */
+  findPendingByFileIds(fileIds: string[]): Promise<FileActionRequest[]>;
 }
 
 export const FILE_ACTION_REQUEST_REPOSITORY = Symbol('FILE_ACTION_REQUEST_REPOSITORY');

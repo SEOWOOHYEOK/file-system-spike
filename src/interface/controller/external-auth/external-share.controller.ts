@@ -33,6 +33,9 @@ import { AuditAction } from '../../../common/decorators';
 import { AuditAction as AuditActionEnum } from '../../../domain/audit/enums/audit-action.enum';
 import { TargetType } from '../../../domain/audit/enums/common.enum';
 import { UnifiedJwtAuthGuard } from '../../../common/guards/unified-jwt-auth.guard';
+import { PermissionsGuard } from '../../../business/role/guards/permissions.guard';
+import { RequirePermissions } from '../../../business/role/decorators/require-permissions.decorator';
+import { PermissionEnum } from '../../../domain/role/permission.enum';
 
 /**
  * 외부 사용자 파일 접근 컨트롤러
@@ -46,7 +49,8 @@ import { UnifiedJwtAuthGuard } from '../../../common/guards/unified-jwt-auth.gua
 @ApiTags('710.파일 외부공유 접근')
 @Controller('v1/file-shares-requests')
 @ApiBearerAuth()
-@UseGuards(UnifiedJwtAuthGuard)
+@UseGuards(UnifiedJwtAuthGuard, PermissionsGuard)
+@RequirePermissions(PermissionEnum.EXTERNAL_SHARE_READ)
 export class ExternalShareController {
   private readonly logger = new Logger(ExternalShareController.name);
 
@@ -85,6 +89,7 @@ export class ExternalShareController {
    * - If-Range + ETag: 파일 변경 감지하여 이어받기 무결성 보장
    */
   @Get(':shareId/content')
+  @RequirePermissions(PermissionEnum.EXTERNAL_SHARE_VIEW)
   @ApiGetContent()
   @AuditAction({
     action: AuditActionEnum.SHARE_ACCESS,
@@ -191,6 +196,7 @@ export class ExternalShareController {
    * - If-Range + ETag: 파일 변경 감지하여 이어받기 무결성 보장
    */
   @Get(':shareId/download')
+  @RequirePermissions(PermissionEnum.EXTERNAL_SHARE_DOWNLOAD)
   @ApiDownloadFile()
   @AuditAction({
     action: AuditActionEnum.SHARE_DOWNLOAD,

@@ -41,4 +41,8 @@ export class FileActionRequestDomainService {
   async 파일PENDING조회(fileId: string): Promise<FileActionRequest | null> {
     return this.repository.findPendingByFileId(fileId);
   }
+
+  async 다건파일PENDING조회(fileIds: string[]): Promise<FileActionRequest[]> {
+    return this.repository.findPendingByFileIds(fileIds);
+  }
 }

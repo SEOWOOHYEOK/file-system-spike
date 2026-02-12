@@ -14,6 +14,31 @@ export interface StorageStatusDto {
 }
 
 /**
+ * 파일에 대한 PENDING 작업 요청 상세 정보 (단건 조회용)
+ */
+export interface PendingActionRequestDetail {
+  id: string;
+  type: 'MOVE' | 'DELETE';
+  status: 'PENDING';
+  requesterId: string;
+  designatedApproverId: string;
+  reason: string;
+  requestedAt: string;
+  /** MOVE인 경우 이동 대상 폴더 ID */
+  targetFolderId?: string;
+}
+
+/**
+ * 파일에 대한 PENDING 작업 요청 요약 정보 (목록 조회용)
+ */
+export interface PendingActionRequestSummary {
+  id: string;
+  type: 'MOVE' | 'DELETE';
+  status: 'PENDING';
+  requestedAt: string;
+}
+
+/**
  * 파일 정보 응답 DTO
  */
 export interface FileInfoResponse {
@@ -31,6 +56,8 @@ export interface FileInfoResponse {
   updatedAt: string;
   /** 파일 체크섬 (SHA-256) - 병렬 다운로드 후 무결성 검증용 */
   checksum: string | null;
+  /** 해당 파일에 대한 PENDING 작업 요청 (없으면 null) */
+  pendingActionRequest: PendingActionRequestDetail | null;
 }
 
 /**

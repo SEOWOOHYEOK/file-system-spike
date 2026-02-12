@@ -8,6 +8,7 @@ import { TrashDomainModule } from '../../domain/trash/trash.module';
 import { SyncEventDomainModule } from '../../domain/sync-event/sync-event.module';
 import { StorageDomainModule } from '../../domain/storage/storage.module';
 import { UploadSessionDomainModule } from '../../domain/upload-session/upload-session.module';
+import { FileActionRequestDomainModule } from '../../domain/file-action-request/file-action-request.module';
 import { AuditModule } from '../audit/audit.module';
 import { FileQueryService } from './file-query.service';
 import { FileUploadService } from './file-upload.service';
@@ -35,6 +36,7 @@ import { SyncProgressService } from './sync-progress.service';
     SyncEventDomainModule,
     StorageDomainModule,
     UploadSessionDomainModule,
+    FileActionRequestDomainModule,
     AuditModule,
   ],
   providers: [

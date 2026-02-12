@@ -88,6 +88,14 @@ export class FileActionRequestRepository implements IFileActionRequestRepository
     return found ? FileActionRequestMapper.toDomain(found) : null;
   }
 
+  async findPendingByFileIds(fileIds: string[]): Promise<FileActionRequest[]> {
+    if (fileIds.length === 0) return [];
+    const found = await this.repo.find({
+      where: { fileId: In(fileIds), status: FileActionRequestStatus.PENDING },
+    });
+    return found.map(FileActionRequestMapper.toDomain);
+  }
+
   private mapSortColumn(sortBy: string): string {
     const map: Record<string, string> = {
       requestedAt: 'requested_at',

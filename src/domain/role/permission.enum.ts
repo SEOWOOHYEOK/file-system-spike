@@ -60,8 +60,14 @@ export enum PermissionEnum {
   FILE_SHARE_APPROVE = 'FILE_SHARE_APPROVE',
   /** 외부 공유 접근 로그 조회 */
   SHARE_LOG_READ = 'SHARE_LOG_READ',
-  /** 공유 파일 정보 조회, 뷰어, 다운로드, 재요청 (Guest 포함) */
-  EXTERNAL_SHARE_ACCESS = 'EXTERNAL_SHARE_ACCESS',
+
+  // ── External Share Access (Guest 포함) ────────────
+  /** 나에게 공유된 파일 목록 조회, 공유 상세 조회 */
+  EXTERNAL_SHARE_READ = 'EXTERNAL_SHARE_READ',
+  /** 공유 파일 뷰어 (인라인 콘텐츠 표시) */
+  EXTERNAL_SHARE_VIEW = 'EXTERNAL_SHARE_VIEW',
+  /** 공유 파일 다운로드 */
+  EXTERNAL_SHARE_DOWNLOAD = 'EXTERNAL_SHARE_DOWNLOAD',
 
   // ── Folder Management ────────────────────────────
   FOLDER_READ = 'FOLDER_READ',
@@ -116,7 +122,9 @@ export const PermissionDescriptions: Record<PermissionEnum, string> = {
   [PermissionEnum.FILE_SHARE_REQUEST]: '파일 공유 요청 (승인 필요)',
   [PermissionEnum.FILE_SHARE_APPROVE]: '외부 공유 요청 승인/반려',
   [PermissionEnum.SHARE_LOG_READ]: '외부 공유 접근 로그 조회',
-  [PermissionEnum.EXTERNAL_SHARE_ACCESS]: '공유 파일 정보 조회/뷰어/다운로드',
+  [PermissionEnum.EXTERNAL_SHARE_READ]: '공유 파일 목록/상세 조회',
+  [PermissionEnum.EXTERNAL_SHARE_VIEW]: '공유 파일 뷰어 (인라인 표시)',
+  [PermissionEnum.EXTERNAL_SHARE_DOWNLOAD]: '공유 파일 다운로드',
 
   // Folder Management
   [PermissionEnum.FOLDER_READ]: '폴더 조회/트리/즐겨찾기',

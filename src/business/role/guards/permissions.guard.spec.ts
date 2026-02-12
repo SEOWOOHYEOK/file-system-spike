@@ -52,6 +52,7 @@ describe('PermissionsGuard', () => {
   beforeEach(async () => {
     const mockUserService = {
       findByIdWithRole: jest.fn(),
+      getGuestRolePermissions: jest.fn(),
     };
 
     const mockRoleService = {
@@ -390,5 +391,81 @@ describe('PermissionsGuard', () => {
     // ✅ THEN
     // ═══════════════════════════════════════════════════════
     expect(result).toBe(false);
+  });
+
+  /**
+   * 📌 테스트 시나리오: 외부 사용자(EXTERNAL)가 GUEST 권한으로 접근 성공
+   *
+   * 🎯 검증 목적:
+   *   - type: 'EXTERNAL'인 사용자는 User 테이블이 아닌
+   *     GUEST 역할 권한으로 체크되는지 확인
+   *   - GUEST 역할에 EXTERNAL_SHARE_READ가 있으면 통과
+   *
+   * ✅ 기대 결과:
+   *   - true 반환
+   *   - findByIdWithRole은 호출되지 않음
+   */
+  it('should return true for EXTERNAL user with matching GUEST permissions', async () => {
+    // ═══════════════════════════════════════════════════════
+    // 📥 GIVEN
+    // ═══════════════════════════════════════════════════════
+    reflector.getAllAndOverride.mockReturnValue([PermissionEnum.EXTERNAL_SHARE_READ]);
+    const context = createMockContext({ id: 'ext-user-1', type: 'EXTERNAL' });
+
+    // GUEST 역할에 외부 공유 관련 권한이 있음
+    userService.getGuestRolePermissions.mockResolvedValue([
+      PermissionEnum.EXTERNAL_SHARE_READ,
+      PermissionEnum.EXTERNAL_SHARE_VIEW,
+      PermissionEnum.EXTERNAL_SHARE_DOWNLOAD,
+    ]);
+
+    // ═══════════════════════════════════════════════════════
+    // 🎬 WHEN
+    // ═══════════════════════════════════════════════════════
+    const result = await guard.canActivate(context);
+
+    // ═══════════════════════════════════════════════════════
+    // ✅ THEN
+    // ═══════════════════════════════════════════════════════
+    expect(result).toBe(true);
+    expect(userService.getGuestRolePermissions).toHaveBeenCalled();
+    expect(userService.findByIdWithRole).not.toHaveBeenCalled();
+  });
+
+  /**
+   * 📌 테스트 시나리오: 외부 사용자(EXTERNAL)가 GUEST에 없는 권한 접근 실패
+   *
+   * 🎯 검증 목적:
+   *   - GUEST 역할에 없는 권한을 요구하는 API는 외부 사용자가 접근 불가
+   *   - 예: 외부 사용자가 FILE_WRITE 같은 내부 전용 권한 요청
+   *
+   * ✅ 기대 결과:
+   *   - false 반환
+   */
+  it('should return false for EXTERNAL user lacking GUEST permissions', async () => {
+    // ═══════════════════════════════════════════════════════
+    // 📥 GIVEN
+    // ═══════════════════════════════════════════════════════
+    reflector.getAllAndOverride.mockReturnValue([PermissionEnum.FILE_WRITE]);
+    const context = createMockContext({ id: 'ext-user-2', type: 'EXTERNAL' });
+
+    // GUEST 역할에는 외부 공유 접근 권한만 있음
+    userService.getGuestRolePermissions.mockResolvedValue([
+      PermissionEnum.EXTERNAL_SHARE_READ,
+      PermissionEnum.EXTERNAL_SHARE_VIEW,
+      PermissionEnum.EXTERNAL_SHARE_DOWNLOAD,
+    ]);
+
+    // ═══════════════════════════════════════════════════════
+    // 🎬 WHEN
+    // ═══════════════════════════════════════════════════════
+    const result = await guard.canActivate(context);
+
+    // ═══════════════════════════════════════════════════════
+    // ✅ THEN
+    // ═══════════════════════════════════════════════════════
+    expect(result).toBe(false);
+    expect(userService.getGuestRolePermissions).toHaveBeenCalled();
+    expect(userService.findByIdWithRole).not.toHaveBeenCalled();
   });
 });

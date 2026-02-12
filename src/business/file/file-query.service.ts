@@ -1,10 +1,11 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { buildPath } from '../../common/utils';
-import type { FileInfoResponse } from '../../domain/file';
+import type { FileInfoResponse, PendingActionRequestDetail } from '../../domain/file';
 import { FileDomainService } from '../../domain/file/service/file-domain.service';
 import { FolderDomainService } from '../../domain/folder/service/folder-domain.service';
 import { FileCacheStorageDomainService } from '../../domain/storage/file/service/file-cache-storage-domain.service';
 import { FileNasStorageDomainService } from '../../domain/storage/file/service/file-nas-storage-domain.service';
+import { FileActionRequestDomainService } from '../../domain/file-action-request/services/file-action-request-domain.service';
 
 /**
  * 파일 조회 비즈니스 서비스
@@ -21,6 +22,7 @@ export class FileQueryService {
     private readonly folderDomainService: FolderDomainService,
     private readonly fileCacheStorageDomainService: FileCacheStorageDomainService,
     private readonly fileNasStorageDomainService: FileNasStorageDomainService,
+    private readonly fileActionRequestDomainService: FileActionRequestDomainService,
   ) {}
 
   /**
@@ -51,6 +53,21 @@ export class FileQueryService {
     // 체크섬은 NAS 또는 캐시 스토리지 객체에서 가져옴
     const checksum = nasStatus?.checksum ?? cacheStatus?.checksum ?? null;
 
+    // PENDING 작업 요청 조회
+    const pendingRequest = await this.fileActionRequestDomainService.파일PENDING조회(fileId);
+    const pendingActionRequest: PendingActionRequestDetail | null = pendingRequest
+      ? {
+          id: pendingRequest.id,
+          type: pendingRequest.type as 'MOVE' | 'DELETE',
+          status: 'PENDING',
+          requesterId: pendingRequest.requesterId,
+          designatedApproverId: pendingRequest.designatedApproverId,
+          reason: pendingRequest.reason,
+          requestedAt: pendingRequest.requestedAt.toISOString(),
+          ...(pendingRequest.targetFolderId ? { targetFolderId: pendingRequest.targetFolderId } : {}),
+        }
+      : null;
+
     return {
       id: file.id,
       name: file.name,
@@ -67,6 +84,7 @@ export class FileQueryService {
       createdAt: file.createdAt.toISOString(),
       updatedAt: file.updatedAt.toISOString(),
       checksum,
+      pendingActionRequest,
     };
   }
 

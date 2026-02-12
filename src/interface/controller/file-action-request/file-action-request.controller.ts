@@ -39,7 +39,7 @@ import {
  *
  * 일반 사용자가 파일 이동/삭제 요청을 생성, 조회, 취소하는 엔드포인트
  */
-@ApiTags('800.파일 작업 요청')
+@ApiTags('750.파일 작업 요청')
 @Controller('v1/file-action-requests')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)

@@ -19,6 +19,8 @@ import { FolderNasStorageObjectDomainService } from '../../domain/storage/folder
 import { FileCacheStorageDomainService } from '../../domain/storage/file/service/file-cache-storage-domain.service';
 import { FileNasStorageDomainService } from '../../domain/storage/file/service/file-nas-storage-domain.service';
 import { FileState } from '../../domain/file/type/file.type';
+import { FileActionRequestDomainService } from '../../domain/file-action-request/services/file-action-request-domain.service';
+import type { FileActionRequest } from '../../domain/file-action-request/entities/file-action-request.entity';
 
 /**
  * 폴더 조회 비즈니스 서비스
@@ -35,6 +37,7 @@ export class FolderQueryService {
     private readonly fileDomainService: FileDomainService,
     private readonly fileCacheStorageService: FileCacheStorageDomainService,
     private readonly fileNasStorageService: FileNasStorageDomainService,
+    private readonly fileActionRequestDomainService: FileActionRequestDomainService,
   ) {}
 
   /**
@@ -195,8 +198,18 @@ export class FolderQueryService {
 
   /**
    * 파일 목록을 FileListItemInFolder로 변환
+   * 각 파일에 대한 PENDING 작업 요청 정보도 함께 조회하여 포함
    */
   private async mapToFileListItems(files: any[]): Promise<FileListItemInFolder[]> {
+    if (files.length === 0) return [];
+
+    // 파일 ID 목록으로 PENDING 요청을 한 번에 일괄 조회
+    const fileIds = files.map((f) => f.id);
+    const pendingRequests = await this.fileActionRequestDomainService.다건파일PENDING조회(fileIds);
+    const pendingMap = new Map<string, FileActionRequest>(
+      pendingRequests.map((r) => [r.fileId, r]),
+    );
+
     const items: FileListItemInFolder[] = [];
 
     for (const file of files) {
@@ -205,6 +218,8 @@ export class FolderQueryService {
         this.fileCacheStorageService.조회(file.id),
         this.fileNasStorageService.조회(file.id),
       ]);
+
+      const pendingRequest = pendingMap.get(file.id);
 
       items.push({
         id: file.id,
@@ -216,6 +231,14 @@ export class FolderQueryService {
           nas: nasStorage?.availabilityStatus ?? null,
         },
         updatedAt: file.updatedAt.toISOString(),
+        pendingActionRequest: pendingRequest
+          ? {
+              id: pendingRequest.id,
+              type: pendingRequest.type as 'MOVE' | 'DELETE',
+              status: 'PENDING',
+              requestedAt: pendingRequest.requestedAt.toISOString(),
+            }
+          : null,
       });
     }
 

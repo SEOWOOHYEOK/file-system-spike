@@ -60,8 +60,17 @@ describe('FolderQueryService', () => {
     폴더내파일조회: jest.fn(),
   };
 
-  const mockFileStorageObjectRepository = {
-    findByFileId: jest.fn(),
+  const mockFileCacheStorageService = {
+    조회: jest.fn().mockResolvedValue(null),
+  };
+
+  const mockFileNasStorageService = {
+    조회: jest.fn().mockResolvedValue(null),
+  };
+
+  const mockFileActionRequestDomainService = {
+    파일PENDING조회: jest.fn(),
+    다건파일PENDING조회: jest.fn().mockResolvedValue([]),
   };
 
   let service: FolderQueryService;
@@ -72,7 +81,9 @@ describe('FolderQueryService', () => {
       mockFolderDomainService as any,
       mockFolderStorageService as any,
       mockFileDomainService as any,
-      mockFileStorageObjectRepository as any,
+      mockFileCacheStorageService as any,
+      mockFileNasStorageService as any,
+      mockFileActionRequestDomainService as any,
     );
   });
 
@@ -320,7 +331,9 @@ describe('FolderQueryService', () => {
         totalSize: 0,
       });
       mockFileDomainService.폴더내파일조회.mockResolvedValue(files);
-      mockFileStorageObjectRepository.findByFileId.mockResolvedValue(fileStorageObjects);
+      // 파일 스토리지 상태 mock (각 파일별 조회 시 반환)
+      mockFileCacheStorageService.조회.mockResolvedValue(null);
+      mockFileNasStorageService.조회.mockResolvedValue(fileStorageObjects[0] ?? null);
 
       // ═══════════════════════════════════════════════════════
       // 🎬 WHEN (테스트 실행)

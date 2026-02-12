@@ -41,7 +41,7 @@ import {
  *
  * 관리자가 파일 작업 요청을 조회, 승인, 반려하는 엔드포인트
  */
-@ApiTags('810.파일 작업 요청 관리')
+@ApiTags('850.파일 작업 요청 관리')
 @Controller('v1/admin/file-action-requests')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)

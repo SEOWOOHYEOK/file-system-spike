@@ -56,6 +56,16 @@ export interface FolderListItem {
 }
 
 /**
+ * 파일에 대한 PENDING 작업 요청 요약 정보 (목록 조회용)
+ */
+export interface PendingActionRequestSummary {
+  id: string;
+  type: 'MOVE' | 'DELETE';
+  status: 'PENDING';
+  requestedAt: string;
+}
+
+/**
  * 파일 목록 아이템 DTO (폴더 내용 조회용)
  */
 export interface FileListItemInFolder {
@@ -68,6 +78,8 @@ export interface FileListItemInFolder {
     nas: string | null;
   };
   updatedAt: string;
+  /** 해당 파일에 대한 PENDING 작업 요청 (없으면 null) */
+  pendingActionRequest: PendingActionRequestSummary | null;
 }
 
 /**
