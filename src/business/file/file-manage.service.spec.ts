@@ -30,9 +30,7 @@ jest.mock('uuid', () => ({
 import { FileManageService } from './file-manage.service';
 import {
   AvailabilityStatus,
-  ConflictStrategy,
   FileEntity,
-  MoveConflictStrategy,
   StorageType,
 } from '../../domain/file';
 import { FileState } from '../../domain/file/type/file.type';
@@ -415,7 +413,7 @@ describe('FileManageService', () => {
     // ═══════════════════════════════════════════════════════
     const result = await service.move(
       'file-2',
-      { targetFolderId: 'folder-2', conflictStrategy: MoveConflictStrategy.ERROR },
+      { targetFolderId: 'folder-2' },
       'user-1',
     );
 
@@ -484,7 +482,7 @@ describe('FileManageService', () => {
     // ═══════════════════════════════════════════════════════
     await service.move(
       'file-2',
-      { targetFolderId: 'folder-2', conflictStrategy: MoveConflictStrategy.ERROR },
+      { targetFolderId: 'folder-2' },
       'user-1',
     );
 
@@ -571,7 +569,7 @@ describe('FileManageService', () => {
     nasObject.updateStatus(AvailabilityStatus.AVAILABLE);
     await service.move(
       'file-1',
-      { targetFolderId: 'folder-2', conflictStrategy: MoveConflictStrategy.ERROR },
+      { targetFolderId: 'folder-2' },
       'user-1',
     );
 
@@ -702,7 +700,7 @@ describe('FileManageService', () => {
       await expect(
         service.move(
           'non-existent-file',
-          { targetFolderId: 'folder-2', conflictStrategy: MoveConflictStrategy.ERROR },
+          { targetFolderId: 'folder-2' },
           'user-1',
         ),
       ).rejects.toMatchObject({
@@ -731,7 +729,7 @@ describe('FileManageService', () => {
       await expect(
         service.move(
           'file-1',
-          { targetFolderId: 'non-existent-folder', conflictStrategy: MoveConflictStrategy.ERROR },
+          { targetFolderId: 'non-existent-folder' },
           'user-1',
         ),
       ).rejects.toMatchObject({
@@ -804,7 +802,7 @@ describe('FileManageService', () => {
       await expect(
         service.move(
           'file-1',
-          { targetFolderId: 'folder-2', conflictStrategy: MoveConflictStrategy.ERROR },
+          { targetFolderId: 'folder-2' },
           'user-1',
         ),
       ).rejects.toMatchObject({
@@ -812,83 +810,6 @@ describe('FileManageService', () => {
       });
     });
 
-    /**
-     * 📌 테스트 시나리오: 중복 파일 + SKIP 전략
-     *
-     * 🎯 검증 목적:
-     *   - FLOW 3-2 step 5: 충돌 처리 (SKIP)
-     *
-     * ✅ 기대 결과:
-     *   - skipped: true 반환
-     */
-    it('중복 파일 + SKIP 전략 시 이동하지 않고 skipped 반환해야 한다', async () => {
-      // ═══════════════════════════════════════════════════════
-      // 📥 GIVEN (사전 조건 설정)
-      // ═══════════════════════════════════════════════════════
-      const fileCreatedAt = new Date('2024-01-01T00:00:00Z');
-      const file = new FileEntity({
-        id: 'file-1',
-        name: 'test.txt',
-        folderId: 'folder-1',
-        sizeBytes: 10,
-        mimeType: 'text/plain',
-        state: FileState.ACTIVE,
-        createdAt: fileCreatedAt,
-        updatedAt: fileCreatedAt,
-      });
-      const nasObject = new FileStorageObjectEntity({
-        id: 'nas-1',
-        fileId: 'file-1',
-        storageType: StorageType.NAS,
-        objectKey: '20240101000000__test.txt',
-        availabilityStatus: AvailabilityStatus.AVAILABLE,
-        accessCount: 0,
-        leaseCount: 0,
-        createdAt: new Date(),
-      });
-      const targetFolder = new FolderEntity({
-        id: 'folder-2',
-        name: 'target',
-        parentId: null,
-        path: '/target',
-        state: FolderState.ACTIVE,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-      const sourceFolder = new FolderEntity({
-        id: 'folder-1',
-        name: 'source',
-        parentId: null,
-        path: '/source',
-        state: FolderState.ACTIVE,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      mockFolderDomainService.조회
-        .mockResolvedValueOnce(targetFolder)
-        .mockResolvedValueOnce(sourceFolder);
-      mockFileDomainService.잠금조회.mockResolvedValue(file);
-      mockFileNasStorageDomainService.잠금조회.mockResolvedValue(nasObject);
-      // 중복 파일 존재
-      mockFileDomainService.중복확인.mockResolvedValue(true);
-
-      // ═══════════════════════════════════════════════════════
-      // 🎬 WHEN (테스트 실행)
-      // ═══════════════════════════════════════════════════════
-      const result = await service.move(
-        'file-1',
-        { targetFolderId: 'folder-2', conflictStrategy: MoveConflictStrategy.SKIP },
-        'user-1',
-      );
-
-      // ═══════════════════════════════════════════════════════
-      // ✅ THEN (결과 검증)
-      // ═══════════════════════════════════════════════════════
-      expect(result.skipped).toBe(true);
-      expect(result.reason).toBeDefined();
-      expect(mockJobQueue.addJob).not.toHaveBeenCalled();
-    });
   });
 
   // =================================================================

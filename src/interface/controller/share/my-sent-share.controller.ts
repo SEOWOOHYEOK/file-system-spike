@@ -44,7 +44,7 @@ import { createPaginatedResult } from '../../../common/types/pagination';
  * ShareRequest + PublicShare 통합 조회/취소
  */
 @ApiTags('701.내가 보낸 파일 공유 관리')
-@Controller('v1/file-shares-requests')
+@Controller('v1/file-shares-requests/my-sent')
 @ApiBearerAuth()
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @RequirePermissions(PermissionEnum.FILE_SHARE_READ)

@@ -26,7 +26,7 @@ jest.mock('uuid', () => ({
 }));
 
 import { FileUploadService } from './file-upload.service';
-import { ConflictStrategy, FileEntity, StorageType } from '../../domain/file';
+import { FileEntity, StorageType } from '../../domain/file';
 import { FolderEntity, FolderState, FolderAvailabilityStatus, FolderStorageObjectEntity } from '../../domain/folder';
 import { NotFoundException } from '@nestjs/common';
 describe('FileUploadService', () => {
@@ -151,7 +151,6 @@ describe('FileUploadService', () => {
     const result = await service.upload({
       file,
       folderId: 'folder-1',
-      conflictStrategy: ConflictStrategy.ERROR,
     });
 
     // ═══════════════════════════════════════════════════════
@@ -209,7 +208,6 @@ describe('FileUploadService', () => {
     await service.upload({
       file,
       folderId: 'folder-1',
-      conflictStrategy: ConflictStrategy.ERROR,
     });
 
     // ═══════════════════════════════════════════════════════
@@ -272,7 +270,6 @@ describe('FileUploadService', () => {
     await service.upload({
       file,
       folderId: 'folder-1',
-      conflictStrategy: ConflictStrategy.ERROR,
     });
 
     // ═══════════════════════════════════════════════════════
@@ -335,7 +332,6 @@ describe('FileUploadService', () => {
       service.upload({
         file,
         folderId: 'folder-1',
-        conflictStrategy: ConflictStrategy.ERROR,
       }),
     ).rejects.toMatchObject({
       response: { code: 'FOLDER_SYNC_IN_PROGRESS' },
@@ -371,7 +367,6 @@ describe('FileUploadService', () => {
       service.upload({
         file,
         folderId: 'non-existent-folder',
-        conflictStrategy: ConflictStrategy.ERROR,
       }),
     ).rejects.toMatchObject({
       response: { code: 'FOLDER_NOT_FOUND' },
@@ -416,7 +411,6 @@ describe('FileUploadService', () => {
       service.upload({
         file,
         folderId: 'folder-1',
-        conflictStrategy: ConflictStrategy.ERROR,
       }),
     ).rejects.toMatchObject({
       response: { code: 'FOLDER_NOT_FOUND' },
@@ -474,7 +468,6 @@ describe('FileUploadService', () => {
       service.upload({
         file,
         folderId: 'folder-1',
-        conflictStrategy: ConflictStrategy.ERROR,
       }),
     ).rejects.toMatchObject({
       response: { code: 'FOLDER_SYNC_FAILED' },
@@ -538,7 +531,6 @@ describe('FileUploadService', () => {
     const results = await service.uploadMany({
       files,
       folderId: 'folder-1',
-      conflictStrategy: ConflictStrategy.ERROR,
     });
 
     // ═══════════════════════════════════════════════════════

@@ -129,8 +129,14 @@ export class ShareRequestCommandService {
         });
       }
     }
+    
 
     // Step 7: ShareRequest 생성
+    // FILE_SHARE_DIRECT 권한으로 자동 승인 시, 요청자가 곧 승인자이므로 자기 자신을 지정
+    const designatedApproverId = hasDirectPermission
+      ? (dto.designatedApproverId ?? requesterId)
+      : dto.designatedApproverId;
+
     const shareRequest = new ShareRequest({
       id: uuidv4(),
       status: ShareRequestStatus.PENDING,
@@ -141,7 +147,7 @@ export class ShareRequestCommandService {
       startAt: dto.startAt,
       endAt: dto.endAt,
       reason: dto.reason,
-      designatedApproverId: dto.designatedApproverId,
+      designatedApproverId,
       isAutoApproved: false,
       publicShareIds: [],
       requestedAt: new Date(),

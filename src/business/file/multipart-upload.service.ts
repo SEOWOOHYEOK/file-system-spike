@@ -36,7 +36,6 @@ import { AbortSessionResponse } from '../../domain/upload-session/dto/session-st
 
 import {
   FileStorageObjectEntity,
-  ConflictStrategy,
 } from '../../domain/file';
 import { FolderAvailabilityStatus } from '../../domain/folder';
 import { SyncEventFactory } from '../../domain/sync-event';
@@ -87,7 +86,7 @@ export class MultipartUploadService {
    * 멀티파트 업로드 초기화
    */
   async initiate(request: InitiateMultipartRequest): Promise<InitiateMultipartResponse> {
-    const { fileName: rawFileName, folderId: rawFolderId, totalSize, mimeType, conflictStrategy } = request;
+    const { fileName: rawFileName, folderId: rawFolderId, totalSize, mimeType } = request;
 
     // 파일명 정규화 (인코딩 문제 해결)
     const fileName = normalizeFileName(rawFileName);
@@ -154,7 +153,6 @@ export class MultipartUploadService {
       totalSize,
       mimeType,
       partSize: DEFAULT_PART_SIZE,
-      conflictStrategy,
     });
 
     return {
@@ -418,12 +416,11 @@ export class MultipartUploadService {
     const fileId = uuidv4();
     const uploadCreatedAt = new Date();
 
-    // 6. 파일명 충돌 처리 (트랜잭션 외부에서 먼저 확인)
+    // 6. 파일명 충돌 확인 (중복 시 에러)
     const finalFileName = await this.resolveFileName(
       session.folderId,
       session.fileName,
       session.mimeType,
-      (session.conflictStrategy as ConflictStrategy) || ConflictStrategy.ERROR,
       uploadCreatedAt,
     );
 
@@ -658,13 +655,12 @@ export class MultipartUploadService {
   }
 
   /**
-   * 파일명 충돌 해결
+   * 파일명 충돌 확인 (중복 시 에러)
    */
   private async resolveFileName(
     folderId: string,
     originalName: string,
     mimeType: string,
-    conflictStrategy: ConflictStrategy,
     createdAt?: Date,
   ): Promise<string> {
     const exists = await this.fileDomainService.중복확인(
@@ -679,46 +675,9 @@ export class MultipartUploadService {
       return originalName;
     }
 
-    if (conflictStrategy === ConflictStrategy.ERROR) {
-      throw new ConflictException({
-        code: 'DUPLICATE_FILE_EXISTS',
-        message: '동일한 이름의 파일이 이미 존재합니다.',
-      });
-    }
-
-    // RENAME 전략: 자동 이름 변경
-    return this.generateUniqueFileName(folderId, originalName, mimeType, createdAt);
-  }
-
-  /**
-   * 고유 파일명 생성
-   */
-  private async generateUniqueFileName(
-    folderId: string,
-    baseName: string,
-    mimeType: string,
-    createdAt?: Date,
-  ): Promise<string> {
-    const lastDot = baseName.lastIndexOf('.');
-    const nameWithoutExt = lastDot > 0 ? baseName.substring(0, lastDot) : baseName;
-    const ext = lastDot > 0 ? baseName.substring(lastDot) : '';
-
-    let counter = 1;
-    let newName = `${nameWithoutExt} (${counter})${ext}`;
-
-    while (
-      await this.fileDomainService.중복확인(
-        folderId,
-        newName,
-        mimeType,
-        undefined,
-        createdAt,
-      )
-    ) {
-      counter++;
-      newName = `${nameWithoutExt} (${counter})${ext}`;
-    }
-
-    return newName;
+    throw new ConflictException({
+      code: 'DUPLICATE_FILE_EXISTS',
+      message: '동일한 이름의 파일이 이미 존재합니다.',
+    });
   }
 }

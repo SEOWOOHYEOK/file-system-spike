@@ -3,23 +3,11 @@
  */
 
 /**
- * 파일 이동 충돌 전략
- */
-export enum MoveConflictStrategy {
-  ERROR = 'ERROR',
-  OVERWRITE = 'OVERWRITE',
-  RENAME = 'RENAME',
-  SKIP = 'SKIP',
-}
-
-/**
  * 파일 이동 요청 DTO
  */
 export class MoveFileRequest {
   /** 대상 폴더 ID */
   targetFolderId: string;
-  /** 충돌 전략 (기본값: ERROR) */
-  conflictStrategy?: MoveConflictStrategy;
 }
 
 /**
@@ -39,12 +27,10 @@ export interface MoveFileResponse {
   mimeType: string;
   /** 파일 생성자 (업로더) ID - 감사 로그 ownerId 매핑용 */
   createdBy: string;
-  skipped?: boolean;
-  reason?: string;
   storageStatus: {
     nas: 'SYNCING';
   };
   updatedAt: string;
-  /** sync_events 테이블 INSERT 후 반환된 ID (skipped=true인 경우 없음) */
+  /** sync_events 테이블 INSERT 후 반환된 ID */
   syncEventId?: string;
 }

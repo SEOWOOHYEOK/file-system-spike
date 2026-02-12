@@ -45,7 +45,6 @@ export function extractUploadMetadata(
     path: response?.path,
     createdBy: response?.createdBy,
     checksum: response?.checksum,
-    conflictStrategy: request.body?.conflictStrategy,
     syncEventId: response?.syncEventId,
   };
 }
@@ -75,7 +74,6 @@ export function extractUploadManyMetadata(
     targetName: buildMultiFileTargetName(files),
     folderId: request.body?.folderId,
     createdBy: files[0]?.createdBy,
-    conflictStrategy: request.body?.conflictStrategy,
     files: files.map((f) => ({
       id: f.id,
       name: f.name,
@@ -152,7 +150,6 @@ export function extractRenameMetadata(
 ): Record<string, unknown> {
   return {
     newName: request.body?.newName,
-    conflictStrategy: request.body?.conflictStrategy,
     newPath: response?.path,
     size: response?.size,
     mimeType: response?.mimeType,
@@ -178,14 +175,11 @@ export function extractMoveMetadata(
 ): Record<string, unknown> {
   return {
     targetFolderId: request.body?.targetFolderId,
-    conflictStrategy: request.body?.conflictStrategy,
     newPath: response?.path,
     newFolderId: response?.folderId,
     size: response?.size,
     mimeType: response?.mimeType,
     createdBy: response?.createdBy,
-    skipped: response?.skipped,
-    skipReason: response?.reason,
     syncEventId: response?.syncEventId,
   };
 }

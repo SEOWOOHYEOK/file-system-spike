@@ -61,9 +61,6 @@ export class UploadSessionOrmEntity {
   @Column({ type: 'varchar', length: 255, nullable: true })
   uploadId: string | null;
 
-  @Column({ type: 'varchar', length: 50, nullable: true })
-  conflictStrategy: string | null;
-
   @CreateDateColumn()
   createdAt: Date;
 

@@ -30,9 +30,8 @@ export const ApiMultipartInitiate = () =>
 - 세션은 24시간 후 만료됩니다.
 - 만료된 세션은 재사용할 수 없습니다.
 
-### 충돌 전략 (conflictStrategy)
-- \`ERROR\`: 동일 이름 파일 존재 시 에러 (기본값)
-- \`RENAME\`: 자동 이름 변경 (예: file(1).txt)
+### 주의사항
+- 동일한 이름의 파일이 존재하면 에러가 발생합니다.
       `,
     }),
     ApiBody({
@@ -60,12 +59,6 @@ export const ApiMultipartInitiate = () =>
             type: 'string',
             description: 'MIME 타입',
             example: 'video/mp4',
-          },
-          conflictStrategy: {
-            type: 'string',
-            enum: ['ERROR', 'RENAME'],
-            description: '이름 충돌 시 처리 전략',
-            default: 'ERROR',
           },
         },
       },

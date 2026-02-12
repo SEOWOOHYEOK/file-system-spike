@@ -18,7 +18,7 @@ import { HttpStatus } from '@nestjs/common';
 import { PassThrough, Writable } from 'stream';
 import { FileController } from './file.controller';
 import { FileQueryService, FileUploadService, FileDownloadService, FileManageService, SyncProgressService } from '../../../business/file';
-import { ConflictStrategy, FileState } from '../../../domain/file';
+import { FileState } from '../../../domain/file';
 
 /**
  * ============================================================
@@ -275,7 +275,6 @@ describe('FileController', () => {
       expect(fileUploadService.uploadMany).toHaveBeenCalledWith({
         files: mockFiles,
         folderId: 'folder-uuid-456',
-        conflictStrategy: undefined,
       });
     });
   });

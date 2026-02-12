@@ -73,10 +73,30 @@ describe('FolderQueryService', () => {
     다건파일PENDING조회: jest.fn().mockResolvedValue([]),
   };
 
+  const mockEmployeeService = {
+    findOne: jest.fn().mockImplementation((userId: string) =>
+      Promise.resolve({
+        id: userId,
+        employeeNumber: 'EMP001',
+        name: '테스트유저',
+        email: 'test@example.com',
+      }),
+    ),
+  };
+
   let service: FolderQueryService;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // mockEmployeeService의 기본 동작 복원 (clearAllMocks 후)
+    mockEmployeeService.findOne.mockImplementation((userId: string) =>
+      Promise.resolve({
+        id: userId,
+        employeeNumber: 'EMP001',
+        name: '테스트유저',
+        email: 'test@example.com',
+      }),
+    );
     service = new FolderQueryService(
       mockFolderDomainService as any,
       mockFolderStorageService as any,
@@ -84,6 +104,7 @@ describe('FolderQueryService', () => {
       mockFileCacheStorageService as any,
       mockFileNasStorageService as any,
       mockFileActionRequestDomainService as any,
+      mockEmployeeService as any,
     );
   });
 

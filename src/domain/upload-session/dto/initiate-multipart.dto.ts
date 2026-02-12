@@ -17,9 +17,6 @@ export interface InitiateMultipartRequest {
 
   /** MIME 타입 */
   mimeType: string;
-
-  /** 충돌 전략 (ERROR | RENAME) */
-  conflictStrategy?: string;
 }
 
 /**

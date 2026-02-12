@@ -69,12 +69,12 @@ import { FileActionRequestController } from './controller/file-action-request/fi
     FolderController,
     TrashController,
     AuthController,
-    // 외부 사용자 컨트롤러
-    ExternalShareController,
     // 파일 공유 컨트롤러 (700, 701, 702)
-    ShareRequestCreateController,    // 700번 - 공유 요청 생성
-    MySentShareController,           // 701번 - 내가 보낸 공유 관리
-    MyReceivedRequestController,     // 702번 - 내가 받은 공유 요청 관리
+    // 중요: 정적/구체적 라우트가 와일드카드(:id, :shareId)보다 먼저 등록되어야 함
+    ShareRequestCreateController,    // 700번 - 공유 요청 생성 (approvers, users 등 정적 라우트)
+    MySentShareController,           // 701번 - 내가 보낸 공유 관리 (my-sent 정적 prefix)
+    MyReceivedRequestController,     // 702번 - 내가 받은 공유 요청 관리 (received 정적 라우트)
+    ExternalShareController,         // 710번 - 외부공유 접근 (me 정적 라우트 + :shareId 와일드카드) ← 반드시 마지막
     // 내 정보 컨트롤러
     MyPermissionController,          // 600번 - 나의 권한 조회
     UserFavoriteController,

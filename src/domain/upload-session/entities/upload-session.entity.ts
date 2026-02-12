@@ -54,9 +54,6 @@ export class UploadSessionEntity {
   /** 캐시 스토리지 uploadId (SeaweedFS 등에서 사용) */
   uploadId?: string;
 
-  /** 충돌 전략 */
-  conflictStrategy?: string;
-
   /** 생성 시간 */
   createdAt: Date;
 
@@ -81,7 +78,6 @@ export class UploadSessionEntity {
     mimeType: string;
     partSize?: number;
     uploadId?: string;
-    conflictStrategy?: string;
   }): UploadSessionEntity {
     const partSize = params.partSize ?? DEFAULT_PART_SIZE;
     const totalParts = Math.ceil(params.totalSize / partSize);
@@ -99,7 +95,6 @@ export class UploadSessionEntity {
       uploadedBytes: 0,
       completedParts: [],
       uploadId: params.uploadId,
-      conflictStrategy: params.conflictStrategy,
       expiresAt: new Date(now.getTime() + SESSION_EXPIRY_MS),
       createdAt: now,
       updatedAt: now,

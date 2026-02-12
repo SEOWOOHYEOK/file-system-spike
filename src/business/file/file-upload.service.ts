@@ -7,7 +7,6 @@ import {
   UploadFileRequest,
   UploadFilesRequest,
   UploadFileResponse,
-  ConflictStrategy,
 } from '../../domain/file';
 
 import { FolderAvailabilityStatus } from '../../domain/folder';
@@ -64,7 +63,7 @@ export class FileUploadService {
    * 
    * 처리 플로우:
    * 1. 요청 검증 (파일 크기, 타입, 폴더 존재)
-   * 2. 동일 파일명 체크 + 충돌 전략 처리
+   * 2. 동일 파일명 체크 (중복 시 에러)
    * 3. UUID 미리 생성
    * 4. SeaweedFS 저장 먼저
    * 5. DB 트랜잭션 (files, file_storage_objects)
@@ -72,7 +71,7 @@ export class FileUploadService {
    * 7. 응답 반환
    */
   async upload(request: UploadFileRequest): Promise<UploadFileResponse> {
-    const { file, folderId: rawFolderId, conflictStrategy = ConflictStrategy.ERROR } = request;
+    const { file, folderId: rawFolderId } = request;
 
     // 0. 폴더 ID 해석 (root 처리)
     let folderId = rawFolderId;
@@ -102,7 +101,6 @@ export class FileUploadService {
       folderId,
       normalizedOriginalName,
       file.mimetype,
-      conflictStrategy,
       uploadCreatedAt,
     );
 
@@ -206,14 +204,13 @@ export class FileUploadService {
    * 2. 모든 결과를 배열로 반환
    */
   async uploadMany(request: UploadFilesRequest): Promise<UploadFileResponse[]> {
-    const { files, folderId, conflictStrategy } = request;
+    const { files, folderId } = request;
     const results: UploadFileResponse[] = [];
 
     for (const file of files) {
       const result = await this.upload({
         file,
         folderId,
-        conflictStrategy,
       });
       results.push(result);
     }
@@ -268,13 +265,12 @@ export class FileUploadService {
   }
 
   /**
-   * 파일명 충돌 해결
+   * 파일명 충돌 확인 (중복 시 에러)
    */
   private async resolveFileName(
     folderId: string,
     originalName: string,
     mimeType: string,
-    conflictStrategy: ConflictStrategy,
     createdAt?: Date,
   ): Promise<string> {
     // Domain Service 사용
@@ -290,48 +286,10 @@ export class FileUploadService {
       return originalName;
     }
 
-    if (conflictStrategy === ConflictStrategy.ERROR) {
-      throw new ConflictException({
-        code: 'DUPLICATE_FILE_EXISTS',
-        message: '동일한 이름의 파일이 이미 존재합니다.',
-      });
-    }
-
-    // RENAME 전략: 자동 이름 변경
-    return this.generateUniqueFileName(folderId, originalName, mimeType, createdAt);
-  }
-
-  /**
-   * 고유 파일명 생성 (충돌 시)
-   */
-  private async generateUniqueFileName(
-    folderId: string,
-    baseName: string,
-    mimeType: string,
-    createdAt?: Date,
-  ): Promise<string> {
-    const lastDot = baseName.lastIndexOf('.');
-    const nameWithoutExt = lastDot > 0 ? baseName.substring(0, lastDot) : baseName;
-    const ext = lastDot > 0 ? baseName.substring(lastDot) : '';
-
-    let counter = 1;
-    let newName = `${nameWithoutExt} (${counter})${ext}`;
-
-    // Domain Service 사용
-    while (
-      await this.fileDomainService.중복확인(
-        folderId,
-        newName,
-        mimeType,
-        undefined,
-        createdAt,
-      )
-    ) {
-      counter++;
-      newName = `${nameWithoutExt} (${counter})${ext}`;
-    }
-
-    return newName;
+    throw new ConflictException({
+      code: 'DUPLICATE_FILE_EXISTS',
+      message: '동일한 이름의 파일이 이미 존재합니다.',
+    });
   }
 
   /**

@@ -3,14 +3,6 @@
  */
 
 /**
- * 파일 충돌 전략
- */
-export enum ConflictStrategy {
-  ERROR = 'ERROR',
-  RENAME = 'RENAME',
-}
-
-/**
  * 파일 업로드 요청 DTO
  */
 export interface UploadFileRequest {
@@ -18,8 +10,6 @@ export interface UploadFileRequest {
   file: Express.Multer.File;
   /** 대상 폴더 ID */
   folderId: string;
-  /** 충돌 전략 (기본값: ERROR) */
-  conflictStrategy?: ConflictStrategy;
 }
 
 /**
@@ -30,8 +20,6 @@ export interface UploadFilesRequest {
   files: Express.Multer.File[];
   /** 대상 폴더 ID */
   folderId: string;
-  /** 충돌 전략 (기본값: ERROR) */
-  conflictStrategy?: ConflictStrategy;
 }
 
 /**

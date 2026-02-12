@@ -10,8 +10,6 @@ import {
   MoveFileRequest,
   MoveFileResponse,
   DeleteFileResponse,
-  MoveConflictStrategy,
-  ConflictStrategy,
   TransactionOptions,
 } from '../../domain/file';
 import {
@@ -69,7 +67,7 @@ export class FileManageService {
    * 8. Bull 큐 등록 (NAS 동기화)
    */
   async rename(fileId: string, request: RenameFileRequest, userId: string): Promise<RenameFileResponse> {
-    const { newName, conflictStrategy = ConflictStrategy.ERROR } = request;
+    const { newName } = request;
 
     const queryRunner = this.dataSource.createQueryRunner();
     await queryRunner.connect();
@@ -109,7 +107,6 @@ export class FileManageService {
         sanitizedName,
         file.mimeType,
         fileId,
-        conflictStrategy,
         txOptions,
         file.createdAt,
       );
@@ -219,7 +216,7 @@ export class FileManageService {
    * 9. Bull 큐 등록 (NAS 동기화)
    */
   async move(fileId: string, request: MoveFileRequest, userId: string): Promise<MoveFileResponse> {
-    const { targetFolderId, conflictStrategy = MoveConflictStrategy.ERROR } = request;
+    const { targetFolderId } = request;
 
     // 1. 대상 폴더 존재 확인 (트랜잭션 밖에서 확인)
     const targetFolder = await this.folderDomainService.조회(targetFolderId);
@@ -265,32 +262,14 @@ export class FileManageService {
       // 3. NAS 동기화 상태 체크
       await this.checkNasSyncStatus(fileId, txOptions);
 
-      // 4. 충돌 처리
-      const { finalName, skipped } = await this.resolveConflictForMove(
+      // 4. 충돌 확인 (중복 시 에러)
+      const finalName = await this.resolveFileNameForMove(
         targetFolderId,
         file.name,
         file.mimeType,
-        conflictStrategy,
         txOptions,
         file.createdAt,
       );
-
-      if (skipped) {
-        await queryRunner.rollbackTransaction();
-        return {
-          id: file.id,
-          name: file.name,
-          folderId: file.folderId,
-          path: '',
-          size: file.sizeBytes,
-          mimeType: file.mimeType,
-          createdBy: file.createdBy,
-          skipped: true,
-          reason: '동일한 이름의 파일이 이미 존재합니다.',
-          storageStatus: { nas: 'SYNCING' },
-          updatedAt: file.updatedAt.toISOString(),
-        };
-      }
 
       // 5. 파일 이동
       file.moveTo(targetFolderId);
@@ -564,14 +543,13 @@ export class FileManageService {
   }
 
   /**
-   * 파일명 변경 시 충돌 해결
+   * 파일명 변경 시 충돌 확인 (중복 시 에러)
    */
   private async resolveFileNameForRename(
     folderId: string,
     newName: string,
     mimeType: string,
     excludeFileId: string,
-    conflictStrategy: ConflictStrategy,
     txOptions?: TransactionOptions,
     createdAt?: Date,
   ): Promise<string> {
@@ -588,28 +566,22 @@ export class FileManageService {
       return newName;
     }
 
-    if (conflictStrategy === ConflictStrategy.ERROR) {
-      throw new ConflictException({
-        code: 'DUPLICATE_FILE_EXISTS',
-        message: '동일한 이름의 파일이 이미 존재합니다.',
-      });
-    }
-
-    // RENAME 전략
-    return this.generateUniqueFileName(folderId, newName, mimeType, excludeFileId, txOptions, createdAt);
+    throw new ConflictException({
+      code: 'DUPLICATE_FILE_EXISTS',
+      message: '동일한 이름의 파일이 이미 존재합니다.',
+    });
   }
 
   /**
-   * 파일 이동 시 충돌 해결
+   * 파일 이동 시 충돌 확인 (중복 시 에러)
    */
-  private async resolveConflictForMove(
+  private async resolveFileNameForMove(
     targetFolderId: string,
     fileName: string,
     mimeType: string,
-    conflictStrategy: MoveConflictStrategy,
     txOptions?: TransactionOptions,
     createdAt?: Date,
-  ): Promise<{ finalName: string; skipped: boolean }> {
+  ): Promise<string> {
     const exists = await this.fileDomainService.중복확인(
       targetFolderId,
       fileName,
@@ -620,72 +592,13 @@ export class FileManageService {
     );
 
     if (!exists) {
-      return { finalName: fileName, skipped: false };
+      return fileName;
     }
 
-    switch (conflictStrategy) {
-      case MoveConflictStrategy.ERROR:
-        throw new ConflictException({
-          code: 'DUPLICATE_FILE_EXISTS',
-          message: '동일한 이름의 파일이 이미 존재합니다.',
-        });
-
-      case MoveConflictStrategy.SKIP:
-        return { finalName: fileName, skipped: true };
-
-      case MoveConflictStrategy.RENAME:
-        const uniqueName = await this.generateUniqueFileName(
-          targetFolderId,
-          fileName,
-          mimeType,
-          undefined,
-          txOptions,
-          createdAt,
-        );
-        return { finalName: uniqueName, skipped: false };
-
-      case MoveConflictStrategy.OVERWRITE:
-        // TODO: 기존 파일 휴지통 이동 처리
-        return { finalName: fileName, skipped: false };
-
-      default:
-        return { finalName: fileName, skipped: false };
-    }
-  }
-
-  /**
-   * 고유 파일명 생성
-   */
-  private async generateUniqueFileName(
-    folderId: string,
-    baseName: string,
-    mimeType: string,
-    excludeFileId?: string,
-    txOptions?: TransactionOptions,
-    createdAt?: Date,
-  ): Promise<string> {
-    const lastDot = baseName.lastIndexOf('.');
-    const nameWithoutExt = lastDot > 0 ? baseName.substring(0, lastDot) : baseName;
-    const ext = lastDot > 0 ? baseName.substring(lastDot) : '';
-
-    let counter = 1;
-    let newName = `${nameWithoutExt} (${counter})${ext}`;
-
-    while (
-      await this.fileDomainService.중복확인(
-        folderId,
-        newName,
-        mimeType,
-        excludeFileId,
-        createdAt,
-        txOptions,
-      )
-    ) {
-      counter++;
-      newName = `${nameWithoutExt} (${counter})${ext}`;
-    }
-
-    return newName;
+    throw new ConflictException({
+      code: 'DUPLICATE_FILE_EXISTS',
+      message: '동일한 이름의 파일이 이미 존재합니다.',
+    });
   }
 
   /**

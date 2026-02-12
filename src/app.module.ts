@@ -13,6 +13,7 @@ import { OrganizationMigrationModule } from './integrations/migration';
 import { RequestContextMiddleware } from './common/middleware/request-context.middleware';
 import { createWinstonConfig } from './common/logger/winston.config';
 import { ErrorMessageModule } from './common/error-message/error-message.module';
+import { RouteConflictDetectorService } from './common/diagnostics/route-conflict-detector.service';
 
 /**
  * 루트 애플리케이션 모듈
@@ -60,7 +61,7 @@ const appMode = process.env.APP_MODE || 'all';
     InterfaceModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, RouteConflictDetectorService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer): void {

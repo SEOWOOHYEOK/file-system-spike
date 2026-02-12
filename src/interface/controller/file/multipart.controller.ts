@@ -60,7 +60,6 @@ interface InitiateRequestBody {
   folderId: string;
   totalSize: number;
   mimeType: string;
-  conflictStrategy?: string;
 }
 
 /**
@@ -109,7 +108,6 @@ export class MultipartController {
         folderId: body.folderId,
         totalSize: body.totalSize,
         mimeType: body.mimeType,
-        conflictStrategy: body.conflictStrategy,
       },
       userId ?? 'anonymous',
     );

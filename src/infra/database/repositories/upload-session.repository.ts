@@ -48,7 +48,6 @@ export class UploadSessionRepository implements IUploadSessionRepository {
       expiresAt: orm.expiresAt,
       fileId: orm.fileId ?? undefined,
       uploadId: orm.uploadId ?? undefined,
-      conflictStrategy: orm.conflictStrategy ?? undefined,
       createdAt: orm.createdAt,
       updatedAt: orm.updatedAt,
     });
@@ -72,7 +71,6 @@ export class UploadSessionRepository implements IUploadSessionRepository {
     orm.expiresAt = domain.expiresAt;
     orm.fileId = domain.fileId ?? null;
     orm.uploadId = domain.uploadId ?? null;
-    orm.conflictStrategy = domain.conflictStrategy ?? null;
     orm.createdAt = domain.createdAt;
     orm.updatedAt = domain.updatedAt;
     return orm;

@@ -35,6 +35,20 @@ export class FolderInfoResponse {
 }
 
 /**
+ * 등록자(createdBy) 사용자 정보 DTO
+ */
+export interface CreatedByUserInfo {
+  /** 사용자 ID (UUID) */
+  id: string;
+  /** 직원 번호 */
+  employeeNumber: string;
+  /** 이름 */
+  name?: string;
+  /** 이메일 */
+  email?: string;
+}
+
+/**
  * 브레드크럼 아이템 DTO
  */
 export interface BreadcrumbItem {
@@ -52,6 +66,8 @@ export interface FolderListItem {
   storageStatus: FolderStorageStatusDto;
   fileCount: number;
   folderCount: number;
+  /** 폴더 등록자 정보 */
+  createdBy: CreatedByUserInfo | null;
   updatedAt: string;
 }
 
@@ -77,6 +93,8 @@ export interface FileListItemInFolder {
     cache: string | null;
     nas: string | null;
   };
+  /** 파일 등록자 정보 */
+  createdBy: CreatedByUserInfo | null;
   updatedAt: string;
   /** 해당 파일에 대한 PENDING 작업 요청 (없으면 null) */
   pendingActionRequest: PendingActionRequestSummary | null;

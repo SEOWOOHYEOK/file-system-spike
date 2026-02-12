@@ -9,6 +9,7 @@ import { SyncEventDomainModule } from '../../domain/sync-event/sync-event.module
 import { StorageDomainModule } from '../../domain/storage/storage.module';
 import { SearchHistoryDomainModule } from '../../domain/search-history/search-history.module';
 import { FileActionRequestDomainModule } from '../../domain/file-action-request/file-action-request.module';
+import { OrganizationModule } from '../../integrations/migration/organization/organization.module';
 import { AuditModule } from '../audit/audit.module';
 import { FolderQueryService } from './folder-query.service';
 import { FolderCommandService } from './folder-command.service';
@@ -31,6 +32,7 @@ import { SearchService } from './search.service';
     StorageDomainModule,
     SearchHistoryDomainModule,
     FileActionRequestDomainModule,
+    OrganizationModule,
     AuditModule,
   ],
   providers: [FolderQueryService, FolderCommandService, SearchService],

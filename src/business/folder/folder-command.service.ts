@@ -14,8 +14,6 @@ import {
   RenameFolderResponse,
   MoveFolderRequest,
   MoveFolderResponse,
-  FolderConflictStrategy,
-  MoveFolderConflictStrategy,
   FolderDomainService,
 } from '../../domain/folder';
 import type { TransactionOptions } from '../../domain/folder/repositories/folder.repository.interface';
@@ -106,7 +104,7 @@ export class FolderCommandService implements OnModuleInit {
    * 폴더 생성
    */
   async 생성(request: CreateFolderRequest): Promise<CreateFolderResponse> {
-    const { name, parentId, conflictStrategy = FolderConflictStrategy.ERROR } = request;
+    const { name, parentId } = request;
 
     // 1. 폴더명 유효성 검사
     this.validateFolderName(name);
@@ -122,7 +120,7 @@ export class FolderCommandService implements OnModuleInit {
     }
 
     // 3. 동일 이름 폴더 존재 확인
-    const finalName = await this.resolveFolderName(parentId, name, conflictStrategy);
+    const finalName = await this.resolveFolderName(parentId, name);
 
     // 4. 폴더 생성
     const folderId = uuidv4();
@@ -185,7 +183,7 @@ export class FolderCommandService implements OnModuleInit {
    * 폴더명 변경
    */
   async 이름변경(folderId: string, request: RenameFolderRequest): Promise<RenameFolderResponse> {
-    const { newName, conflictStrategy = FolderConflictStrategy.ERROR } = request;
+    const { newName } = request;
 
     // 1. 폴더명 유효성 검사
     this.validateFolderName(newName);
@@ -219,7 +217,6 @@ export class FolderCommandService implements OnModuleInit {
         folder.parentId,
         newName,
         folderId,
-        conflictStrategy,
       );
 
       // 5. 새 경로 계산
@@ -301,7 +298,7 @@ export class FolderCommandService implements OnModuleInit {
    * 폴더 이동
    */
   async 이동(folderId: string, request: MoveFolderRequest): Promise<MoveFolderResponse> {
-    const { targetParentId, conflictStrategy = MoveFolderConflictStrategy.ERROR } = request;
+    const { targetParentId } = request;
 
     // 1. 대상 상위 폴더 존재 확인
     const targetParent = await this.folderDomainService.조회(targetParentId);
@@ -341,26 +338,11 @@ export class FolderCommandService implements OnModuleInit {
       // 4. NAS 동기화 상태 체크
       await this.checkNasSyncStatus(folderId, txOptions);
 
-      // 5. 충돌 처리
-      const { finalName, skipped } = await this.resolveConflictForMove(
+      // 5. 충돌 확인 (중복 시 에러)
+      const finalName = await this.resolveFolderNameForMove(
         targetParentId,
         folder.name,
-        conflictStrategy,
       );
-
-      if (skipped) {
-        await queryRunner.rollbackTransaction();
-        return {
-          id: folder.id,
-          name: folder.name,
-          parentId: folder.parentId || '',
-          path: folder.path,
-          skipped: true,
-          reason: '동일한 이름의 폴더가 이미 존재합니다.',
-          storageStatus: { nas: 'SYNCING' },
-          updatedAt: folder.updatedAt.toISOString(),
-        };
-      }
 
       // 6. 새 경로 계산
       const oldPath = folder.path;
@@ -599,12 +581,11 @@ export class FolderCommandService implements OnModuleInit {
   }
 
   /**
-   * 폴더명 충돌 해결 (생성 시)
+   * 폴더명 충돌 확인 (생성 시, 중복 시 에러)
    */
   private async resolveFolderName(
     parentId: string | null,
     name: string,
-    conflictStrategy: FolderConflictStrategy,
   ): Promise<string> {
     const exists = await this.folderDomainService.중복확인(parentId, name);
 
@@ -612,21 +593,16 @@ export class FolderCommandService implements OnModuleInit {
       return name;
     }
 
-    if (conflictStrategy === FolderConflictStrategy.ERROR) {
-      throw BusinessException.of(ErrorCodes.FOLDER_DUPLICATE_EXISTS, { parentId, name });
-    }
-
-    return this.generateUniqueFolderName(parentId, name);
+    throw BusinessException.of(ErrorCodes.FOLDER_DUPLICATE_EXISTS, { parentId, name });
   }
 
   /**
-   * 폴더명 충돌 해결 (변경 시)
+   * 폴더명 충돌 확인 (변경 시, 중복 시 에러)
    */
   private async resolveFolderNameForRename(
     parentId: string | null,
     name: string,
     excludeFolderId: string,
-    conflictStrategy: FolderConflictStrategy,
   ): Promise<string> {
     const exists = await this.folderDomainService.중복확인(parentId, name, excludeFolderId);
 
@@ -634,62 +610,25 @@ export class FolderCommandService implements OnModuleInit {
       return name;
     }
 
-    if (conflictStrategy === FolderConflictStrategy.ERROR) {
-      throw BusinessException.of(ErrorCodes.FOLDER_DUPLICATE_EXISTS, { parentId, name });
-    }
-
-    return this.generateUniqueFolderName(parentId, name, excludeFolderId);
+    throw BusinessException.of(ErrorCodes.FOLDER_DUPLICATE_EXISTS, { parentId, name });
   }
 
   /**
-   * 폴더 이동 시 충돌 해결
+   * 폴더 이동 시 충돌 확인 (중복 시 에러)
    */
-  private async resolveConflictForMove(
+  private async resolveFolderNameForMove(
     targetParentId: string,
     folderName: string,
-    conflictStrategy: MoveFolderConflictStrategy,
-  ): Promise<{ finalName: string; skipped: boolean }> {
+  ): Promise<string> {
     const exists = await this.folderDomainService.중복확인(targetParentId, folderName);
 
     if (!exists) {
-      return { finalName: folderName, skipped: false };
+      return folderName;
     }
 
-    switch (conflictStrategy) {
-      case MoveFolderConflictStrategy.ERROR:
-        throw BusinessException.of(ErrorCodes.FOLDER_DUPLICATE_EXISTS, {
-          targetParentId,
-          folderName,
-        });
-
-      case MoveFolderConflictStrategy.SKIP:
-        return { finalName: folderName, skipped: true };
-
-      case MoveFolderConflictStrategy.RENAME:
-        const uniqueName = await this.generateUniqueFolderName(targetParentId, folderName);
-        return { finalName: uniqueName, skipped: false };
-
-      default:
-        return { finalName: folderName, skipped: false };
-    }
-  }
-
-  /**
-   * 고유 폴더명 생성
-   */
-  private async generateUniqueFolderName(
-    parentId: string | null,
-    baseName: string,
-    excludeFolderId?: string,
-  ): Promise<string> {
-    let counter = 1;
-    let newName = `${baseName} (${counter})`;
-
-    while (await this.folderDomainService.중복확인(parentId, newName, excludeFolderId)) {
-      counter++;
-      newName = `${baseName} (${counter})`;
-    }
-
-    return newName;
+    throw BusinessException.of(ErrorCodes.FOLDER_DUPLICATE_EXISTS, {
+      targetParentId,
+      folderName,
+    });
   }
 }

@@ -2,8 +2,7 @@
  * 파일명 변경 관련 DTO
  */
 
-import { ConflictStrategy } from './upload-file.dto';
-import { IsNotEmpty, IsOptional, IsString, ValidateIf } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
 
 /**
  * 파일명 변경 요청 DTO
@@ -13,10 +12,6 @@ export class RenameFileRequest {
   @IsString({ message: '파일명은 문자열이어야 합니다.' })
   @IsNotEmpty({ message: '새 파일명은 비어 있을 수 없습니다.' })
   newName: string;
-
-  /** 충돌 전략 (기본값: ERROR) */
-  @IsOptional()
-  conflictStrategy?: ConflictStrategy;
 }
 
 /**

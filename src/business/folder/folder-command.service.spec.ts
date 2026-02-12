@@ -32,8 +32,6 @@ import { FolderCommandService } from './folder-command.service';
 import {
   FolderEntity,
   FolderState,
-  FolderConflictStrategy,
-  MoveFolderConflictStrategy,
 } from '../../domain/folder';
 import { FolderStorageObjectEntity, FolderAvailabilityStatus } from '../../domain/storage/folder/entity/folder-storage-object.entity';
 import { ConflictException, NotFoundException, BadRequestException } from '@nestjs/common';
@@ -146,7 +144,6 @@ describe('FolderCommandService', () => {
         {
           name: 'new-folder',
           parentId: 'parent-folder-id',
-          conflictStrategy: FolderConflictStrategy.ERROR,
         },
         'user-1',
       );
@@ -271,7 +268,6 @@ describe('FolderCommandService', () => {
       const request = {
         name: 'existing-folder',
         parentId: 'parent-folder-id',
-        conflictStrategy: FolderConflictStrategy.ERROR,
       };
 
       // ═══════════════════════════════════════════════════════
@@ -280,55 +276,6 @@ describe('FolderCommandService', () => {
       await expect(service.생성(request, 'user-1')).rejects.toThrow(ConflictException);
     });
 
-    /**
-     * 📌 테스트 시나리오: 중복 폴더명 + RENAME 전략
-     *
-     * 🎯 검증 목적:
-     *   - 중복 폴더명 발생 시 자동으로 이름 변경 (예: folder → folder (1))
-     *
-     * ✅ 기대 결과:
-     *   - 폴더가 자동 이름 변경되어 생성됨
-     */
-    it('중복 폴더명 + RENAME 전략 시 자동으로 이름이 변경되어 생성되어야 한다', async () => {
-      // ═══════════════════════════════════════════════════════
-      // 📥 GIVEN (사전 조건 설정)
-      // ═══════════════════════════════════════════════════════
-      const parentFolder = new FolderEntity({
-        id: 'parent-folder-id',
-        name: 'parent',
-        parentId: null,
-        path: '/',
-        state: FolderState.ACTIVE,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      mockFolderDomainService.조회.mockResolvedValue(parentFolder);
-      // 첫 번째 호출: 기본 이름 존재함
-      // 두 번째 호출: folder (1) 존재하지 않음
-      mockFolderDomainService.중복확인
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(false);
-      mockFolderDomainService.저장.mockResolvedValue(undefined);
-      mockFolderStorageService.저장.mockResolvedValue(undefined);
-      mockJobQueue.addJob.mockResolvedValue(undefined);
-
-      const request = {
-        name: 'existing-folder',
-        parentId: 'parent-folder-id',
-        conflictStrategy: FolderConflictStrategy.RENAME,
-      };
-
-      // ═══════════════════════════════════════════════════════
-      // 🎬 WHEN (테스트 실행)
-      // ═══════════════════════════════════════════════════════
-      const result = await service.생성(request, 'user-1');
-
-      // ═══════════════════════════════════════════════════════
-      // ✅ THEN (결과 검증)
-      // ═══════════════════════════════════════════════════════
-      expect(result.name).toBe('existing-folder (1)');
-    });
   });
 
   // =================================================================
@@ -514,7 +461,7 @@ describe('FolderCommandService', () => {
       await expect(
         service.이름변경(
           'folder-1',
-          { newName: 'existing-name', conflictStrategy: FolderConflictStrategy.ERROR },
+          { newName: 'existing-name' },
           'user-1',
         ),
       ).rejects.toThrow(ConflictException);
@@ -706,72 +653,6 @@ describe('FolderCommandService', () => {
       ).rejects.toThrow(ConflictException);
     });
 
-    /**
-     * 📌 테스트 시나리오: 중복 폴더명 + SKIP 전략
-     *
-     * 🎯 검증 목적:
-     *   - 대상 폴더에 동일 이름의 폴더가 있을 때 SKIP 전략 동작 확인
-     *
-     * ✅ 기대 결과:
-     *   - 이동하지 않고 skipped: true 반환
-     */
-    it('중복 폴더명 + SKIP 전략 시 이동하지 않고 skipped 반환해야 한다', async () => {
-      // ═══════════════════════════════════════════════════════
-      // 📥 GIVEN (사전 조건 설정)
-      // ═══════════════════════════════════════════════════════
-      const folder = new FolderEntity({
-        id: 'folder-1',
-        name: 'folder-to-move',
-        parentId: 'old-parent-id',
-        path: '/old-parent/folder-to-move',
-        state: FolderState.ACTIVE,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      const targetParent = new FolderEntity({
-        id: 'target-parent-id',
-        name: 'target-parent',
-        parentId: null,
-        path: '/target-parent',
-        state: FolderState.ACTIVE,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      const storageObject = new FolderStorageObjectEntity({
-        id: 'storage-1',
-        folderId: 'folder-1',
-        storageType: 'NAS',
-        objectKey: '/old-parent/folder-to-move',
-        availabilityStatus: FolderAvailabilityStatus.AVAILABLE,
-        createdAt: new Date(),
-      });
-
-      mockFolderDomainService.조회.mockResolvedValue(targetParent);
-      mockFolderDomainService.잠금조회.mockResolvedValue(folder);
-      mockFolderStorageService.조회.mockResolvedValue(storageObject);
-      mockFolderDomainService.중복확인.mockResolvedValue(true); // 중복 존재
-
-      // ═══════════════════════════════════════════════════════
-      // 🎬 WHEN (테스트 실행)
-      // ═══════════════════════════════════════════════════════
-      const result = await service.이동(
-        'folder-1',
-        {
-          targetParentId: 'target-parent-id',
-          conflictStrategy: MoveFolderConflictStrategy.SKIP,
-        },
-        'user-1',
-      );
-
-      // ═══════════════════════════════════════════════════════
-      // ✅ THEN (결과 검증)
-      // ═══════════════════════════════════════════════════════
-      expect(result.skipped).toBe(true);
-      expect(result.reason).toBeDefined();
-      expect(mockJobQueue.addJob).not.toHaveBeenCalled();
-    });
   });
 
   // =================================================================

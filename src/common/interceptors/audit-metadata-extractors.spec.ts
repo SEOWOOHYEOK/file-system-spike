@@ -60,7 +60,7 @@ describe('extractUploadMetadata', () => {
 
   it('응답에서 파일 크기, MIME 타입, 경로를 추출해야 함', () => {
     const req = mockRequest({
-      body: { folderId: 'folder-uuid-456', conflictStrategy: 'RENAME' },
+      body: { folderId: 'folder-uuid-456' },
       file: {
         originalname: 'report.pdf',
         size: 2048576,
@@ -87,9 +87,9 @@ describe('extractUploadMetadata', () => {
     expect(result.size).toBe(2048576);
   });
 
-  it('요청에서 원본 파일명, 대상 폴더, 충돌 전략을 추출해야 함', () => {
+  it('요청에서 원본 파일명과 대상 폴더를 추출해야 함', () => {
     const req = mockRequest({
-      body: { folderId: 'folder-uuid-456', conflictStrategy: 'RENAME' },
+      body: { folderId: 'folder-uuid-456' },
       file: {
         originalname: 'report.pdf',
         size: 2048576,
@@ -101,7 +101,6 @@ describe('extractUploadMetadata', () => {
 
     expect(result.originalName).toBe('report.pdf');
     expect(result.folderId).toBe('folder-uuid-456');
-    expect(result.conflictStrategy).toBe('RENAME');
   });
 
   it('응답에서 syncEventId를 추출해야 함', () => {
@@ -173,7 +172,7 @@ describe('extractUploadManyMetadata', () => {
 
   it('파일 수와 총 크기를 계산해야 함', () => {
     const req = mockRequest({
-      body: { folderId: 'folder-uuid', conflictStrategy: 'ERROR' },
+      body: { folderId: 'folder-uuid' },
       files: [
         { originalname: 'doc1.pdf', size: 1024, mimetype: 'application/pdf' },
         { originalname: 'doc2.xlsx', size: 4096, mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
@@ -245,16 +244,15 @@ describe('extractUploadManyMetadata', () => {
     ]);
   });
 
-  it('대상 폴더 ID와 충돌 전략을 추출해야 함', () => {
+  it('대상 폴더 ID를 추출해야 함', () => {
     const req = mockRequest({
-      body: { folderId: 'folder-uuid', conflictStrategy: 'RENAME' },
+      body: { folderId: 'folder-uuid' },
       files: [],
     });
 
     const result = extractUploadManyMetadata(req, []);
 
     expect(result.folderId).toBe('folder-uuid');
-    expect(result.conflictStrategy).toBe('RENAME');
   });
 
   it('응답이 배열이 아닐 때 안전하게 처리해야 함', () => {
@@ -324,16 +322,15 @@ describe('extractRenameMetadata', () => {
     syncEventId: 'sync-rename-001',
   };
 
-  it('새 파일명과 충돌 전략을 추출해야 함', () => {
+  it('새 파일명을 추출해야 함', () => {
     const req = mockRequest({
       params: { fileId: 'file-uuid-123' },
-      body: { newName: 'new-report.pdf', conflictStrategy: 'RENAME' },
+      body: { newName: 'new-report.pdf' },
     });
 
     const result = extractRenameMetadata(req, renameResponse);
 
     expect(result.newName).toBe('new-report.pdf');
-    expect(result.conflictStrategy).toBe('RENAME');
   });
 
   it('응답에서 변경 후 경로와 syncEventId를 추출해야 함', () => {
@@ -380,16 +377,15 @@ describe('extractMoveMetadata', () => {
     syncEventId: 'sync-move-001',
   };
 
-  it('이동 대상 폴더와 충돌 전략을 추출해야 함', () => {
+  it('이동 대상 폴더를 추출해야 함', () => {
     const req = mockRequest({
       params: { fileId: 'file-uuid-123' },
-      body: { targetFolderId: 'target-folder-uuid', conflictStrategy: 'OVERWRITE' },
+      body: { targetFolderId: 'target-folder-uuid' },
     });
 
     const result = extractMoveMetadata(req, moveResponse);
 
     expect(result.targetFolderId).toBe('target-folder-uuid');
-    expect(result.conflictStrategy).toBe('OVERWRITE');
   });
 
   it('응답에서 이동 후 경로와 syncEventId를 추출해야 함', () => {
@@ -403,25 +399,6 @@ describe('extractMoveMetadata', () => {
     expect(result.newPath).toBe('/target/report.pdf');
     expect(result.newFolderId).toBe('target-folder-uuid');
     expect(result.syncEventId).toBe('sync-move-001');
-  });
-
-  it('이동 스킵(충돌) 정보를 추출해야 함', () => {
-    const skippedResponse = {
-      ...moveResponse,
-      skipped: true,
-      reason: 'File already exists in target folder',
-      syncEventId: undefined,
-    };
-
-    const req = mockRequest({
-      params: { fileId: 'file-uuid-123' },
-      body: { targetFolderId: 'target-folder-uuid', conflictStrategy: 'SKIP' },
-    });
-
-    const result = extractMoveMetadata(req, skippedResponse);
-
-    expect(result.skipped).toBe(true);
-    expect(result.skipReason).toBe('File already exists in target folder');
   });
 
   it('응답이 null일 때도 요청 정보만 추출해야 함', () => {

@@ -31,7 +31,6 @@ export interface CreateSessionParams {
   mimeType: string;
   partSize?: number;
   uploadId?: string;
-  conflictStrategy?: string;
 }
 
 /**
@@ -107,7 +106,6 @@ export class UploadSessionDomainService {
       mimeType: params.mimeType,
       partSize: params.partSize,
       uploadId: params.uploadId,
-      conflictStrategy: params.conflictStrategy,
     });
 
     return this.sessionRepository.save(session, txOptions);

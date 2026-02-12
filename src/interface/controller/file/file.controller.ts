@@ -33,7 +33,6 @@ import {
   RenameFileResponse,
   MoveFileRequest,
   MoveFileResponse,
-  ConflictStrategy,
 } from '../../../domain/file';
 import {
   ApiFileUpload,
@@ -106,7 +105,6 @@ export class FileController {
   async upload(
     @UploadedFile() file: Express.Multer.File,
     @Body('folderId', new ParseUUIDPipe()) folderId: string,
-    @Body('conflictStrategy') conflictStrategy?: ConflictStrategy,
   ): Promise<UploadFileResponse> {
     this.logger.log(
       `파일 업로드 요청: fileName=${file?.originalname}, folderId=${folderId}, size=${file?.size}, userId=${RequestContext.getUserId()}`,
@@ -114,7 +112,6 @@ export class FileController {
     return this.fileUploadService.upload({
       file,
       folderId,
-      conflictStrategy,
     });
   }
 
@@ -137,7 +134,6 @@ export class FileController {
   async uploadMany(
     @UploadedFiles() files: Express.Multer.File[],
     @Body('folderId', new ParseUUIDPipe()) folderId: string,
-    @Body('conflictStrategy') conflictStrategy?: ConflictStrategy,
   ): Promise<UploadFileResponse[]> {
     this.logger.log(
       `다중 파일 업로드 요청: fileCount=${files?.length}, folderId=${folderId}, userId=${RequestContext.getUserId()}`,
@@ -145,7 +141,6 @@ export class FileController {
     return this.fileUploadService.uploadMany({
       files,
       folderId,
-      conflictStrategy,
     });
   }
 

@@ -22,10 +22,6 @@ export const ApiFolderCreate = () =>
       description: `
 새 폴더를 생성합니다.
 
-### 충돌 전략 (conflictStrategy)
-- \`ERROR\`: 동일 이름 폴더 존재 시 에러 (기본값)
-- \`RENAME\`: 자동 이름 변경 (예: folder(1))
-
 ### 루트 폴더
 - parentId를 null로 설정하면 루트에 폴더가 생성됩니다.
       `,
@@ -46,12 +42,6 @@ export const ApiFolderCreate = () =>
             description: '상위 폴더 ID (null = 루트)',
             example: 'folder_parent123',
             nullable: true,
-          },
-          conflictStrategy: {
-            type: 'string',
-            enum: ['ERROR', 'RENAME'],
-            description: '이름 충돌 시 처리 전략',
-            default: 'ERROR',
           },
         },
       },
@@ -231,6 +221,17 @@ export const ApiFolderContents = () =>
                 },
                 fileCount: { type: 'number' },
                 folderCount: { type: 'number' },
+                createdBy: {
+                  type: 'object',
+                  nullable: true,
+                  description: '폴더 등록자 정보',
+                  properties: {
+                    id: { type: 'string', description: '사용자 ID (UUID)', example: 'user-uuid-001' },
+                    employeeNumber: { type: 'string', description: '직원 번호', example: 'EMP001' },
+                    name: { type: 'string', description: '이름', example: '홍길동' },
+                    email: { type: 'string', description: '이메일', example: 'hong@example.com' },
+                  },
+                },
                 updatedAt: { type: 'string' },
               },
             },
@@ -249,6 +250,17 @@ export const ApiFolderContents = () =>
                   properties: {
                     cache: { type: 'string', nullable: true },
                     nas: { type: 'string', nullable: true },
+                  },
+                },
+                createdBy: {
+                  type: 'object',
+                  nullable: true,
+                  description: '파일 등록자 정보',
+                  properties: {
+                    id: { type: 'string', description: '사용자 ID (UUID)', example: 'user-uuid-001' },
+                    employeeNumber: { type: 'string', description: '직원 번호', example: 'EMP001' },
+                    name: { type: 'string', description: '이름', example: '홍길동' },
+                    email: { type: 'string', description: '이메일', example: 'hong@example.com' },
                   },
                 },
                 updatedAt: { type: 'string' },
@@ -283,9 +295,8 @@ export const ApiFolderRename = () =>
       description: `
 폴더의 이름을 변경합니다.
 
-### 충돌 전략 (conflictStrategy)
-- \`ERROR\`: 동일 이름 폴더 존재 시 에러 (기본값)
-- \`RENAME\`: 자동 이름 변경 (예: folder(1))
+### 주의사항
+- 동일한 이름의 폴더가 존재하면 에러가 발생합니다.
       `,
     }),
     ApiParam({
@@ -303,12 +314,6 @@ export const ApiFolderRename = () =>
             type: 'string',
             description: '새 폴더명',
             example: 'Renamed Folder',
-          },
-          conflictStrategy: {
-            type: 'string',
-            enum: ['ERROR', 'RENAME'],
-            description: '이름 충돌 시 처리 전략',
-            default: 'ERROR',
           },
         },
       },
@@ -347,11 +352,6 @@ export const ApiFolderMove = () =>
       description: `
 폴더를 다른 위치로 이동합니다.
 
-### 충돌 전략 (conflictStrategy)
-- \`ERROR\`: 동일 이름 폴더 존재 시 에러 (기본값)
-- \`RENAME\`: 자동 이름 변경 (예: folder(1))
-- \`SKIP\`: 이동 건너뛰기
-
 ### 주의사항
 - 자신의 하위 폴더로는 이동할 수 없습니다.
 - 하위 파일/폴더도 함께 이동됩니다.
@@ -373,12 +373,6 @@ export const ApiFolderMove = () =>
             description: '이동 대상 상위 폴더 ID',
             example: 'folder_target123',
           },
-          conflictStrategy: {
-            type: 'string',
-            enum: ['ERROR', 'RENAME', 'SKIP'],
-            description: '이름 충돌 시 처리 전략',
-            default: 'ERROR',
-          },
         },
       },
     }),
@@ -392,8 +386,6 @@ export const ApiFolderMove = () =>
           name: { type: 'string', example: 'Documents' },
           parentId: { type: 'string', example: 'folder_target123' },
           path: { type: 'string', example: '/Archive/Documents' },
-          skipped: { type: 'boolean', example: false },
-          reason: { type: 'string', example: null, nullable: true },
           storageStatus: {
             type: 'object',
             properties: {
@@ -406,7 +398,7 @@ export const ApiFolderMove = () =>
     }),
     ApiResponse({ status: 400, description: '잘못된 요청 (자기 자신의 하위로 이동 등)' }),
     ApiResponse({ status: 404, description: '폴더 또는 대상 폴더를 찾을 수 없음' }),
-    ApiResponse({ status: 409, description: '동일한 이름의 폴더가 이미 존재함 (ERROR 전략)' }),
+    ApiResponse({ status: 409, description: '동일한 이름의 폴더가 이미 존재함' }),
   );
 
 /**

@@ -2,15 +2,7 @@
  * 폴더 생성 관련 DTO
  */
 
-import { IsEnum, IsNotEmpty, IsOptional, IsString, ValidateIf } from 'class-validator';
-
-/**
- * 폴더 충돌 전략
- */
-export enum FolderConflictStrategy {
-  ERROR = 'ERROR',
-  RENAME = 'RENAME',
-}
+import { IsNotEmpty, IsString, ValidateIf } from 'class-validator';
 
 /**
  * 폴더 생성 요청 DTO
@@ -25,11 +17,6 @@ export class CreateFolderRequest {
   @ValidateIf((o) => o.parentId !== null)
   @IsString({ message: '상위 폴더 ID는 문자열이어야 합니다.' })
   parentId: string | null;
-
-  /** 충돌 전략 (기본값: ERROR) */
-  @IsOptional()
-  @IsEnum(FolderConflictStrategy, { message: '충돌 전략이 올바르지 않습니다. 허용 값: ERROR, RENAME' })
-  conflictStrategy?: FolderConflictStrategy;
 }
 
 /**
