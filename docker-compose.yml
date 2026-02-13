@@ -1,0 +1,199 @@
+# DMS Project - Docker Compose 전체 구성
+# ============================================
+# 기본 (app + PostgreSQL):
+#   docker compose up -d --build
+#
+# Redis 포함:
+#   docker compose --profile redis up -d --build
+#
+# 전체 (app + PostgreSQL + Redis + SeaweedFS):
+#   docker compose --profile full up -d --build
+#
+# 로컬 개발 (인프라만, 앱은 호스트에서 실행):
+#   docker compose --profile dev up -d
+#
+# 테스트 유저 시드 (앱 시작 후 1회 실행):
+#   docker compose --profile seed up -d --build
+#
+# 앱 로그 확인:
+#   docker compose logs -f dms-app
+#
+# 재빌드:
+#   docker compose up -d --build --force-recreate dms-app
+# ============================================
+
+services:
+  # ============================================
+  # DMS Application (NestJS)
+  # ============================================
+  dms-app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dms-app
+    restart: unless-stopped
+    ports:
+      - "${APP_PORT:-3100}:3100"
+    env_file:
+      - .env.docker
+    environment:
+      # docker-compose 내부 네트워크 → 서비스명으로 접속
+      DB_HOST: postgres
+      DB_PORT: 5432
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      SEAWEEDFS_MASTER_URL: http://seaweedfs-master:9333
+      SEAWEEDFS_FILER_URL: http://seaweedfs-filer:8888
+      # 컨테이너 내부 경로
+      QUEUE_LOCAL_PATH: /data/queue
+      CACHE_LOCAL_PATH: /data/cache
+      NAS_MOUNT_PATH: /data/nas
+    volumes:
+      - dms_queue_data:/data/queue
+      - dms_cache_data:/data/cache
+      - dms_logs:/data/logs
+      # 로컬 경로 바인드 마운트 (호스트 → 컨테이너) 수정 부분 #
+      - C:\서우혁\dms:/data/nas
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3100/api-docs"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+
+  # ============================================
+  # 테스트 유저 시드 (선택 - 1회성 실행 후 자동 종료)
+  # docker compose --profile seed up -d --build
+  # ============================================
+  dms-seed:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dms-seed
+    profiles:
+      - seed
+    env_file:
+      - .env.docker
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      # 새 DB에는 외부부서가 없으므로 비움 → 테스트부서에 생성됨
+      EXTERNAL_DEPARTMENT_ID: ""
+    # 앱이 healthy 상태여야 roles 테이블이 준비됨
+    depends_on:
+      dms-app:
+        condition: service_healthy
+    # seed 실행 후 자동 종료 (restart 없음)
+    restart: "no"
+    command: ["node", "dist/scripts/seed-test-users.js", "seed"]
+
+  # ============================================
+  # PostgreSQL (필수)
+  # ============================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: dms-postgres
+    restart: unless-stopped
+    ports:
+      - "${DB_EXTERNAL_PORT:-5000}:5432"
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-postgres}
+      POSTGRES_DB: ${DB_DATABASE:-dms}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Redis (선택 - QUEUE_TYPE=redis 사용 시)
+  # docker compose --profile redis up -d --build
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: dms-redis
+    restart: unless-stopped
+    profiles:
+      - redis
+      - full
+    ports:
+      - "${REDIS_EXTERNAL_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # SeaweedFS (선택 - CACHE_STORAGE_TYPE=seaweedfs 사용 시)
+  # docker compose --profile full up -d --build
+  # ============================================
+  seaweedfs-master:
+    image: chrislusf/seaweedfs:latest
+    container_name: dms-seaweedfs-master
+    restart: unless-stopped
+    profiles:
+      - seaweedfs
+      - full
+    ports:
+      - "9333:9333"
+    command: "master -ip=seaweedfs-master -ip.bind=0.0.0.0"
+    volumes:
+      - seaweedfs_master_data:/data
+
+  seaweedfs-volume:
+    image: chrislusf/seaweedfs:latest
+    container_name: dms-seaweedfs-volume
+    restart: unless-stopped
+    profiles:
+      - seaweedfs
+      - full
+    ports:
+      - "8080:8080"
+    command: "volume -mserver=seaweedfs-master:9333 -ip.bind=0.0.0.0 -port=8080"
+    depends_on:
+      - seaweedfs-master
+    volumes:
+      - seaweedfs_volume_data:/data
+
+  seaweedfs-filer:
+    image: chrislusf/seaweedfs:latest
+    container_name: dms-seaweedfs-filer
+    restart: unless-stopped
+    profiles:
+      - seaweedfs
+      - full
+    ports:
+      - "8888:8888"
+    command: "filer -master=seaweedfs-master:9333 -ip.bind=0.0.0.0"
+    depends_on:
+      - seaweedfs-master
+      - seaweedfs-volume
+    volumes:
+      - seaweedfs_filer_data:/data
+
+volumes:
+  postgres_data:
+  redis_data:
+  seaweedfs_master_data:
+  seaweedfs_volume_data:
+  seaweedfs_filer_data:
+  dms_queue_data:
+  dms_cache_data:
+  dms_logs:
+  # NAS 네트워크 공유 (SMB/CIFS) 볼륨
+  # Windows \\192.168.10.249\Web\personal\서우혁\dms-docker 를 마운트
+  # nas_data:
+  #   driver: local
+  #   driver_opts:
+  #     type: cifs
+  #     device: "//192.168.10.249/Web/personal/서우혁/dms-docker"
+  #     o: "username=${NAS_USERNAME:-guest},password=${NAS_PASSWORD:-},vers=3.0,iocharset=utf8"

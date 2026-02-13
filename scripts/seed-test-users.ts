@@ -21,12 +21,17 @@
  *   npx ts-node scripts/seed-test-users.ts unseed
  */
 
-import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { Client } from 'pg';
 
-// ─── .env 로드 ───────────────────────────────────────
-dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
+// ─── .env 로드 (로컬 실행 시에만, Docker에서는 env_file로 주입) ──
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const dotenv = require('dotenv');
+  dotenv.config({ path: path.resolve(__dirname, '..', '.env') });
+} catch {
+  // dotenv 미설치 환경(Docker production)에서는 무시
+}
 
 // ─── 고정 UUID (쉬운 식별 및 삭제용, 모두 valid hex) ──
 const IDS = {

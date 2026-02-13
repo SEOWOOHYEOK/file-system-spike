@@ -1,0 +1,46 @@
+# 의존성
+node_modules
+npm-debug.log*
+
+# 빌드 결과물 (Docker 내에서 새로 빌드)
+dist
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.cursor
+.idea
+*.swp
+*.swo
+
+# 환경 파일 (docker-compose에서 별도 관리)
+.env
+.env.*
+!.env.docker.example
+
+# 테스트
+test
+coverage
+**/*.spec.ts
+jest-e2e.json
+
+# 문서 / 기타
+docs
+*.md
+LICENSE
+
+# 로컬 데이터
+queue
+cache
+logs
+
+# Docker 관련 (재귀 방지)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# 기타
+역할별\ 가능기능.csv
