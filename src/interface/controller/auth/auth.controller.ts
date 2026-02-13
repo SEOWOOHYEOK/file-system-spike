@@ -2,11 +2,8 @@ import { Controller, Post, Body, BadRequestException, UnauthorizedException, Use
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { SSOService } from '../../../integrations/sso/sso.service';
 import { OrganizationMigrationService } from '../../../integrations/migration/migration.service';
-import { EmployeeDepartmentPosition } from '../../../integrations/migration/organization/entities/employee-department-position.entity';
 import { TokenBlacklistService } from '../../../business/external-share/security/token-blacklist.service';
 import { RefreshTokenService } from '../../../business/auth/refresh-token.service';
 import { GenerateTokenRequestDto, GenerateTokenResponseDto } from './dto/generate-token.dto';
@@ -41,29 +38,27 @@ export class AuthController {
         private readonly tokenBlacklistService: TokenBlacklistService,
         private readonly refreshTokenService: RefreshTokenService,
         private readonly userService: UserService,
-        @InjectRepository(EmployeeDepartmentPosition)
-        private readonly edpRepository: Repository<EmployeeDepartmentPosition>,
     ) { }
 
     /**
-     * 직원이 외부 부서(EXTERNAL_DEPARTMENT_ID) 소속인지 확인
+     * 사용자의 Role이 GUEST인지 확인하여 외부 사용자 여부를 판별
      */
-    private async isExternalDepartment(employeeId: string): Promise<boolean> {
-        const externalDepartmentId = this.configService.get<string>('EXTERNAL_DEPARTMENT_ID');
-        if (!externalDepartmentId) {
+    private async isGuestRole(employeeId: string): Promise<boolean> {
+        try {
+            const { role } = await this.userService.findByIdWithRole(employeeId);
+            return role?.name === RoleNameEnum.GUEST;
+        } catch {
             return false;
         }
-        const position = await this.edpRepository.findOne({
-            where: { employeeId, departmentId: externalDepartmentId },
-        });
-        return !!position;
     }
 
     /**
-     * 부서 기반으로 userType 결정
+     * Role 기반으로 userType 결정
+     * - GUEST Role → external (외부 사용자)
+     * - 그 외 Role → internal (내부 사용자)
      */
     private async resolveUserType(employeeId: string): Promise<'internal' | 'external'> {
-        const isExternal = await this.isExternalDepartment(employeeId);
+        const isExternal = await this.isGuestRole(employeeId);
         return isExternal ? 'external' : 'internal';
     }
 
@@ -439,6 +434,7 @@ export class AuthController {
      *
      * SSO에서 EXTERNAL_DEPARTMENT_ID에 해당하는 부서(및 하위 부서)의
      * 조직 데이터만 가져와 로컬 DB에 저장합니다.
+     * (마이그레이션은 SSO 부서 구조를 가져오는 작업이므로 EXTERNAL_DEPARTMENT_ID 유지)
      */
     @Post('migrate-external-organization')
     @AuditAction({

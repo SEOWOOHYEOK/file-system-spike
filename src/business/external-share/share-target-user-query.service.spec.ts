@@ -8,48 +8,36 @@
  *
  * 📋 비즈니스 맥락:
  *   - 파일 공유 대상자 선택 UI에서 내부/외부 사용자를 통합 검색
- *   - EXTERNAL_DEPARTMENT_ID 기반으로 내부/외부 구분
+ *   - roles.name = 'GUEST' 기반으로 내부/외부 구분
  *   - 이름, 부서, 이메일, 사용자 유형 필터링 + 페이지네이션
  *
  * ⚠️ 중요 고려사항:
  *   - 단일 SQL로 내부/외부 통합 조회 (UNION 아닌 CASE WHEN)
  *   - type 필터에 따라 WHERE 조건이 동적으로 변경됨
- *   - EXTERNAL_DEPARTMENT_ID 미설정 시 BusinessException 발생
+ *   - Role 기반 외부 사용자 판별 (r.name = 'GUEST')
  * ============================================================
  */
 import { Test, TestingModule } from '@nestjs/testing';
 import { DataSource } from 'typeorm';
-import { ConfigService } from '@nestjs/config';
 import { ShareTargetUserQueryService } from './share-target-user-query.service';
 import {
   ShareTargetUserQueryDto,
   ShareTargetUserType,
 } from '../../interface/controller/share/dto/share-target-user.dto';
-import { BusinessException } from '../../common/exceptions';
-
-const EXTERNAL_DEPT_ID = 'ext-dept-001';
 
 describe('ShareTargetUserQueryService', () => {
   let service: ShareTargetUserQueryService;
   let mockDataSource: { query: jest.Mock };
-  let mockConfigService: { get: jest.Mock };
 
   /**
    * 🎭 Mock 설정
    * 📍 mockDataSource.query:
    *   - 실제 동작: DB에서 Raw SQL 실행
    *   - Mock 이유: 실제 DB 연결 없이 SQL 생성 로직과 결과 매핑 검증
-   * 📍 mockConfigService.get:
-   *   - 실제 동작: 환경변수에서 EXTERNAL_DEPARTMENT_ID 조회
-   *   - Mock 이유: 환경변수 의존 없이 테스트
    */
   beforeEach(async () => {
     mockDataSource = {
       query: jest.fn(),
-    };
-
-    mockConfigService = {
-      get: jest.fn().mockReturnValue(EXTERNAL_DEPT_ID),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -59,43 +47,10 @@ describe('ShareTargetUserQueryService', () => {
           provide: DataSource,
           useValue: mockDataSource,
         },
-        {
-          provide: ConfigService,
-          useValue: mockConfigService,
-        },
       ],
     }).compile();
 
     service = module.get<ShareTargetUserQueryService>(ShareTargetUserQueryService);
-  });
-
-  // ──────────────────────────────────────────────────────────
-  // 환경 설정 검증
-  // ──────────────────────────────────────────────────────────
-
-  describe('EXTERNAL_DEPARTMENT_ID 환경변수 검증', () => {
-    /**
-     * 📌 테스트 시나리오: 환경변수 미설정 시 예외 발생
-     *
-     * 🎯 검증 목적:
-     *   EXTERNAL_DEPARTMENT_ID가 없으면 내부/외부 구분이 불가능하므로
-     *   즉시 실패하여 잘못된 데이터 반환을 방지해야 한다.
-     *
-     * ✅ 기대 결과:
-     *   BusinessException이 발생한다.
-     */
-    it('EXTERNAL_DEPARTMENT_ID 미설정 시 BusinessException을 던져야 한다', async () => {
-      // ═══════════════════════════════════════════════════════
-      // 📥 GIVEN (사전 조건 설정)
-      // ═══════════════════════════════════════════════════════
-      mockConfigService.get.mockReturnValue(undefined);
-      const query = new ShareTargetUserQueryDto();
-
-      // ═══════════════════════════════════════════════════════
-      // 🎬 WHEN & ✅ THEN
-      // ═══════════════════════════════════════════════════════
-      await expect(service.findAll(query)).rejects.toThrow(BusinessException);
-    });
   });
 
   // ──────────────────────────────────────────────────────────
@@ -140,7 +95,7 @@ describe('ShareTargetUserQueryService', () => {
             name: '김외부',
             email: 'kim@partner.com',
             department: '외부협력사',
-            roleName: null,
+            roleName: 'GUEST',
             type: 'EXTERNAL',
             isActive: true,
           },
@@ -170,7 +125,7 @@ describe('ShareTargetUserQueryService', () => {
       expect(result.items[1].id).toBe('emp-2');
       expect(result.items[1].type).toBe('EXTERNAL');
       expect(result.items[1].name).toBe('김외부');
-      expect(result.items[1].roleName).toBeNull();
+      expect(result.items[1].roleName).toBe('GUEST');
     });
 
     /**
@@ -212,16 +167,16 @@ describe('ShareTargetUserQueryService', () => {
 
   describe('type 필터', () => {
     /**
-     * 📌 테스트 시나리오: EXTERNAL 필터 시 외부 부서만 조회
+     * 📌 테스트 시나리오: EXTERNAL 필터 시 GUEST Role 조건 조회
      *
      * 🎯 검증 목적:
-     *   type=EXTERNAL이면 WHERE절에 departmentId = EXTERNAL_DEPT_ID 조건이 추가되어
+     *   type=EXTERNAL이면 WHERE절에 r.name = 'GUEST' 조건이 추가되어
      *   외부 사용자만 반환되어야 한다.
      *
      * ✅ 기대 결과:
-     *   SQL에 departmentId = $1 (EXTERNAL_DEPT_ID) 조건이 포함된다.
+     *   SQL에 r.name = 'GUEST' 조건이 포함된다.
      */
-    it('type=EXTERNAL이면 외부 부서 조건(departmentId =)을 포함해야 한다', async () => {
+    it('type=EXTERNAL이면 GUEST Role 조건(r.name = \'GUEST\')을 포함해야 한다', async () => {
       // ═══════════════════════════════════════════════════════
       // 📥 GIVEN (사전 조건 설정)
       // ═══════════════════════════════════════════════════════
@@ -240,21 +195,20 @@ describe('ShareTargetUserQueryService', () => {
       // ✅ THEN (결과 검증)
       // ═══════════════════════════════════════════════════════
       const countSql = mockDataSource.query.mock.calls[0][0];
-      expect(countSql).toContain('edp."departmentId" = $1');
-      expect(mockDataSource.query.mock.calls[0][1]).toContain(EXTERNAL_DEPT_ID);
+      expect(countSql).toContain("r.name = 'GUEST'");
     });
 
     /**
-     * 📌 테스트 시나리오: INTERNAL 필터 시 외부 부서 제외
+     * 📌 테스트 시나리오: INTERNAL 필터 시 GUEST Role 제외
      *
      * 🎯 검증 목적:
-     *   type=INTERNAL이면 WHERE절에 departmentId != EXTERNAL_DEPT_ID 조건이 추가되어
+     *   type=INTERNAL이면 WHERE절에 GUEST Role이 아닌 조건이 추가되어
      *   내부 사용자만 반환되어야 한다.
      *
      * ✅ 기대 결과:
-     *   SQL에 departmentId != $1 (EXTERNAL_DEPT_ID) 조건이 포함된다.
+     *   SQL에 r.name != 'GUEST' 조건이 포함된다.
      */
-    it('type=INTERNAL이면 외부 부서 제외 조건(departmentId !=)을 포함해야 한다', async () => {
+    it('type=INTERNAL이면 GUEST Role 제외 조건을 포함해야 한다', async () => {
       // ═══════════════════════════════════════════════════════
       // 📥 GIVEN (사전 조건 설정)
       // ═══════════════════════════════════════════════════════
@@ -273,19 +227,19 @@ describe('ShareTargetUserQueryService', () => {
       // ✅ THEN (결과 검증)
       // ═══════════════════════════════════════════════════════
       const countSql = mockDataSource.query.mock.calls[0][0];
-      expect(countSql).toContain('edp."departmentId" != $1');
+      expect(countSql).toContain("r.name != 'GUEST'");
     });
 
     /**
-     * 📌 테스트 시나리오: type 미지정 시 departmentId 필터 없음
+     * 📌 테스트 시나리오: type 미지정 시 Role 필터 없음
      *
      * 🎯 검증 목적:
-     *   type이 없으면 내부/외부 구분 없이 전체 조회. departmentId 필터가 없어야 한다.
+     *   type이 없으면 내부/외부 구분 없이 전체 조회. Role 필터가 없어야 한다.
      *
      * ✅ 기대 결과:
-     *   SQL에 departmentId 관련 조건이 포함되지 않는다.
+     *   SQL WHERE절에 r.name 관련 필터 조건이 포함되지 않는다.
      */
-    it('type 미지정 시 WHERE절에 departmentId 필터가 없어야 한다', async () => {
+    it('type 미지정 시 WHERE절에 Role 필터가 없어야 한다', async () => {
       // ═══════════════════════════════════════════════════════
       // 📥 GIVEN (사전 조건 설정)
       // ═══════════════════════════════════════════════════════
@@ -301,13 +255,13 @@ describe('ShareTargetUserQueryService', () => {
 
       // ═══════════════════════════════════════════════════════
       // ✅ THEN (결과 검증)
-      // WHERE절만 추출하여 departmentId 필터 조건이 없는지 확인
-      // (JOIN의 edp."departmentId" = d.id는 제외)
+      // WHERE절만 추출하여 Role 필터 조건이 없는지 확인
+      // (JOIN의 r.id 참조는 제외)
       // ═══════════════════════════════════════════════════════
       const countSql = mockDataSource.query.mock.calls[0][0];
       const whereClause = countSql.substring(countSql.indexOf('WHERE'));
-      expect(whereClause).not.toContain('edp."departmentId" = $');
-      expect(whereClause).not.toContain('edp."departmentId" != $');
+      expect(whereClause).not.toContain("r.name = 'GUEST'");
+      expect(whereClause).not.toContain("r.name != 'GUEST'");
     });
   });
 
@@ -446,14 +400,13 @@ describe('ShareTargetUserQueryService', () => {
 
       // 모든 조건 포함
       expect(countSql).toContain('e.status = \'재직중\'');
-      expect(countSql).toContain('edp."departmentId" != $1');
+      expect(countSql).toContain("r.name != 'GUEST'");
       expect(countSql).toContain('e.name ILIKE');
       expect(countSql).toContain('e.email ILIKE');
 
-      // 파라미터 순서: externalDeptId, %홍%, %hong%
-      expect(params[0]).toBe(EXTERNAL_DEPT_ID);
-      expect(params[1]).toBe('%홍%');
-      expect(params[2]).toBe('%hong%');
+      // 파라미터 순서: %홍%, %hong% (EXTERNAL_DEPARTMENT_ID 파라미터 제거됨)
+      expect(params[0]).toBe('%홍%');
+      expect(params[1]).toBe('%hong%');
     });
   });
 
@@ -608,6 +561,35 @@ describe('ShareTargetUserQueryService', () => {
       // ═══════════════════════════════════════════════════════
       const countSql = mockDataSource.query.mock.calls[0][0];
       expect(countSql).toContain("e.status = '재직중'");
+    });
+
+    /**
+     * 📌 테스트 시나리오: SQL에 roles JOIN이 포함
+     *
+     * 🎯 검증 목적:
+     *   외부/내부 사용자 구분을 위해 roles 테이블 JOIN이 반드시 포함되어야 한다.
+     *
+     * ✅ 기대 결과:
+     *   SQL에 roles 테이블 JOIN이 포함된다.
+     */
+    it('SQL에 roles 테이블 JOIN이 포함되어야 한다', async () => {
+      // ═══════════════════════════════════════════════════════
+      // 📥 GIVEN (사전 조건 설정)
+      // ═══════════════════════════════════════════════════════
+      const query = new ShareTargetUserQueryDto();
+
+      mockDataSource.query.mockResolvedValueOnce([{ total: '0' }]);
+
+      // ═══════════════════════════════════════════════════════
+      // 🎬 WHEN (테스트 실행)
+      // ═══════════════════════════════════════════════════════
+      await service.findAll(query);
+
+      // ═══════════════════════════════════════════════════════
+      // ✅ THEN (결과 검증)
+      // ═══════════════════════════════════════════════════════
+      const countSql = mockDataSource.query.mock.calls[0][0];
+      expect(countSql).toContain('LEFT JOIN roles r ON u.role_id = r.id');
     });
   });
 });

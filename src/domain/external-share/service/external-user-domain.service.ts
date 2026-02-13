@@ -1,6 +1,5 @@
 import { Injectable, Logger, NotImplementedException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { ConfigService } from '@nestjs/config';
 import { Repository } from 'typeorm';
 import type { PaginatedResult, PaginationParams } from '../../../common/types/pagination';
 import { createPaginatedResult } from '../../../common/types/pagination';
@@ -8,12 +7,13 @@ import type { ExternalUser } from '../entities/external-user.entity';
 import { ExternalUser as ExternalUserEntity } from '../entities/external-user.entity';
 import { BusinessException, ErrorCodes } from '../../../common/exceptions';
 import { DomainEmployeeService } from '../../../integrations/migration/organization/services/employee.service';
-import { EmployeeDepartmentPosition } from '../../../integrations/migration/organization/entities/employee-department-position.entity';
+import { UserOrmEntity } from '../../../infra/database/entities/user.orm-entity';
+import { RoleNameEnum } from '../../role/role-name.enum';
 
 /**
- * ExternalUser 도메인 서비스 (Employee 기반)
+ * ExternalUser 도메인 서비스 (Role 기반)
  *
- * 외부 사용자 = EXTERNAL_DEPARTMENT_ID 부서에 소속된 직원
+ * 외부 사용자 = users 테이블에서 role_id로 연결된 roles 테이블의 name이 'GUEST'인 사용자
  * - SSO 인증으로 사용자명/이메일/비밀번호 직접 관리 없음
  * - 조회/활성전체조회/전체조회만 지원
  */
@@ -23,19 +23,9 @@ export class ExternalUserDomainService {
 
   constructor(
     private readonly employeeService: DomainEmployeeService,
-    @InjectRepository(EmployeeDepartmentPosition)
-    private readonly edpRepository: Repository<EmployeeDepartmentPosition>,
-    private readonly configService: ConfigService,
+    @InjectRepository(UserOrmEntity)
+    private readonly userRepository: Repository<UserOrmEntity>,
   ) {}
-
-  private getExternalDepartmentId(): string {
-    const id = this.configService.get<string>('EXTERNAL_DEPARTMENT_ID');
-    if (!id) {
-      this.logger.error('EXTERNAL_DEPARTMENT_ID 환경변수가 설정되지 않았습니다.');
-      throw BusinessException.of(ErrorCodes.AUTH_CONFIG_ERROR);
-    }
-    return id;
-  }
 
   private mapToExternalUser(
     employee: { id: string; employeeNumber: string; name: string; email?: string; createdAt?: Date },
@@ -57,22 +47,26 @@ export class ExternalUserDomainService {
 
   /**
    * 외부 사용자 조회 (직원 ID 기준)
-   * - EXTERNAL_DEPARTMENT_ID 부서 소속인지 확인 후 반환
+   * - users.role_id → roles.name = 'GUEST' 인지 확인 후 반환
    */
   async 조회(id: string): Promise<ExternalUser | null> {
-    const externalDepartmentId = this.getExternalDepartmentId();
-
-    const position = await this.edpRepository.findOne({
-      where: { employeeId: id, departmentId: externalDepartmentId },
-      relations: ['employee', 'department'],
+    // GUEST Role 여부 확인
+    const user = await this.userRepository.findOne({
+      where: { id },
+      relations: ['role'],
     });
 
-    if (!position?.employee) {
+    if (!user?.role || user.role.name !== RoleNameEnum.GUEST) {
       return null;
     }
 
-    const departmentName = position.department?.departmentName ?? '';
-    return this.mapToExternalUser(position.employee, departmentName);
+    const employee = await this.employeeService.findOne(id);
+    if (!employee) {
+      return null;
+    }
+
+    // Employee의 부서 정보는 별도로 가져오지 않음 (Role 기반이므로)
+    return this.mapToExternalUser(employee, '');
   }
 
   /**
@@ -82,24 +76,26 @@ export class ExternalUserDomainService {
   async 아이디목록조회(ids: string[]): Promise<ExternalUser[]> {
     if (ids.length === 0) return [];
 
-    const externalDepartmentId = this.getExternalDepartmentId();
-
-    const positions = await this.edpRepository
-      .createQueryBuilder('edp')
-      .leftJoinAndSelect('edp.employee', 'employee')
-      .leftJoinAndSelect('edp.department', 'department')
-      .where('edp.departmentId = :externalDepartmentId', { externalDepartmentId })
-      .andWhere('edp.employeeId IN (:...ids)', { ids })
+    // GUEST Role을 가진 사용자만 필터링
+    const guestUsers = await this.userRepository
+      .createQueryBuilder('user')
+      .leftJoinAndSelect('user.role', 'role')
+      .where('user.id IN (:...ids)', { ids })
+      .andWhere('role.name = :roleName', { roleName: RoleNameEnum.GUEST })
       .getMany();
 
-    return positions
-      .filter((p) => p.employee)
-      .map((p) =>
-        this.mapToExternalUser(
-          p.employee!,
-          p.department?.departmentName ?? '',
-        ),
-      );
+    if (guestUsers.length === 0) return [];
+
+    const guestUserIds = guestUsers.map((u) => u.id);
+
+    // Employee 정보를 일괄 조회
+    const employees = await Promise.all(
+      guestUserIds.map((id) => this.employeeService.findOne(id)),
+    );
+
+    return employees
+      .filter((e): e is NonNullable<typeof e> => e !== null)
+      .map((e) => this.mapToExternalUser(e, ''));
   }
 
   /**
@@ -113,29 +109,29 @@ export class ExternalUserDomainService {
 
   /**
    * 전체 외부 사용자 조회 (페이지네이션)
-   * - EXTERNAL_DEPARTMENT_ID 부서 소속 직원 = 외부 사용자
+   * - users.role_id → roles.name = 'GUEST' 인 사용자 = 외부 사용자
    */
   async 전체조회(
     pagination: PaginationParams,
   ): Promise<PaginatedResult<ExternalUser>> {
-    const externalDepartmentId = this.getExternalDepartmentId();
     const { page, pageSize } = pagination;
 
-    const [positions, total] = await this.edpRepository.findAndCount({
-      where: { departmentId: externalDepartmentId },
-      relations: ['employee', 'department'],
-      skip: (page - 1) * pageSize,
-      take: pageSize,
-    });
+    const [guestUsers, total] = await this.userRepository
+      .createQueryBuilder('user')
+      .leftJoinAndSelect('user.role', 'role')
+      .where('role.name = :roleName', { roleName: RoleNameEnum.GUEST })
+      .skip((page - 1) * pageSize)
+      .take(pageSize)
+      .getManyAndCount();
 
-    const items = positions
-      .filter((p) => p.employee)
-      .map((p) =>
-        this.mapToExternalUser(
-          p.employee!,
-          p.department?.departmentName ?? '',
-        ),
-      );
+    // Employee 정보를 일괄 조회
+    const employees = await Promise.all(
+      guestUsers.map((u) => this.employeeService.findOne(u.id)),
+    );
+
+    const items = employees
+      .filter((e): e is NonNullable<typeof e> => e !== null)
+      .map((e) => this.mapToExternalUser(e, ''));
 
     return createPaginatedResult(items, page, pageSize, total);
   }

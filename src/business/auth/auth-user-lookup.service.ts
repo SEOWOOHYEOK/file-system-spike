@@ -2,12 +2,10 @@ import {
   Injectable,
   Logger,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
 import { UserDomainService } from '../../domain/user/service/user-domain.service';
+import { RoleDomainService } from '../../domain/role/service/role-domain.service';
 import { DomainEmployeeService } from '../../integrations/migration/organization/services/employee.service';
-import { EmployeeDepartmentPosition } from '../../integrations/migration/organization/entities/employee-department-position.entity';
+import { RoleNameEnum } from '../../domain/role/role-name.enum';
 import { UserType } from '../../domain/audit/enums/common.enum';
 import type { AuthenticatedUser } from '../../common/auth/authenticated-user.interface';
 import { BusinessException, ErrorCodes } from '../../common/exceptions';
@@ -17,7 +15,7 @@ import { BusinessException, ErrorCodes } from '../../common/exceptions';
  *
  * Guard에서 JWT 검증 후 사용자 DB 조회를 담당합니다.
  * - 내부 사용자: User(isActive) + Employee(name, email) 조회
- * - 외부 사용자: Employee + employee_department_positions (EXTERNAL_DEPARTMENT_ID 소속) 조회
+ * - 외부 사용자: User의 Role이 GUEST인 사용자 + Employee(name, email) 조회
  *
  * 조회 실패 또는 비활성 사용자는 예외를 발생시킵니다.
  */
@@ -27,10 +25,8 @@ export class AuthUserLookupService {
 
   constructor(
     private readonly userDomainService: UserDomainService,
+    private readonly roleDomainService: RoleDomainService,
     private readonly employeeService: DomainEmployeeService,
-    private readonly configService: ConfigService,
-    @InjectRepository(EmployeeDepartmentPosition)
-    private readonly edpRepository: Repository<EmployeeDepartmentPosition>,
   ) {}
 
   /**
@@ -70,33 +66,32 @@ export class AuthUserLookupService {
   /**
    * 외부 사용자 조회
    *
-   * Employee 테이블에서 사용자 정보를 가져오고,
-   * employee_department_positions로 EXTERNAL_DEPARTMENT_ID 부서 소속 여부를 검증합니다.
-   * 부서 이동 등으로 해당 부서에 없으면 AUTH_ACCOUNT_DISABLED 예외를 발생시킵니다.
+   * User 테이블에서 role_id를 확인하고, roles 테이블에서 해당 Role의 name이 GUEST인지 검증합니다.
+   * GUEST Role이 아닌 경우 AUTH_DEPARTMENT_MISMATCH 예외를 발생시킵니다.
    *
    * @throws UnauthorizedException 사용자를 찾을 수 없는 경우
-   * @throws ForbiddenException 해당 부서(EXTERNAL_DEPARTMENT_ID) 소속이 아닌 경우 (부서 이동됨)
+   * @throws ForbiddenException GUEST Role이 아닌 경우 (Role 변경됨)
    */
   async lookupExternal(userId: string): Promise<AuthenticatedUser> {
-    const externalDepartmentId = this.configService.get<string>('EXTERNAL_DEPARTMENT_ID');
-    if (!externalDepartmentId) {
-      this.logger.error('EXTERNAL_DEPARTMENT_ID 환경변수가 설정되지 않았습니다.');
-      throw BusinessException.of(ErrorCodes.AUTH_CONFIG_ERROR);
-    }
+    const [user, employee] = await Promise.all([
+      this.userDomainService.조회(userId),
+      this.employeeService.findOne(userId),
+    ]);
 
-    const employee = await this.employeeService.findOne(userId);
-    if (!employee) {
-      this.logger.warn(`외부 사용자(직원) 조회 실패: userId=${userId}`);
+    if (!user || !employee) {
+      this.logger.warn(`외부 사용자 조회 실패: userId=${userId}`);
       throw BusinessException.of(ErrorCodes.AUTH_USER_NOT_FOUND, { userId });
     }
 
-    const position = await this.edpRepository.findOne({
-      where: { employeeId: userId, departmentId: externalDepartmentId },
-      relations: ['department'],
-    });
+    // Role 검증: GUEST Role이어야 외부 사용자
+    if (!user.roleId) {
+      this.logger.warn(`외부 사용자 Role 미할당: userId=${userId}`);
+      throw BusinessException.of(ErrorCodes.AUTH_DEPARTMENT_MISMATCH, { userId });
+    }
 
-    if (!position || !position.department) {
-      this.logger.warn(`외부 부서(EXTERNAL_DEPARTMENT_ID) 소속 아님 - 부서 이동됨: userId=${userId}`);
+    const role = await this.roleDomainService.조회(user.roleId);
+    if (!role || role.name !== RoleNameEnum.GUEST) {
+      this.logger.warn(`GUEST Role이 아님 - Role 변경됨: userId=${userId}, roleName=${role?.name ?? 'null'}`);
       throw BusinessException.of(ErrorCodes.AUTH_DEPARTMENT_MISMATCH, { userId });
     }
 
@@ -105,10 +100,8 @@ export class AuthUserLookupService {
       type: UserType.EXTERNAL,
       name: employee.name,
       email: employee.email ?? '',
-      isActive: true,
+      isActive: user.isActive,
       employeeNumber: employee.employeeNumber,
-      departmentId: position.department.id,
-      departmentName: position.department.departmentName,
     };
   }
 }

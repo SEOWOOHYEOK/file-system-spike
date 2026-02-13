@@ -1,7 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
-import { BusinessException, ErrorCodes } from '../../common/exceptions';
 import { createPaginationInfo } from '../../common/types/pagination';
 import type { ShareTargetUserQueryDto } from '../../interface/controller/share/dto/share-target-user.dto';
 import {
@@ -14,8 +12,8 @@ import type { PaginatedResponseDto } from '../../interface/common/dto/pagination
  * 공유 대상자 통합 조회 서비스
  *
  * 내부/외부 사용자를 단일 쿼리로 조회하여 통합된 목록을 반환합니다.
- * - 내부 사용자: EXTERNAL_DEPARTMENT_ID 부서에 속하지 않은 직원
- * - 외부 사용자: EXTERNAL_DEPARTMENT_ID 부서에 속한 직원
+ * - 내부 사용자: users 테이블의 role이 GUEST가 아닌 사용자
+ * - 외부 사용자: users 테이블의 role이 GUEST인 사용자
  * - type 필터로 한쪽만 조회 가능 (불필요한 조회 제거)
  */
 @Injectable()
@@ -24,17 +22,7 @@ export class ShareTargetUserQueryService {
 
   constructor(
     private readonly dataSource: DataSource,
-    private readonly configService: ConfigService,
   ) {}
-
-  private getExternalDepartmentId(): string {
-    const id = this.configService.get<string>('EXTERNAL_DEPARTMENT_ID');
-    if (!id) {
-      this.logger.error('EXTERNAL_DEPARTMENT_ID 환경변수가 설정되지 않았습니다.');
-      throw BusinessException.of(ErrorCodes.AUTH_CONFIG_ERROR);
-    }
-    return id;
-  }
 
   /**
    * 공유 대상자 통합 조회 (내부 + 외부)
@@ -45,7 +33,6 @@ export class ShareTargetUserQueryService {
   async findAll(
     query: ShareTargetUserQueryDto,
   ): Promise<PaginatedResponseDto<ShareTargetUserDto>> {
-    const externalDeptId = this.getExternalDepartmentId();
     const { page, pageSize } = query;
 
     // 동적 WHERE 절 구성
@@ -53,16 +40,11 @@ export class ShareTargetUserQueryService {
     const params: any[] = [];
     let paramIndex = 1;
 
-    // EXTERNAL_DEPARTMENT_ID 파라미터 (type 판별용)
-    params.push(externalDeptId);
-    const externalDeptParamIndex = paramIndex;
-    paramIndex++;
-
-    // type 필터
+    // type 필터 (Role 기반: GUEST = EXTERNAL, 그 외 = INTERNAL)
     if (query.type === ShareTargetUserType.EXTERNAL) {
-      conditions.push(`edp."departmentId" = $${externalDeptParamIndex}`);
+      conditions.push(`r.name = 'GUEST'`);
     } else if (query.type === ShareTargetUserType.INTERNAL) {
-      conditions.push(`edp."departmentId" != $${externalDeptParamIndex}`);
+      conditions.push(`(r.name IS NULL OR r.name != 'GUEST')`);
     }
 
     // name 필터
@@ -94,6 +76,8 @@ export class ShareTargetUserQueryService {
       FROM "employees-info" e
       JOIN employee_department_positions edp ON e.id = edp."employeeId"
       LEFT JOIN "departments-info" d ON edp."departmentId" = d.id
+      LEFT JOIN users u ON e.id = u.id
+      LEFT JOIN roles r ON u.role_id = r.id
       ${whereClause}
     `;
 
@@ -117,7 +101,7 @@ export class ShareTargetUserQueryService {
         COALESCE(d."departmentName", '') AS department,
         r.name AS "roleName",
         CASE 
-          WHEN edp."departmentId" = $${externalDeptParamIndex} THEN 'EXTERNAL'
+          WHEN r.name = 'GUEST' THEN 'EXTERNAL'
           ELSE 'INTERNAL'
         END AS type,
         COALESCE(u.is_active, true) AS "isActive"
