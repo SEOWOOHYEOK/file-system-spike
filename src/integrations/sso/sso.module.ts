@@ -1,3 +1,6 @@
+import { config } from 'dotenv';
+config(); // ConfigModule보다 먼저 .env 로드 (top-level 코드에서 process.env 접근 필요)
+
 import { Module, Logger } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { SSOClient } from '@lumir-company/sso-sdk';
@@ -5,12 +8,16 @@ import { SSOService } from './sso.service';
 import { MockSSOService } from './mock-sso.service';
 import { SSO_CLIENT } from './sso.constants';
 
+
 /**
  * NODE_ENV=dev 이면 Mock SSO 모드를 활성화합니다.
  * - Mock 모드: 실제 SSO 서버 없이 테스트 유저(seed-test-users.ts)로 동작
  * - 그 외(development, production 등): 실제 SSO 서버 연동
  */
-const isMockSSOMode = process.env.NODE_ENV?.trim() === 'dev';
+const NODE_ENV = process.env.NODE_ENV ;
+
+const isMockSSOMode = NODE_ENV === 'dev';
+
 
 // ─── 실제 SSO 프로바이더 ────────────────────────────────────
 const realSSOProviders = [
@@ -74,4 +81,4 @@ const mockSSOProviders = [
     providers: isMockSSOMode ? mockSSOProviders : realSSOProviders,
     exports: [SSOService, SSO_CLIENT],
 })
-export class SSOModule {}
+export class SSOModule { }
